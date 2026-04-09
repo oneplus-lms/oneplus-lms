@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>OnePLUS Ultrasound Lab® LMS</title>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OnePLUS">
+<meta name="theme-color" content="#1A4A3A">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- Firebase v10 (compat CDN — works in plain HTML, no bundler needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+:root {
+  --bg: #F4F1EC; --surface: #FDFCFA; --surface2: #EEE9E0;
+  --border: rgba(60,50,30,0.12); --border-strong: rgba(60,50,30,0.22);
+  --text: #1C1810; --text2: #6B6050; --text3: #A09080;
+  --accent: #1A4A3A; --accent-light: #E4EDE9; --accent2: #C8501A;
+  --accent2-light: #FAF0EB; --blue: #1A3A6A; --blue-light: #E4ECF7;
+  --gold: #8B6914; --gold-light: #F5EDD0; --red: #8B1A1A; --red-light: #F5E4E4;
+  --radius: 10px; --radius-lg: 16px;
+  --mono: 'DM Mono', monospace; --serif: 'Fraunces', serif; --sans: 'DM Sans', sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);font-family:var(--sans);color:var(--text);font-size:15px;line-height:1.5;overscroll-behavior:none}
+button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
+
+/* ── LAYOUT ── */
+#app{height:100vh;display:flex;flex-direction:column;max-width:430px;margin:0 auto;position:relative;overflow:hidden}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1),opacity 0.28s;transform:translateX(100%);opacity:0;pointer-events:none}
+.screen.active{transform:translateX(0);opacity:1;pointer-events:all}
+.screen.exit{transform:translateX(-30px);opacity:0;pointer-events:none}
+
+/* ── TOP BAR ── */
+.topbar{padding:14px 18px 10px;display:flex;align-items:center;gap:10px;border-bottom:0.5px solid var(--border);background:var(--surface);flex-shrink:0}
+.topbar-logo{font-family:var(--serif);font-size:18px;font-weight:500;color:var(--accent);letter-spacing:-0.3px}
+.topbar-title{font-size:14px;font-weight:500;color:var(--text);flex:1}
+.topbar-sub{font-size:11px;color:var(--text3);font-family:var(--mono)}
+.back-btn{width:32px;height:32px;border-radius:8px;border:0.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:16px;transition:background 0.15s;flex-shrink:0}
+.back-btn:hover{background:var(--surface2)}
+.scroll-body{flex:1;overflow-y:auto;padding:16px 18px 100px}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{position:absolute;bottom:0;left:0;right:0;background:var(--surface);border-top:0.5px solid var(--border);display:flex;padding:8px 0 20px;z-index:50}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;cursor:pointer;opacity:0.45;transition:opacity 0.15s}
+.nav-item.active{opacity:1}
+.nav-icon{font-size:18px;line-height:1}
+.nav-label{font-size:10px;font-family:var(--mono);color:var(--text2)}
+.nav-item.active .nav-label{color:var(--accent);font-weight:500}
+
+/* ── COMPONENTS ── */
+.card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px}
+.card-title{font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border)}
+.row:last-child{border-bottom:none}
+.row-label{font-size:13px;color:var(--text2)}
+.row-val{font-size:13px;font-weight:500;color:var(--text)}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-family:var(--mono);color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em}
+.field input,.field select{width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;transition:border-color 0.15s}
+.field input:focus,.field select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,74,58,0.08)}
+.ferr{font-size:12px;color:var(--red);margin-top:4px;display:none}
+.ferr.on{display:block}
+.tog-row{display:flex;gap:6px}
+.tog{flex:1;padding:8px 6px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;color:var(--text2);text-align:center;cursor:pointer;transition:all 0.15s;background:var(--surface)}
+.tog:hover{background:var(--surface2)}
+.tog.on{border-color:var(--accent);background:var(--accent-light);color:var(--accent);font-weight:500}
+.tog.on-red{border-color:var(--accent2);background:var(--accent2-light);color:var(--accent2);font-weight:500}
+.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:11px;font-family:var(--mono);font-weight:500}
+.badge-green{background:var(--accent-light);color:var(--accent)}
+.badge-orange{background:var(--accent2-light);color:var(--accent2)}
+.badge-blue{background:var(--blue-light);color:var(--blue)}
+.badge-gold{background:var(--gold-light);color:var(--gold)}
+.badge-red{background:var(--red-light);color:var(--red)}
+.btn{width:100%;padding:12px;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;transition:all 0.15s;border:0.5px solid var(--border-strong);background:var(--surface);color:var(--text)}
+.btn:hover{background:var(--surface2)}
+.btn:active{transform:scale(0.99)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:#0f3328}
+.btn-danger{background:var(--red);border-color:var(--red);color:#fff}
+.btn-danger:hover{background:#6b1010}
+.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+.btn-sm{padding:6px 12px;font-size:12px;width:auto;border-radius:8px}
+.sep{height:0.5px;background:var(--border);margin:14px 0}
+.empty{text-align:center;padding:32px 16px;color:var(--text3);font-size:13px}
+.empty-icon{font-size:32px;margin-bottom:8px}
+
+/* ── FIREBASE AUTH SCREEN ── */
+#s-auth{background:var(--accent);justify-content:flex-start;align-items:stretch;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.auth-wrap{width:100%;padding:32px 28px 60px;box-sizing:border-box}
+.auth-logo{font-family:var(--serif);font-size:38px;font-weight:300;color:#fff;letter-spacing:-1px;margin-bottom:4px}
+.auth-sub{font-size:13px;color:rgba(255,255,255,0.55);font-family:var(--mono);margin-bottom:40px}
+.auth-tabs{display:flex;gap:0;margin-bottom:24px;background:rgba(255,255,255,0.1);border-radius:var(--radius);padding:3px}
+.auth-tab{flex:1;padding:8px;border-radius:8px;font-size:13px;color:rgba(255,255,255,0.6);text-align:center;cursor:pointer;transition:all 0.15s;font-family:var(--mono)}
+.auth-tab.active{background:rgba(255,255,255,0.18);color:#fff;font-weight:500}
+.auth-field label{display:block;font-size:11px;color:rgba(255,255,255,0.5);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px}
+.auth-field input{width:100%;padding:12px 14px;border:0.5px solid rgba(255,255,255,0.2);border-radius:var(--radius);background:rgba(255,255,255,0.08);color:#fff;font-size:15px;margin-bottom:14px}
+.auth-field input::placeholder{color:rgba(255,255,255,0.3)}
+.auth-field input:focus{border-color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.12)}
+.auth-btn{width:100%;padding:13px;border-radius:var(--radius);background:#fff;color:var(--accent);font-size:14px;font-weight:500;border:none;cursor:pointer;margin-top:8px;transition:opacity 0.15s}
+.auth-btn:hover{opacity:0.9}
+.auth-btn:disabled{opacity:0.5;cursor:not-allowed}
+.auth-err{color:rgba(255,200,180,1);font-size:13px;margin-top:10px;min-height:18px;font-family:var(--mono)}
+.auth-link{color:rgba(255,255,255,0.5);font-size:12px;font-family:var(--mono);margin-top:12px;cursor:pointer;text-align:center}
+.auth-link:hover{color:rgba(255,255,255,0.8)}
+
+/* ── PIN SCREEN ── */
+#s-pin{background:var(--accent);justify-content:flex-start;align-items:stretch;overflow-y:auto}
+.pin-wrap{width:100%;padding:32px 28px;box-sizing:border-box}
+.pin-user{font-family:var(--serif);font-size:24px;font-weight:300;color:#fff;letter-spacing:-0.5px;margin-bottom:4px}
+.pin-hint{font-size:12px;color:rgba(255,255,255,0.5);font-family:var(--mono);margin-bottom:32px}
+.pin-dots{display:flex;gap:14px;justify-content:center;margin:20px 0 8px}
+.pin-dot{width:12px;height:12px;border-radius:50%;border:1.5px solid rgba(255,255,255,0.4);transition:all 0.15s}
+.pin-dot.filled{background:#fff;border-color:#fff}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+.pin-key{height:54px;border-radius:var(--radius);border:0.5px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:18px;font-family:var(--mono);cursor:pointer;transition:background 0.15s;display:flex;align-items:center;justify-content:center;touch-action:manipulation;user-select:none}
+.pin-key:hover{background:rgba(255,255,255,0.14)}
+.pin-key:active{background:rgba(255,255,255,0.22)}
+.pin-err{color:rgba(255,180,160,1);font-size:12px;font-family:var(--mono);text-align:center;margin-top:8px;min-height:16px}
+.pin-logout{color:rgba(255,255,255,0.4);font-size:11px;font-family:var(--mono);text-align:center;margin-top:20px;cursor:pointer}
+.pin-logout:hover{color:rgba(255,255,255,0.7)}
+
+/* ── DASHBOARD ── */
+.dash-header{padding:20px 18px 4px}
+.dash-greeting{font-family:var(--serif);font-size:24px;font-weight:300;color:var(--text);letter-spacing:-0.3px;margin-bottom:2px}
+.dash-role{font-size:11px;font-family:var(--mono);color:var(--text3)}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px}
+.stat-num{font-family:var(--serif);font-size:28px;font-weight:500;color:var(--text);letter-spacing:-0.5px}
+.stat-label{font-size:11px;font-family:var(--mono);color:var(--text3);margin-top:2px}
+.quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.qa-btn{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px;cursor:pointer;text-align:left;transition:all 0.15s}
+.qa-btn:hover{border-color:var(--border-strong);background:var(--surface2)}
+.qa-icon{font-size:20px;margin-bottom:8px}
+.qa-label{font-size:13px;font-weight:500;color:var(--text)}
+.qa-sub{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px}
+.sync-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);padding:3px 10px;border-radius:20px;margin-left:8px}
+.sync-badge.online{background:var(--accent-light);color:var(--accent)}
+.sync-badge.offline{background:var(--gold-light);color:var(--gold)}
+
+/* ── STEP PROGRESS ── */
+.step-bar{display:flex;gap:4px;padding:0 18px 12px;flex-shrink:0}
+.step-seg{flex:1;height:3px;border-radius:2px;background:var(--border);transition:background 0.3s}
+.step-seg.done{background:var(--accent)}
+.step-seg.curr{background:var(--accent2)}
+
+/* ── TEST SELECTION ── */
+.search-wrap{position:relative;margin-bottom:12px}
+.search-wrap input{padding-left:36px}
+.search-ico{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3)}
+.suggest-list{background:var(--surface);border:0.5px solid var(--border-strong);border-radius:var(--radius-lg);overflow:hidden;margin-top:4px;max-height:240px;overflow-y:auto}
+.suggest-item{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-bottom:0.5px solid var(--border)}
+.suggest-item:last-child{border-bottom:none}
+.suggest-item:hover{background:var(--surface2)}
+.sug-name{font-size:13px;color:var(--text);font-weight:500}
+.sug-dept{font-size:11px;color:var(--text3);font-family:var(--mono)}
+.sug-rate{font-size:13px;color:var(--text2)}
+.chip-list{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;min-height:40px}
+.chip{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:9px 12px}
+.chip-info{display:flex;flex-direction:column;gap:2px}
+.chip-name{font-size:13px;font-weight:500;color:var(--text)}
+.chip-meta{font-size:11px;color:var(--text3);font-family:var(--mono)}
+.chip-right{display:flex;align-items:center;gap:8px}
+.chip-amt{font-size:13px;color:var(--text2)}
+.chip-del{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:14px;transition:all 0.15s}
+.chip-del:hover{background:var(--red-light);color:var(--red)}
+.est-strip{background:var(--accent);border-radius:var(--radius-lg);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.est-lbl{font-size:12px;color:rgba(255,255,255,0.6);font-family:var(--mono)}
+.est-amt{font-family:var(--serif);font-size:22px;font-weight:500;color:#fff;letter-spacing:-0.3px}
+.est-skip{font-size:11px;color:rgba(255,255,255,0.5);font-family:var(--mono);margin-top:1px}
+
+/* ── MODAL ── */
+.modal-bg{position:fixed;inset:0;background:rgba(20,15,5,0.5);z-index:200;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.2s}
+.modal-bg.open{opacity:1;pointer-events:all}
+.modal{background:var(--surface);border-radius:20px 20px 0 0;padding:20px 20px 36px;width:100%;max-width:430px;transform:translateY(100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1)}
+.modal-bg.open .modal{transform:translateY(0)}
+.modal-handle{width:36px;height:3px;border-radius:2px;background:var(--border-strong);margin:0 auto 16px}
+.modal-title{font-size:15px;font-weight:500;color:var(--text);margin-bottom:4px}
+.modal-sub{font-size:13px;color:var(--text2);margin-bottom:16px}
+
+/* ── EOD ── */
+.eod-header{background:var(--accent);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px;color:#fff}
+.eod-date{font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-bottom:4px}
+.eod-title{font-family:var(--serif);font-size:20px;font-weight:300;letter-spacing:-0.3px}
+.eod-staff-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);margin-bottom:8px}
+.eod-name{font-size:13px;font-weight:500;color:var(--text)}
+.eod-counts{display:flex;gap:8px;align-items:center}
+.wa-preview{background:#E8F5E9;border-radius:var(--radius-lg);padding:14px 16px;font-family:var(--mono);font-size:12px;color:#1B5E20;white-space:pre-wrap;line-height:1.7;margin-bottom:12px;border:0.5px solid #A5D6A7}
+
+/* ── ADMIN ── */
+.staff-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--border)}
+.staff-row:last-child{border-bottom:none}
+.avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0}
+.av-green{background:var(--accent-light);color:var(--accent)}
+.av-blue{background:var(--blue-light);color:var(--blue)}
+.av-gold{background:var(--gold-light);color:var(--gold)}
+.staff-info{flex:1}
+.staff-name{font-size:13px;font-weight:500;color:var(--text)}
+.staff-roles{font-size:11px;font-family:var(--mono);color:var(--text3)}
+
+/* ── ORDERS LIST ── */
+.order-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:border-color 0.15s}
+.order-card:hover{border-color:var(--border-strong)}
+.order-id{font-size:11px;font-family:var(--mono);color:var(--text3)}
+.order-patient{font-size:15px;font-weight:500;color:var(--text);margin:2px 0}
+.order-meta{font-size:12px;color:var(--text2);font-family:var(--mono)}
+.order-footer{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)}
+.order-amt{font-family:var(--serif);font-size:18px;font-weight:500;color:var(--accent)}
+
+/* ── BILLING ── */
+.bill-total-strip{background:var(--accent);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:14px}
+.bill-total-lbl{font-size:11px;color:rgba(255,255,255,0.6);font-family:var(--mono);margin-bottom:2px}
+.bill-total-amt{font-family:var(--serif);font-size:26px;font-weight:500;color:#fff;letter-spacing:-0.3px}
+.bill-due{font-size:12px;color:rgba(255,255,255,0.55);font-family:var(--mono);margin-top:2px}
+.pay-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.pay-mode-btn{padding:11px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;color:var(--text2);text-align:center;cursor:pointer;background:var(--surface);transition:all 0.15s}
+.pay-mode-btn:hover{background:var(--surface2)}
+.pay-mode-btn.on{border-color:var(--accent);background:var(--accent-light);color:var(--accent);font-weight:500}
+.pay-mode-btn.on-credit{border-color:var(--gold);background:var(--gold-light);color:var(--gold);font-weight:500}
+
+/* ── CASH HANDOVER ── */
+.ho-summary-strip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border);border-bottom:0.5px solid var(--border);flex-shrink:0}
+.ho-summary-cell{background:var(--surface);padding:10px 12px;text-align:center}
+.ho-summary-val{font-family:var(--serif);font-size:20px;font-weight:500;color:var(--text);letter-spacing:-0.3px}
+.ho-summary-val.green{color:var(--accent)}
+.ho-summary-val.red{color:var(--accent2)}
+.ho-summary-lbl{font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px}
+.ho-handover-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);margin-bottom:10px;overflow:hidden}
+.ho-card-header{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:0.5px solid var(--border);background:var(--surface2)}
+.ho-card-id{font-size:10px;font-family:var(--mono);color:var(--text3)}
+.ho-card-time{font-size:10px;font-family:var(--mono);color:var(--text3)}
+.ho-card-body{padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.ho-card-k{font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em}
+.ho-card-v{font-size:13px;font-weight:500;color:var(--text)}
+.ho-card-v.amount{font-family:var(--serif);font-size:18px;color:var(--accent)}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:#1C1810;color:#fff;padding:10px 18px;border-radius:30px;font-size:13px;font-family:var(--mono);opacity:0;transition:all 0.25s;z-index:500;white-space:nowrap;pointer-events:none}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{background:var(--accent)}
+#toast.warn{background:var(--gold)}
+#toast.err{background:var(--red)}
+
+/* ── LOADING ── */
+.loading-overlay{position:fixed;inset:0;background:rgba(244,241,236,0.85);z-index:900;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.loading-spinner{width:32px;height:32px;border:2.5px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:12px;font-family:var(--mono);color:var(--text3)}
+
+/* ── DONE SCREEN ── */
+.done-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px}
+.done-ring{width:64px;height:64px;border-radius:50%;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:16px}
+.done-title{font-family:var(--serif);font-size:24px;font-weight:300;color:var(--text);letter-spacing:-0.3px;margin-bottom:6px;text-align:center}
+.done-sub{font-size:13px;color:var(--text2);text-align:center;margin-bottom:28px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══ LOADING ══ -->
+  <div class="loading-overlay" id="loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">connecting…</div>
+  </div>
+
+  <!-- ══ AUTH (Email + Password) ══ -->
+  <div id="s-auth" class="screen">
+    <div class="auth-wrap">
+      <div class="auth-logo">OnePLUS</div>
+      <div class="auth-sub">Ultrasound Lab® · Pitampura</div>
+      <div class="auth-tabs">
+        <div class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign In</div>
+        <div class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Register</div>
+      </div>
+
+      <!-- LOGIN FORM -->
+      <div id="auth-login-form">
+        <div class="auth-field">
+          <label>Email</label>
+          <input type="email" id="auth-email" placeholder="you@lab.com" autocomplete="email">
+        </div>
+        <div class="auth-field">
+          <label>Password</label>
+          <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <button class="auth-btn" id="auth-login-btn" onclick="doLogin()">Sign In</button>
+        <div class="auth-link" onclick="doResetPassword()">Forgot password?</div>
+        <div class="auth-err" id="auth-err"></div>
+      </div>
+
+      <!-- REGISTER FORM -->
+      <div id="auth-register-form" style="display:none">
+        <div class="auth-field">
+          <label>Full Name</label>
+          <input type="text" id="reg-name" placeholder="Dr. Nitin Kumar">
+        </div>
+        <div class="auth-field">
+          <label>Email</label>
+          <input type="email" id="reg-email" placeholder="you@lab.com">
+        </div>
+        <div class="auth-field">
+          <label>Password (min 6 chars)</label>
+          <input type="password" id="reg-password" placeholder="••••••••">
+        </div>
+        <div class="auth-field">
+          <label style="display:block;font-size:11px;color:rgba(255,255,255,0.5);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Role</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px" id="role-grid">
+            <button type="button" onclick="selectRole('reception')" id="role-reception" style="padding:9px 6px;border:0.5px solid rgba(255,255,255,0.2);border-radius:var(--radius);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6);font-size:12px;font-family:var(--mono);cursor:pointer;transition:all 0.15s">Reception</button>
+            <button type="button" onclick="selectRole('lab')" id="role-lab" style="padding:9px 6px;border:0.5px solid rgba(255,255,255,0.2);border-radius:var(--radius);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6);font-size:12px;font-family:var(--mono);cursor:pointer;transition:all 0.15s">Lab Tech</button>
+            <button type="button" onclick="selectRole('admin')" id="role-admin" style="padding:9px 6px;border:0.5px solid rgba(255,255,255,0.2);border-radius:var(--radius);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6);font-size:12px;font-family:var(--mono);cursor:pointer;transition:all 0.15s">Admin</button>
+            <button type="button" onclick="selectRole('pathologist')" id="role-pathologist" style="padding:9px 6px;border:0.5px solid rgba(255,255,255,0.2);border-radius:var(--radius);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6);font-size:12px;font-family:var(--mono);cursor:pointer;transition:all 0.15s">Pathologist</button>
+          </div>
+          <input type="hidden" id="reg-role" value="reception">
+        </div>
+        <div class="auth-field">
+          <label>PIN (4 digits — for daily login)</label>
+          <input type="password" id="reg-pin" placeholder="••••" maxlength="4" inputmode="numeric">
+        </div>
+        <button class="auth-btn" id="auth-reg-btn" onclick="doRegister()">Create Account</button>
+        <div class="auth-err" id="reg-err"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PIN SCREEN ══ -->
+  <div id="s-pin" class="screen">
+    <div class="pin-wrap">
+      <div class="pin-user" id="pin-username">Good morning</div>
+      <div class="pin-hint" id="pin-rolebadge">Enter your PIN to continue</div>
+      <div class="pin-dots">
+        <div class="pin-dot" id="pd0"></div>
+        <div class="pin-dot" id="pd1"></div>
+        <div class="pin-dot" id="pd2"></div>
+        <div class="pin-dot" id="pd3"></div>
+      </div>
+      <div class="pin-err" id="pin-err"></div>
+      <div class="pin-pad">
+        <button class="pin-key" onclick="pinKey('1')">1</button>
+        <button class="pin-key" onclick="pinKey('2')">2</button>
+        <button class="pin-key" onclick="pinKey('3')">3</button>
+        <button class="pin-key" onclick="pinKey('4')">4</button>
+        <button class="pin-key" onclick="pinKey('5')">5</button>
+        <button class="pin-key" onclick="pinKey('6')">6</button>
+        <button class="pin-key" onclick="pinKey('7')">7</button>
+        <button class="pin-key" onclick="pinKey('8')">8</button>
+        <button class="pin-key" onclick="pinKey('9')">9</button>
+        <button class="pin-key" onclick="pinKey('back')" style="font-size:14px">⌫</button>
+        <button class="pin-key" onclick="pinKey('0')">0</button>
+        <button class="pin-key" onclick="pinKey('clear')" style="font-size:11px;color:rgba(255,255,255,0.5)">CLR</button>
+      </div>
+      <div class="pin-logout" onclick="doSignOut()">Sign out · use different account</div>
+    </div>
+  </div>
+
+  <!-- ══ DASHBOARD ══ -->
+  <div id="s-dash" class="screen">
+    <div class="topbar">
+      <div style="flex:1">
+        <div class="topbar-logo">OnePLUS <span style="font-size:13px;font-weight:300;color:var(--text3)" id="sync-indicator"></span></div>
+      </div>
+      <button onclick="doSignOut()" style="font-size:11px;font-family:var(--mono);color:var(--text3);padding:4px 8px;border:0.5px solid var(--border);border-radius:6px">Sign out</button>
+    </div>
+    <div class="scroll-body">
+      <div class="dash-header">
+        <div class="dash-greeting" id="dash-greeting">Good morning</div>
+        <div class="dash-role" id="dash-role"></div>
+      </div>
+      <div style="padding:0 0 16px">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-num" id="stat-today">—</div>
+            <div class="stat-label">Orders today</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-revenue">—</div>
+            <div class="stat-label">Revenue today</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-pending">—</div>
+            <div class="stat-label">Pending bills</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-handovers">—</div>
+            <div class="stat-label">Handovers today</div>
+          </div>
+        </div>
+        <div class="quick-actions">
+          <button class="qa-btn" onclick="goTo('s-new-order')">
+            <div class="qa-icon">🧪</div>
+            <div class="qa-label">New Order</div>
+            <div class="qa-sub">Register patient</div>
+          </button>
+          <button class="qa-btn" onclick="goTo('s-orders')">
+            <div class="qa-icon">📋</div>
+            <div class="qa-label">All Orders</div>
+            <div class="qa-sub">View & billing</div>
+          </button>
+          <button class="qa-btn" onclick="goTo('s-handover')">
+            <div class="qa-icon">💰</div>
+            <div class="qa-label">Cash Handover</div>
+            <div class="qa-sub">EOD settlement</div>
+          </button>
+          <button class="qa-btn" onclick="goTo('s-eod')">
+            <div class="qa-icon">📊</div>
+            <div class="qa-label">EOD Report</div>
+            <div class="qa-sub">WhatsApp summary</div>
+          </button>
+        </div>
+        <div class="card">
+          <div class="card-title">Recent Orders</div>
+          <div id="dash-recent-orders"><div class="empty"><div class="empty-icon">📭</div>No orders yet today</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ NEW ORDER ══ -->
+  <div id="s-new-order" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="goBack()">←</button>
+      <div style="flex:1">
+        <div class="topbar-title">New Order</div>
+        <div class="topbar-sub" id="order-step-label">Step 1 · Patient Info</div>
+      </div>
+    </div>
+    <div class="step-bar">
+      <div class="step-seg curr" id="seg0"></div>
+      <div class="step-seg" id="seg1"></div>
+      <div class="step-seg" id="seg2"></div>
+    </div>
+    <div class="scroll-body">
+
+      <!-- Step 1: Patient -->
+      <div id="step-patient">
+        <div class="field">
+          <label>Patient Name *</label>
+          <input type="text" id="pt-name" placeholder="Full name">
+          <div class="ferr" id="err-pt-name">Required</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field">
+            <label>Age</label>
+            <input type="number" id="pt-age" placeholder="35" min="0" max="120">
+          </div>
+          <div class="field">
+            <label>Sex</label>
+            <select id="pt-sex">
+              <option value="">—</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+              <option value="O">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Mobile</label>
+          <input type="tel" id="pt-phone" placeholder="9876543210" maxlength="10" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>Referred by</label>
+          <input type="text" id="pt-ref" placeholder="Dr. name or self">
+        </div>
+        <button class="btn btn-primary" onclick="orderStep1Next()">Next → Select Tests</button>
+      </div>
+
+      <!-- Step 2: Tests -->
+      <div id="step-tests" style="display:none">
+        <div class="search-wrap">
+          <span class="search-ico">🔍</span>
+          <input class="field" style="margin:0" type="text" id="test-search" placeholder="Search tests…" oninput="searchTests(this.value)">
+        </div>
+        <div id="test-suggest" class="suggest-list" style="display:none"></div>
+        <div id="selected-tests" class="chip-list"></div>
+        <div class="est-strip" id="est-strip" style="display:none">
+          <div>
+            <div class="est-lbl">Estimated Total</div>
+            <div class="est-skip" id="est-skip-note"></div>
+          </div>
+          <div class="est-amt" id="est-amt">₹0</div>
+        </div>
+        <button class="btn btn-primary" id="tests-next-btn" onclick="orderStep2Next()" disabled>Next → Billing</button>
+      </div>
+
+      <!-- Step 3: Billing -->
+      <div id="step-billing" style="display:none">
+        <div class="bill-total-strip">
+          <div class="bill-total-lbl">Total Amount</div>
+          <div class="bill-total-amt" id="bill-amt">₹0</div>
+          <div class="bill-due" id="bill-due-note"></div>
+        </div>
+        <div class="card-title" style="margin-bottom:8px">Payment Mode</div>
+        <div class="pay-mode-grid">
+          <button class="pay-mode-btn" id="pm-cash" onclick="setPayMode('cash')">💵 Cash</button>
+          <button class="pay-mode-btn" id="pm-upi" onclick="setPayMode('upi')">📱 UPI</button>
+          <button class="pay-mode-btn" id="pm-card" onclick="setPayMode('card')">💳 Card</button>
+          <button class="pay-mode-btn on-credit" id="pm-credit" onclick="setPayMode('credit')">📒 Credit</button>
+        </div>
+        <div class="field" id="paid-amt-field">
+          <label>Amount Paid (₹)</label>
+          <input type="number" id="paid-amt" placeholder="0" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>Notes (optional)</label>
+          <input type="text" id="bill-notes" placeholder="Discount, remarks…">
+        </div>
+        <button class="btn btn-primary" onclick="submitOrder()">✓ Save Order</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ ORDER DONE ══ -->
+  <div id="s-order-done" class="screen">
+    <div class="topbar">
+      <div class="topbar-logo">OnePLUS</div>
+    </div>
+    <div class="done-wrap">
+      <div class="done-ring">✓</div>
+      <div class="done-title">Order Saved</div>
+      <div class="done-sub" id="done-order-id">Synced to Firebase</div>
+      <button class="btn btn-primary" style="max-width:260px" onclick="goTo('s-dash')">Back to Dashboard</button>
+      <div style="height:10px"></div>
+      <button class="btn" style="max-width:260px" onclick="startNewOrder()">+ New Order</button>
+    </div>
+  </div>
+
+  <!-- ══ ALL ORDERS ══ -->
+  <div id="s-orders" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="goBack()">←</button>
+      <div style="flex:1">
+        <div class="topbar-title">All Orders</div>
+        <div class="topbar-sub" id="orders-count-label">Loading…</div>
+      </div>
+    </div>
+    <div class="scroll-body">
+      <div class="search-wrap" style="margin-bottom:16px">
+        <span class="search-ico">🔍</span>
+        <input style="width:100%;padding:9px 11px 9px 36px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text)" type="text" placeholder="Search patient name…" oninput="filterOrders(this.value)">
+      </div>
+      <div id="orders-list"><div class="empty"><div class="empty-icon">⏳</div>Loading orders…</div></div>
+    </div>
+  </div>
+
+  <!-- ══ CASH HANDOVER ══ -->
+  <div id="s-handover" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="goBack()">←</button>
+      <div style="flex:1">
+        <div class="topbar-title">Cash Handover</div>
+        <div class="topbar-sub" id="ho-date-label"></div>
+      </div>
+    </div>
+    <div class="ho-summary-strip">
+      <div class="ho-summary-cell">
+        <div class="ho-summary-val green" id="ho-cash-total">₹0</div>
+        <div class="ho-summary-lbl">Cash</div>
+      </div>
+      <div class="ho-summary-cell">
+        <div class="ho-summary-val" id="ho-upi-total">₹0</div>
+        <div class="ho-summary-lbl">UPI</div>
+      </div>
+      <div class="ho-summary-cell">
+        <div class="ho-summary-val red" id="ho-credit-total">₹0</div>
+        <div class="ho-summary-lbl">Credit</div>
+      </div>
+    </div>
+    <div class="scroll-body" style="padding-top:16px">
+      <div class="card">
+        <div class="card-title">Record Handover</div>
+        <div class="field">
+          <label>Handover To</label>
+          <input type="text" id="ho-to" placeholder="Dr. Nitin / Accountant name">
+        </div>
+        <div class="field">
+          <label>Cash Amount (₹)</label>
+          <input type="number" id="ho-amount" placeholder="0" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>Notes</label>
+          <input type="text" id="ho-notes" placeholder="Shift, remarks…">
+        </div>
+        <button class="btn btn-primary" onclick="submitHandover()">Record Handover</button>
+      </div>
+      <div class="card-title" style="margin-bottom:8px">Today's Handovers</div>
+      <div id="ho-list"><div class="empty">No handovers recorded yet</div></div>
+    </div>
+  </div>
+
+  <!-- ══ EOD REPORT ══ -->
+  <div id="s-eod" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="goBack()">←</button>
+      <div style="flex:1">
+        <div class="topbar-title">EOD Report</div>
+        <div class="topbar-sub" id="eod-date"></div>
+      </div>
+    </div>
+    <div class="scroll-body">
+      <div class="eod-header">
+        <div class="eod-date" id="eod-full-date"></div>
+        <div class="eod-title">End of Day Summary</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Today's Numbers</div>
+        <div class="row"><span class="row-label">Total Orders</span><span class="row-val" id="eod-orders">—</span></div>
+        <div class="row"><span class="row-label">Cash Collected</span><span class="row-val" id="eod-cash">—</span></div>
+        <div class="row"><span class="row-label">UPI Collected</span><span class="row-val" id="eod-upi">—</span></div>
+        <div class="row"><span class="row-label">Card Collected</span><span class="row-val" id="eod-card">—</span></div>
+        <div class="row"><span class="row-label">Credit / Pending</span><span class="row-val" id="eod-credit">—</span></div>
+        <div class="row" style="border-top:1px solid var(--border)"><span class="row-label" style="font-weight:500">Total Revenue</span><span class="row-val" style="color:var(--accent);font-size:16px" id="eod-total">—</span></div>
+      </div>
+      <div class="card-title" style="margin-bottom:8px">WhatsApp Report</div>
+      <div class="wa-preview" id="wa-preview">Generating…</div>
+      <button class="btn btn-primary" onclick="shareWA()">📤 Share on WhatsApp</button>
+      <div style="height:8px"></div>
+      <button class="btn" onclick="saveEODReport()">💾 Save EOD Report</button>
+    </div>
+  </div>
+
+  <!-- ══ TOAST ══ -->
+  <div id="toast"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  FIREBASE INIT
+// ══════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyChTDf2CdK4fBomsYlFlL5Uvsb-eUFaNkE",
+  authDomain: "oneplus-lms.firebaseapp.com",
+  projectId: "oneplus-lms",
+  storageBucket: "oneplus-lms.firebasestorage.app",
+  messagingSenderId: "869836991266",
+  appId: "1:869836991266:web:a754fb93663b2a65c4137b",
+  measurementId: "G-E2YCMF91M5"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+// Enable offline persistence
+db.enablePersistence().catch(e => {
+  if (e.code === 'failed-precondition') console.warn('Multiple tabs open, persistence in one tab only');
+  else if (e.code === 'unimplemented') console.warn('Browser does not support persistence');
+});
+
+// ══════════════════════════════════════════════════
+//  APP STATE
+// ══════════════════════════════════════════════════
+let currentUser = null;       // Firebase Auth user
+let currentProfile = null;    // Firestore staff profile
+let pinBuffer = '';
+let currentOrder = {};        // order being built
+let selectedTests = [];
+let payMode = 'cash';
+let allOrders = [];           // cached for orders list
+let screenStack = [];
+
+// ══════════════════════════════════════════════════
+//  SCREEN NAVIGATION
+// ══════════════════════════════════════════════════
+function goTo(id, pushStack = true) {
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active', 'exit');
+  });
+  if (pushStack) screenStack.push(id);
+  document.getElementById(id).classList.add('active');
+}
+
+function goBack() {
+  screenStack.pop();
+  const prev = screenStack[screenStack.length - 1] || 's-dash';
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active', 'exit'));
+  document.getElementById(prev).classList.add('active');
+}
+
+// ══════════════════════════════════════════════════
+//  AUTH STATE OBSERVER
+// ══════════════════════════════════════════════════
+auth.onAuthStateChanged(async user => {
+  document.getElementById('loading').style.display = 'none';
+  if (!user) {
+    screenStack = ['s-auth'];
+    goTo('s-auth', false);
+    return;
+  }
+  currentUser = user;
+  // Load staff profile from Firestore
+  try {
+    const snap = await db.collection('staff').doc(user.uid).get();
+    if (snap.exists) {
+      currentProfile = snap.data();
+      // Show PIN screen for fast daily auth
+      setupPinScreen();
+      screenStack = ['s-pin'];
+      goTo('s-pin', false);
+    } else {
+      // Profile doesn't exist yet — go to dashboard directly (first-time setup)
+      currentProfile = { name: user.email, role: 'admin', pin: '' };
+      loadDashboard();
+      screenStack = ['s-dash'];
+      goTo('s-dash', false);
+    }
+  } catch(e) {
+    console.error(e);
+    loadDashboard();
+    screenStack = ['s-dash'];
+    goTo('s-dash', false);
+  }
+});
+
+// ══════════════════════════════════════════════════
+//  ROLE SELECTOR
+// ══════════════════════════════════════════════════
+function selectRole(role) {
+  document.getElementById('reg-role').value = role;
+  ['reception','lab','admin','pathologist'].forEach(r => {
+    const btn = document.getElementById('role-'+r);
+    if (r === role) {
+      btn.style.background = 'rgba(255,255,255,0.22)';
+      btn.style.borderColor = 'rgba(255,255,255,0.6)';
+      btn.style.color = '#fff';
+      btn.style.fontWeight = '500';
+    } else {
+      btn.style.background = 'rgba(255,255,255,0.06)';
+      btn.style.borderColor = 'rgba(255,255,255,0.2)';
+      btn.style.color = 'rgba(255,255,255,0.6)';
+      btn.style.fontWeight = 'normal';
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════
+//  AUTH TAB SWITCH
+// ══════════════════════════════════════════════════
+function switchAuthTab(tab) {
+  document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+  document.getElementById('auth-login-form').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('auth-register-form').style.display = tab === 'register' ? 'block' : 'none';
+}
+
+// ══════════════════════════════════════════════════
+//  LOGIN
+// ══════════════════════════════════════════════════
+async function doLogin() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const btn = document.getElementById('auth-login-btn');
+  const errEl = document.getElementById('auth-err');
+  if (!email || !password) { errEl.textContent = 'Enter email and password'; return; }
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    await auth.signInWithEmailAndPassword(email, password);
+    errEl.textContent = '';
+  } catch(e) {
+    errEl.textContent = friendlyAuthError(e.code);
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
+}
+
+// ══════════════════════════════════════════════════
+//  REGISTER
+// ══════════════════════════════════════════════════
+async function doRegister() {
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const role = document.getElementById('reg-role').value;
+  const pin = document.getElementById('reg-pin').value;
+  const errEl = document.getElementById('reg-err');
+  const btn = document.getElementById('auth-reg-btn');
+  if (!name || !email || !password) { errEl.textContent = 'Fill all required fields'; return; }
+  if (pin.length !== 4 || !/^\d{4}$/.test(pin)) { errEl.textContent = 'PIN must be exactly 4 digits'; return; }
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, password);
+    await db.collection('staff').doc(cred.user.uid).set({
+      name, email, role, pin,
+      uid: cred.user.uid,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      active: true
+    });
+    toast('Account created!', 'ok');
+  } catch(e) {
+    errEl.textContent = friendlyAuthError(e.code);
+    btn.disabled = false; btn.textContent = 'Create Account';
+  }
+}
+
+function friendlyAuthError(code) {
+  const map = {
+    'auth/user-not-found': 'No account with that email',
+    'auth/wrong-password': 'Incorrect password',
+    'auth/email-already-in-use': 'Email already registered',
+    'auth/weak-password': 'Password must be at least 6 characters',
+    'auth/invalid-email': 'Invalid email address',
+    'auth/too-many-requests': 'Too many attempts — try again later',
+    'auth/network-request-failed': 'No internet connection'
+  };
+  return map[code] || 'Something went wrong. Try again.';
+}
+
+async function doResetPassword() {
+  const email = document.getElementById('auth-email').value.trim();
+  if (!email) { document.getElementById('auth-err').textContent = 'Enter your email first'; return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    toast('Reset email sent!', 'ok');
+  } catch(e) {
+    document.getElementById('auth-err').textContent = friendlyAuthError(e.code);
+  }
+}
+
+async function doSignOut() {
+  await auth.signOut();
+  currentUser = null; currentProfile = null; pinBuffer = '';
+  screenStack = [];
+  goTo('s-auth', false);
+}
+
+// ══════════════════════════════════════════════════
+//  PIN SCREEN
+// ══════════════════════════════════════════════════
+function setupPinScreen() {
+  const hr = new Date().getHours();
+  const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+  const name = currentProfile?.name?.split(' ')[0] || 'Doctor';
+  document.getElementById('pin-username').textContent = `${greet}, ${name}`;
+  document.getElementById('pin-rolebadge').textContent = (currentProfile?.role || 'staff') + ' · Enter PIN';
+  pinBuffer = '';
+  renderPinDots();
+}
+
+function pinKey(k) {
+  const errEl = document.getElementById('pin-err');
+  errEl.textContent = '';
+  if (k === 'back') { pinBuffer = pinBuffer.slice(0, -1); }
+  else if (k === 'clear') { pinBuffer = ''; }
+  else if (pinBuffer.length < 4) { pinBuffer += k; }
+  renderPinDots();
+  if (pinBuffer.length === 4) {
+    setTimeout(verifyPin, 150);
+  }
+}
+
+function renderPinDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('pd' + i).classList.toggle('filled', i < pinBuffer.length);
+  }
+}
+
+async function verifyPin() {
+  const storedPin = currentProfile?.pin;
+  if (!storedPin) {
+    // No PIN set — bypass (first login)
+    unlockApp();
+    return;
+  }
+  if (pinBuffer === storedPin) {
+    unlockApp();
+  } else {
+    document.getElementById('pin-err').textContent = 'Incorrect PIN — try again';
+    pinBuffer = '';
+    renderPinDots();
+  }
+}
+
+function unlockApp() {
+  loadDashboard();
+  screenStack = ['s-dash'];
+  goTo('s-dash', false);
+}
+
+// ══════════════════════════════════════════════════
+//  DASHBOARD
+// ══════════════════════════════════════════════════
+function loadDashboard() {
+  const hr = new Date().getHours();
+  const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+  const name = currentProfile?.name || currentUser?.email || 'Doctor';
+  document.getElementById('dash-greeting').textContent = `${greet}, ${name.split(' ')[0]}`;
+  document.getElementById('dash-role').textContent = (currentProfile?.role || 'staff').toUpperCase() + ' · OnePLUS Pitampura';
+
+  // Online indicator
+  const online = navigator.onLine;
+  document.getElementById('sync-indicator').innerHTML =
+    `<span class="sync-badge ${online ? 'online' : 'offline'}">${online ? '● Live' : '⚠ Offline'}</span>`;
+
+  loadTodayStats();
+  loadRecentOrders();
+}
+
+async function loadTodayStats() {
+  const today = todayStr();
+  try {
+    const snap = await db.collection('orders')
+      .where('date', '==', today).get();
+    let revenue = 0, pending = 0;
+    snap.forEach(d => {
+      const o = d.data();
+      revenue += (o.paidAmount || 0);
+      if (o.payMode === 'credit') pending++;
+    });
+    document.getElementById('stat-today').textContent = snap.size;
+    document.getElementById('stat-revenue').textContent = '₹' + revenue.toLocaleString('en-IN');
+    document.getElementById('stat-pending').textContent = pending;
+
+    const hoSnap = await db.collection('handovers').where('date', '==', today).get();
+    document.getElementById('stat-handovers').textContent = hoSnap.size;
+  } catch(e) { console.error(e); }
+}
+
+async function loadRecentOrders() {
+  try {
+    const snap = await db.collection('orders')
+      .where('date', '==', todayStr())
+      .orderBy('createdAt', 'desc').limit(5).get();
+    const el = document.getElementById('dash-recent-orders');
+    if (snap.empty) { el.innerHTML = '<div class="empty"><div class="empty-icon">📭</div>No orders yet today</div>'; return; }
+    el.innerHTML = '';
+    snap.forEach(d => { el.appendChild(miniOrderCard(d.id, d.data())); });
+  } catch(e) { console.error(e); }
+}
+
+function miniOrderCard(id, o) {
+  const div = document.createElement('div');
+  div.className = 'row';
+  div.style.cursor = 'pointer';
+  div.innerHTML = `
+    <div>
+      <div style="font-size:13px;font-weight:500">${o.patientName}</div>
+      <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${o.tests?.map(t=>t.name).join(', ') || ''}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:13px;color:var(--accent);font-family:var(--serif)">₹${(o.paidAmount||0).toLocaleString('en-IN')}</div>
+      <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">${payModeBadge(o.payMode)}</div>
+    </div>`;
+  return div;
+}
+
+// ══════════════════════════════════════════════════
+//  TEST CATALOGUE (embedded — add your real tests)
+// ══════════════════════════════════════════════════
+const TEST_CATALOGUE = [
+  { name: 'CBC', dept: 'Haematology', rate: 250 },
+  { name: 'ESR', dept: 'Haematology', rate: 80 },
+  { name: 'Blood Group & Rh', dept: 'Haematology', rate: 100 },
+  { name: 'Peripheral Smear', dept: 'Haematology', rate: 200 },
+  { name: 'PT/INR', dept: 'Coagulation', rate: 300 },
+  { name: 'Blood Glucose Fasting', dept: 'Biochemistry', rate: 80 },
+  { name: 'Blood Glucose PP', dept: 'Biochemistry', rate: 80 },
+  { name: 'HbA1c', dept: 'Biochemistry', rate: 350 },
+  { name: 'Lipid Profile', dept: 'Biochemistry', rate: 500 },
+  { name: 'LFT', dept: 'Biochemistry', rate: 600 },
+  { name: 'KFT / RFT', dept: 'Biochemistry', rate: 600 },
+  { name: 'Serum Creatinine', dept: 'Biochemistry', rate: 120 },
+  { name: 'Blood Urea', dept: 'Biochemistry', rate: 100 },
+  { name: 'Serum Uric Acid', dept: 'Biochemistry', rate: 120 },
+  { name: 'Serum Electrolytes', dept: 'Biochemistry', rate: 400 },
+  { name: 'Thyroid Profile (TSH, T3, T4)', dept: 'Immunology', rate: 700 },
+  { name: 'TSH', dept: 'Immunology', rate: 300 },
+  { name: 'Vitamin D (25-OH)', dept: 'Immunology', rate: 900 },
+  { name: 'Vitamin B12', dept: 'Immunology', rate: 700 },
+  { name: 'Iron Studies (S.Iron, TIBC, Ferritin)', dept: 'Immunology', rate: 900 },
+  { name: 'PSA Total', dept: 'Immunology', rate: 600 },
+  { name: 'CRP', dept: 'Immunology', rate: 300 },
+  { name: 'RA Factor', dept: 'Serology', rate: 200 },
+  { name: 'Widal Test', dept: 'Serology', rate: 200 },
+  { name: 'Dengue NS1 + IgM/IgG', dept: 'Serology', rate: 800 },
+  { name: 'Malaria Antigen', dept: 'Serology', rate: 300 },
+  { name: 'HBsAg', dept: 'Serology', rate: 200 },
+  { name: 'Anti-HCV', dept: 'Serology', rate: 400 },
+  { name: 'HIV 1 & 2', dept: 'Serology', rate: 300 },
+  { name: 'VDRL', dept: 'Serology', rate: 150 },
+  { name: 'Urine R/M', dept: 'Urine', rate: 100 },
+  { name: 'Urine Culture & Sensitivity', dept: 'Microbiology', rate: 600 },
+  { name: 'Stool Examination', dept: 'Microbiology', rate: 150 },
+  { name: 'USG Abdomen & Pelvis', dept: 'Ultrasound', rate: 1200 },
+  { name: 'USG Pregnancy (Obs)', dept: 'Ultrasound', rate: 1000 },
+  { name: 'NT Scan', dept: 'Ultrasound', rate: 1800 },
+  { name: 'Anomaly Scan (Level II)', dept: 'Ultrasound', rate: 2500 },
+  { name: 'Doppler Study', dept: 'Ultrasound', rate: 1500 },
+  { name: 'USG Thyroid', dept: 'Ultrasound', rate: 800 },
+  { name: 'USG Pelvis (TVS)', dept: 'Ultrasound', rate: 1000 },
+  { name: 'X-Ray Chest PA', dept: 'Radiology', rate: 400 },
+  { name: 'ECG', dept: 'Cardiology', rate: 300 },
+  { name: '2D Echo', dept: 'Cardiology', rate: 2500 },
+];
+
+function searchTests(q) {
+  const sugEl = document.getElementById('test-suggest');
+  if (!q || q.length < 1) { sugEl.style.display = 'none'; return; }
+  const hits = TEST_CATALOGUE.filter(t =>
+    t.name.toLowerCase().includes(q.toLowerCase()) ||
+    t.dept.toLowerCase().includes(q.toLowerCase())
+  ).slice(0, 10);
+  if (!hits.length) { sugEl.style.display = 'none'; return; }
+  sugEl.style.display = 'block';
+  sugEl.innerHTML = hits.map(t => `
+    <div class="suggest-item" onclick="addTest(${JSON.stringify(t).replace(/"/g,"'")})">
+      <div><div class="sug-name">${t.name}</div><div class="sug-dept">${t.dept}</div></div>
+      <div class="sug-rate">₹${t.rate}</div>
+    </div>`).join('');
+}
+
+function addTest(t) {
+  if (selectedTests.find(x => x.name === t.name)) { toast('Already added', 'warn'); return; }
+  selectedTests.push(t);
+  document.getElementById('test-search').value = '';
+  document.getElementById('test-suggest').style.display = 'none';
+  renderSelectedTests();
+}
+
+function removeTest(idx) {
+  selectedTests.splice(idx, 1);
+  renderSelectedTests();
+}
+
+function renderSelectedTests() {
+  const el = document.getElementById('selected-tests');
+  const total = selectedTests.reduce((s,t) => s + t.rate, 0);
+  el.innerHTML = selectedTests.map((t,i) => `
+    <div class="chip">
+      <div class="chip-info"><div class="chip-name">${t.name}</div><div class="chip-meta">${t.dept}</div></div>
+      <div class="chip-right"><div class="chip-amt">₹${t.rate}</div>
+      <button class="chip-del" onclick="removeTest(${i})">✕</button></div>
+    </div>`).join('') || '<div style="color:var(--text3);font-size:13px;text-align:center;padding:12px">No tests selected</div>';
+
+  const strip = document.getElementById('est-strip');
+  const btn = document.getElementById('tests-next-btn');
+  if (selectedTests.length > 0) {
+    strip.style.display = 'flex';
+    document.getElementById('est-amt').textContent = '₹' + total.toLocaleString('en-IN');
+    btn.disabled = false;
+  } else {
+    strip.style.display = 'none';
+    btn.disabled = true;
+  }
+}
+
+// ══════════════════════════════════════════════════
+//  ORDER STEPS
+// ══════════════════════════════════════════════════
+function orderStep1Next() {
+  const name = document.getElementById('pt-name').value.trim();
+  const errEl = document.getElementById('err-pt-name');
+  if (!name) { errEl.classList.add('on'); return; }
+  errEl.classList.remove('on');
+  currentOrder.patientName = name;
+  currentOrder.age = document.getElementById('pt-age').value;
+  currentOrder.sex = document.getElementById('pt-sex').value;
+  currentOrder.phone = document.getElementById('pt-phone').value;
+  currentOrder.refBy = document.getElementById('pt-ref').value;
+  selectedTests = [];
+  showOrderStep(2);
+}
+
+function orderStep2Next() {
+  if (!selectedTests.length) { toast('Select at least one test', 'warn'); return; }
+  currentOrder.tests = selectedTests;
+  const total = selectedTests.reduce((s,t) => s + t.rate, 0);
+  currentOrder.totalAmount = total;
+  document.getElementById('bill-amt').textContent = '₹' + total.toLocaleString('en-IN');
+  document.getElementById('paid-amt').value = total;
+  setPayMode('cash');
+  showOrderStep(3);
+}
+
+function showOrderStep(n) {
+  document.getElementById('step-patient').style.display = n===1?'block':'none';
+  document.getElementById('step-tests').style.display = n===2?'block':'none';
+  document.getElementById('step-billing').style.display = n===3?'block':'none';
+  const labels = ['Step 1 · Patient Info', 'Step 2 · Select Tests', 'Step 3 · Billing'];
+  document.getElementById('order-step-label').textContent = labels[n-1];
+  ['seg0','seg1','seg2'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    el.className = 'step-seg' + (i < n-1 ? ' done' : i===n-1 ? ' curr' : '');
+  });
+}
+
+function setPayMode(m) {
+  payMode = m;
+  ['cash','upi','card','credit'].forEach(mode => {
+    const btn = document.getElementById('pm-'+mode);
+    btn.className = 'pay-mode-btn' + (mode===m ? (mode==='credit'?' on-credit':' on') : '');
+  });
+  document.getElementById('paid-amt-field').style.display = m==='credit' ? 'none' : 'block';
+  if (m==='credit') {
+    document.getElementById('bill-due-note').textContent = 'Amount on credit — collect later';
+  } else {
+    document.getElementById('bill-due-note').textContent = '';
+  }
+}
+
+// ══════════════════════════════════════════════════
+//  SUBMIT ORDER → FIRESTORE
+// ══════════════════════════════════════════════════
+async function submitOrder() {
+  const paidAmt = payMode === 'credit' ? 0 : parseFloat(document.getElementById('paid-amt').value || 0);
+  const notes = document.getElementById('bill-notes').value;
+  const order = {
+    patientName: currentOrder.patientName,
+    age: currentOrder.age || '',
+    sex: currentOrder.sex || '',
+    phone: currentOrder.phone || '',
+    refBy: currentOrder.refBy || '',
+    tests: currentOrder.tests,
+    totalAmount: currentOrder.totalAmount,
+    paidAmount: paidAmt,
+    dueAmount: currentOrder.totalAmount - paidAmt,
+    payMode: payMode,
+    notes: notes,
+    date: todayStr(),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    createdBy: currentUser.uid,
+    createdByName: currentProfile?.name || currentUser.email,
+    status: payMode === 'credit' ? 'pending' : 'paid'
+  };
+  try {
+    const docRef = await db.collection('orders').add(order);
+    document.getElementById('done-order-id').textContent = 'Order ID: ' + docRef.id.slice(-6).toUpperCase() + ' · Synced ✓';
+    goTo('s-order-done');
+    loadTodayStats();
+  } catch(e) {
+    toast('Save failed — check connection', 'err');
+    console.error(e);
+  }
+}
+
+function startNewOrder() {
+  currentOrder = {}; selectedTests = []; payMode = 'cash';
+  document.getElementById('pt-name').value = '';
+  document.getElementById('pt-age').value = '';
+  document.getElementById('pt-sex').value = '';
+  document.getElementById('pt-phone').value = '';
+  document.getElementById('pt-ref').value = '';
+  document.getElementById('test-search').value = '';
+  document.getElementById('bill-notes').value = '';
+  renderSelectedTests();
+  showOrderStep(1);
+  goTo('s-new-order');
+}
+
+// ══════════════════════════════════════════════════
+//  ALL ORDERS
+// ══════════════════════════════════════════════════
+async function loadAllOrders() {
+  document.getElementById('orders-list').innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>Loading…</div>';
+  try {
+    const snap = await db.collection('orders')
+      .where('date', '==', todayStr())
+      .orderBy('createdAt', 'desc').get();
+    allOrders = [];
+    snap.forEach(d => allOrders.push({ id: d.id, ...d.data() }));
+    renderOrdersList(allOrders);
+    document.getElementById('orders-count-label').textContent = allOrders.length + ' orders today';
+  } catch(e) { console.error(e); }
+}
+
+function filterOrders(q) {
+  if (!q) { renderOrdersList(allOrders); return; }
+  const filt = allOrders.filter(o => o.patientName?.toLowerCase().includes(q.toLowerCase()));
+  renderOrdersList(filt);
+}
+
+function renderOrdersList(orders) {
+  const el = document.getElementById('orders-list');
+  if (!orders.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📭</div>No orders found</div>'; return; }
+  el.innerHTML = orders.map(o => `
+    <div class="order-card">
+      <div class="order-id">${o.id.slice(-6).toUpperCase()} · ${o.date}</div>
+      <div class="order-patient">${o.patientName}</div>
+      <div class="order-meta">${o.age ? o.age+'yr ' : ''}${o.sex || ''} · Ref: ${o.refBy || '—'}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">${o.tests?.map(t=>t.name).join(', ') || ''}</div>
+      <div class="order-footer">
+        <span class="badge ${o.status==='paid'?'badge-green':'badge-gold'}">${o.status?.toUpperCase()||'PAID'}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">${payModeBadge(o.payMode)}</span>
+        <div class="order-amt">₹${(o.paidAmount||0).toLocaleString('en-IN')}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════
+//  CASH HANDOVER
+// ══════════════════════════════════════════════════
+async function loadHandoverScreen() {
+  const today = todayStr();
+  document.getElementById('ho-date-label').textContent = today;
+  try {
+    const snap = await db.collection('orders').where('date','==',today).get();
+    let cash=0, upi=0, credit=0;
+    snap.forEach(d => {
+      const o = d.data();
+      if (o.payMode==='cash') cash += (o.paidAmount||0);
+      else if (o.payMode==='upi'||o.payMode==='card') upi += (o.paidAmount||0);
+      else if (o.payMode==='credit') credit += (o.totalAmount||0);
+    });
+    document.getElementById('ho-cash-total').textContent = '₹'+cash.toLocaleString('en-IN');
+    document.getElementById('ho-upi-total').textContent = '₹'+upi.toLocaleString('en-IN');
+    document.getElementById('ho-credit-total').textContent = '₹'+credit.toLocaleString('en-IN');
+    document.getElementById('ho-amount').value = cash;
+
+    const hoSnap = await db.collection('handovers').where('date','==',today).orderBy('createdAt','desc').get();
+    const hoEl = document.getElementById('ho-list');
+    if (hoSnap.empty) { hoEl.innerHTML = '<div class="empty">No handovers recorded yet</div>'; return; }
+    hoEl.innerHTML = '';
+    hoSnap.forEach(d => {
+      const h = d.data();
+      const div = document.createElement('div');
+      div.className = 'ho-handover-card';
+      div.innerHTML = `
+        <div class="ho-card-header"><span class="ho-card-id">${d.id.slice(-6).toUpperCase()}</span><span class="ho-card-time">${h.time||''}</span></div>
+        <div class="ho-card-body">
+          <div><div class="ho-card-k">To</div><div class="ho-card-v">${h.handoverTo}</div></div>
+          <div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">₹${(h.amount||0).toLocaleString('en-IN')}</div></div>
+          <div><div class="ho-card-k">By</div><div class="ho-card-v">${h.recordedByName||'—'}</div></div>
+          <div><div class="ho-card-k">Notes</div><div class="ho-card-v">${h.notes||'—'}</div></div>
+        </div>`;
+      hoEl.appendChild(div);
+    });
+  } catch(e) { console.error(e); }
+}
+
+async function submitHandover() {
+  const handoverTo = document.getElementById('ho-to').value.trim();
+  const amount = parseFloat(document.getElementById('ho-amount').value || 0);
+  const notes = document.getElementById('ho-notes').value;
+  if (!handoverTo) { toast('Enter handover recipient', 'warn'); return; }
+  const now = new Date();
+  try {
+    await db.collection('handovers').add({
+      handoverTo, amount, notes,
+      date: todayStr(),
+      time: now.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'}),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      recordedBy: currentUser.uid,
+      recordedByName: currentProfile?.name || currentUser.email
+    });
+    toast('Handover recorded ✓', 'ok');
+    document.getElementById('ho-to').value = '';
+    document.getElementById('ho-notes').value = '';
+    loadHandoverScreen();
+    loadTodayStats();
+  } catch(e) { toast('Failed — check connection', 'err'); console.error(e); }
+}
+
+// ══════════════════════════════════════════════════
+//  EOD REPORT
+// ══════════════════════════════════════════════════
+async function loadEODReport() {
+  const today = todayStr();
+  const d = new Date();
+  document.getElementById('eod-date').textContent = today;
+  document.getElementById('eod-full-date').textContent = d.toLocaleDateString('en-IN',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  try {
+    const snap = await db.collection('orders').where('date','==',today).get();
+    let cash=0, upi=0, card=0, credit=0, total=0;
+    snap.forEach(doc => {
+      const o = doc.data();
+      const paid = o.paidAmount || 0;
+      total += paid;
+      if (o.payMode==='cash') cash+=paid;
+      else if (o.payMode==='upi') upi+=paid;
+      else if (o.payMode==='card') card+=paid;
+      else if (o.payMode==='credit') credit+=(o.totalAmount||0);
+    });
+    const fmt = n => '₹' + n.toLocaleString('en-IN');
+    document.getElementById('eod-orders').textContent = snap.size;
+    document.getElementById('eod-cash').textContent = fmt(cash);
+    document.getElementById('eod-upi').textContent = fmt(upi);
+    document.getElementById('eod-card').textContent = fmt(card);
+    document.getElementById('eod-credit').textContent = fmt(credit);
+    document.getElementById('eod-total').textContent = fmt(total);
+
+    const waText =
+`*OnePLUS Ultrasound Lab® — EOD Report*
+📅 ${d.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}
+
+📋 Total Orders: *${snap.size}*
+💵 Cash: *${fmt(cash)}*
+📱 UPI: *${fmt(upi)}*
+💳 Card: *${fmt(card)}*
+📒 Credit: *${fmt(credit)}*
+━━━━━━━━━━━━━━━━━
+💰 Total Revenue: *${fmt(total)}*
+
+Prepared by ${currentProfile?.name || currentUser?.email}
+_OnePLUS Lab Management System_`;
+    document.getElementById('wa-preview').textContent = waText;
+  } catch(e) { console.error(e); }
+}
+
+async function saveEODReport() {
+  const today = todayStr();
+  const waText = document.getElementById('wa-preview').textContent;
+  try {
+    await db.collection('eod_reports').doc(today).set({
+      date: today,
+      report: waText,
+      savedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      savedBy: currentUser.uid,
+      savedByName: currentProfile?.name || currentUser.email
+    });
+    toast('EOD report saved ✓', 'ok');
+  } catch(e) { toast('Save failed', 'err'); }
+}
+
+function shareWA() {
+  const text = document.getElementById('wa-preview').textContent;
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+}
+
+// ══════════════════════════════════════════════════
+//  SCREEN HOOKS (called when navigating to screens)
+// ══════════════════════════════════════════════════
+const origGoTo = goTo;
+window.goTo = function(id, push=true) {
+  origGoTo(id, push);
+  if (id === 's-orders') loadAllOrders();
+  if (id === 's-handover') loadHandoverScreen();
+  if (id === 's-eod') loadEODReport();
+  if (id === 's-new-order') { currentOrder={}; selectedTests=[]; showOrderStep(1); renderSelectedTests(); }
+};
+
+// ══════════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════════
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function payModeBadge(mode) {
+  const map = { cash:'💵 Cash', upi:'📱 UPI', card:'💳 Card', credit:'📒 Credit' };
+  return map[mode] || mode || '';
+}
+
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (type ? ' '+type : '');
+  setTimeout(() => { el.className = ''; }, 2500);
+}
+
+// Online/offline events
+window.addEventListener('online', () => loadDashboard());
+window.addEventListener('offline', () => loadDashboard());
+</script>
+</body>
+</html>

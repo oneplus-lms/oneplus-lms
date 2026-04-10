@@ -580,7 +580,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="done-sub" id="done-id">Synced to Firebase</div>
     <button class="btn btn-primary" style="max-width:260px" onclick="goTo('s-dash')">Back to Dashboard</button>
     <div style="height:8px"></div>
-    <button class="btn" style="max-width:260px;color:var(--accent);border-color:var(--accent)" onclick="openTRF()">Print / Share TRF</button>
+    <button class="btn" style="max-width:260px;color:var(--accent);border-color:var(--accent)" onclick="openTRF()">&#128196; PDF / Share TRF</button>
     <div style="height:8px"></div>
     <button class="btn" style="max-width:260px" onclick="newOrder()">+ New Order</button>
   </div>
@@ -848,7 +848,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   <div class="topbar">
     <button class="back-btn" onclick="goBack()">&#8592;</button>
     <div style="flex:1"><div class="topbar-title">Test Request Form</div><div class="topbar-sub" id="trf-order-id"></div></div>
-    <button onclick="window.print()" style="font-size:11px;font-family:var(--mono);color:var(--accent);padding:4px 10px;border:0.5px solid var(--accent);border-radius:6px;background:none;cursor:pointer">Print</button>
+    <button onclick="downloadTRFpdf()" style="font-size:11px;font-family:var(--mono);color:#fff;padding:4px 10px;border:none;border-radius:6px;background:var(--accent);cursor:pointer">&#128196; PDF</button>
   </div>
   <div class="scroll-body" id="trf-body"></div>
 </div>
@@ -2537,7 +2537,10 @@ function openTRF() {
     + '<div style="background:#fff;border:0.5px solid #ddd;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#999">Collected by</div><div style="font-size:12px;margin-top:2px">' + esc(o.createdByName||'-') + '</div></div>'
     + '<div style="background:#fff;border:0.5px solid #ddd;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#999">Status</div><div style="font-size:12px;margin-top:2px;font-weight:500;color:#1A4A3A">' + esc((o.status||'PAID').toUpperCase()) + '</div></div>'
     + '</div>'
-    + (o.rxPhoto ? '<div style="margin-bottom:12px"><div style="font-size:11px;color:#999;margin-bottom:6px;text-transform:uppercase">Prescription</div><img src="' + o.rxPhoto + '" style="width:100%;border-radius:8px;border:0.5px solid #ddd"></div>' : '') + (o.paymentProof ? '<div style="margin-bottom:12px"><div style="font-size:11px;color:#999;margin-bottom:6px;text-transform:uppercase">Payment Proof</div><img src="' + o.paymentProof + '" style="width:100%;border-radius:8px;border:0.5px solid #ddd"></div>' : '') + '<button onclick="shareTRFWA()" style="width:100%;padding:12px;background:#25D366;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer">Share via WhatsApp</button>';
+    + (o.rxPhoto ? '<div style="margin-bottom:12px"><div style="font-size:11px;color:#999;margin-bottom:6px;text-transform:uppercase">Prescription</div><img src="' + o.rxPhoto + '" style="width:100%;border-radius:8px;border:0.5px solid #ddd"></div>' : '') + (o.paymentProof ? '<div style="margin-bottom:12px"><div style="font-size:11px;color:#999;margin-bottom:6px;text-transform:uppercase">Payment Proof</div><img src="' + o.paymentProof + '" style="width:100%;border-radius:8px;border:0.5px solid #ddd"></div>' : '') + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">'
+    + '<button onclick="downloadTRFpdf()" style="padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer">&#128196; Download PDF</button>'
+    + '<button onclick="shareTRFWA()" style="padding:12px;background:#25D366;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer">&#128172; WhatsApp</button>'
+    + '</div>';
 
   goTo('s-trf');
 }

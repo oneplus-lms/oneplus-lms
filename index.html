@@ -256,6 +256,14 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-text{font-size:12px;font-family:var(--mono);color:var(--text3)}
 
+/* ── PRINT TRF ── */
+@media print {
+  #app > *:not(#s-trf) { display: none !important; }
+  #s-trf { position: static !important; transform: none !important; opacity: 1 !important; pointer-events: all !important; background: #fff !important; }
+  .topbar button, .back-btn { display: none !important; }
+  body { background: #fff !important; }
+}
+
 /* ── DONE SCREEN ── */
 .done-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px}
 .done-ring{width:64px;height:64px;border-radius:50%;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:16px}
@@ -414,6 +422,11 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
             <div class="qa-label">EOD Report</div>
             <div class="qa-sub">WhatsApp summary</div>
           </button>
+          <button class="qa-btn" id="admin-btn" onclick="goTo('s-admin')" style="display:none">
+            <div class="qa-icon">⚙️</div>
+            <div class="qa-label">Admin</div>
+            <div class="qa-sub">Staff & roles</div>
+          </button>
         </div>
         <div class="card">
           <div class="card-title">Recent Orders</div>
@@ -474,6 +487,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 
       <!-- Step 2: Tests -->
       <div id="step-tests" style="display:none">
+        <button onclick="showOrderStep(1)" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);font-family:var(--mono);margin-bottom:12px;padding:4px 0;background:none;border:none;cursor:pointer">← Back to Patient Info</button>
         <div class="search-wrap">
           <span class="search-ico">🔍</span>
           <input class="field" style="margin:0" type="text" id="test-search" placeholder="Search tests…" oninput="searchTests(this.value)">
@@ -492,6 +506,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 
       <!-- Step 3: Billing -->
       <div id="step-billing" style="display:none">
+        <button onclick="showOrderStep(2)" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);font-family:var(--mono);margin-bottom:12px;padding:4px 0;background:none;border:none;cursor:pointer">← Back to Tests</button>
         <div class="bill-total-strip">
           <div class="bill-total-lbl">Total Amount</div>
           <div class="bill-total-amt" id="bill-amt">₹0</div>
@@ -531,7 +546,9 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <div class="done-title">Order Saved</div>
       <div class="done-sub" id="done-order-id">Synced to Firebase</div>
       <button class="btn btn-primary" style="max-width:260px" onclick="goTo('s-dash')">Back to Dashboard</button>
-      <div style="height:10px"></div>
+      <div style="height:8px"></div>
+      <button class="btn" style="max-width:260px;border-color:var(--accent);color:var(--accent)" onclick="openTRF()">🖨 Print / Share TRF</button>
+      <div style="height:8px"></div>
       <button class="btn" style="max-width:260px" onclick="startNewOrder()">+ New Order</button>
     </div>
   </div>
@@ -627,6 +644,65 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <button class="btn btn-primary" onclick="shareWA()">📤 Share on WhatsApp</button>
       <div style="height:8px"></div>
       <button class="btn" onclick="saveEODReport()">💾 Save EOD Report</button>
+    </div>
+  </div>
+
+  <!-- ══ ADMIN ══ -->
+  <div id="s-admin" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="goBack()">←</button>
+      <div style="flex:1">
+        <div class="topbar-title">Admin</div>
+        <div class="topbar-sub">Staff management</div>
+      </div>
+    </div>
+    <div class="scroll-body">
+      <div class="card">
+        <div class="card-title">Temp Role Override</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Grant a staff member a second role for this shift only. Resets at midnight.</div>
+        <div class="field">
+          <label>Staff Email</label>
+          <input type="email" id="temp-email" placeholder="staff@lab.com">
+        </div>
+        <div class="field">
+          <label>Temp Role to Add</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" id="temp-role-grid">
+            <button type="button" onclick="selectTempRole('reception')" id="tr-reception" class="tog">Reception</button>
+            <button type="button" onclick="selectTempRole('lab')" id="tr-lab" class="tog">Lab Tech</button>
+            <button type="button" onclick="selectTempRole('admin')" id="tr-admin" class="tog">Admin</button>
+            <button type="button" onclick="selectTempRole('pathologist')" id="tr-pathologist" class="tog">Pathologist</button>
+          </div>
+          <input type="hidden" id="temp-role-val" value="">
+        </div>
+        <div class="field">
+          <label>Reason / Note</label>
+          <input type="text" id="temp-reason" placeholder="e.g. Reception staff absent">
+        </div>
+        <button class="btn btn-primary" onclick="grantTempRole()">Grant Temp Role</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Active Temp Roles Today</div>
+        <div id="temp-roles-list"><div class="empty">No temp roles active</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">All Staff</div>
+        <div id="admin-staff-list"><div class="empty">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TRF (Test Request Form) ══ -->
+  <div id="s-trf" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="goBack()">←</button>
+      <div style="flex:1">
+        <div class="topbar-title">Test Request Form</div>
+        <div class="topbar-sub" id="trf-order-id"></div>
+      </div>
+      <button onclick="printTRF()" style="font-size:11px;font-family:var(--mono);color:var(--accent);padding:4px 10px;border:0.5px solid var(--accent);border-radius:6px">🖨 Print</button>
+    </div>
+    <div class="scroll-body" id="trf-body" style="padding-bottom:40px">
+      <!-- filled dynamically -->
     </div>
   </div>
 
@@ -883,6 +959,10 @@ function unlockApp() {
   loadDashboard();
   screenStack = ['s-dash'];
   goTo('s-dash', false);
+  // Show admin button for admin/pathologist
+  const role = currentProfile?.role || '';
+  const adminBtn = document.getElementById('admin-btn');
+  if (adminBtn) adminBtn.style.display = (role === 'admin' || role === 'pathologist') ? 'block' : 'none';
 }
 
 // ══════════════════════════════════════════════════
@@ -2124,7 +2204,8 @@ async function submitOrder() {
   };
   try {
     const docRef = await db.collection('orders').add(order);
-    document.getElementById('done-order-id').textContent = 'Order ID: ' + docRef.id.slice(-6).toUpperCase() + ' · Synced ✓';
+    lastSavedOrder = { ...order, id: docRef.id };
+    document.getElementById('done-order-id').textContent = 'Order #' + docRef.id.slice(-6).toUpperCase() + ' · Synced ✓';
     goTo('s-order-done');
     loadTodayStats();
   } catch(e) {
@@ -2333,7 +2414,228 @@ window.goTo = function(id, push=true) {
   if (id === 's-handover') loadHandoverScreen();
   if (id === 's-eod') loadEODReport();
   if (id === 's-new-order') { currentOrder={}; selectedTests=[]; showOrderStep(1); renderSelectedTests(); }
+  if (id === 's-admin') { loadTempRoles(); loadAdminStaff(); }
 };
+
+// ══════════════════════════════════════════════════
+//  TRF — IN-APP TEST REQUEST FORM
+// ══════════════════════════════════════════════════
+let lastSavedOrder = null;
+
+function openTRF() {
+  if (!lastSavedOrder) { toast('No order to print', 'warn'); return; }
+  renderTRF(lastSavedOrder);
+  goTo('s-trf');
+}
+
+function renderTRF(o) {
+  const id = (o.id || '').slice(-6).toUpperCase();
+  document.getElementById('trf-order-id').textContent = 'Order #' + id;
+  const date = o.date || todayStr();
+  const tests = (o.tests || []).map((t,i) =>
+    `<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:13px">${i+1}. ${t.name}</td>
+     <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;color:#64748b">${t.dept}</td>
+     <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right;font-weight:500">₹${(t.rate||0).toLocaleString('en-IN')}</td></tr>`
+  ).join('');
+
+  document.getElementById('trf-body').innerHTML = `
+    <div style="background:var(--accent);border-radius:12px;padding:14px 16px;color:#fff;margin-bottom:16px">
+      <div style="font-family:var(--serif);font-size:20px;font-weight:300;margin-bottom:2px">OnePLUS Ultrasound Lab®</div>
+      <div style="font-size:11px;opacity:0.7;font-family:var(--mono)">47, Harsh Vihar, Pitampura, Delhi-34 · 011-4248 0101</div>
+    </div>
+    <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px">
+      <div style="font-size:11px;font-family:var(--mono);color:var(--text3);margin-bottom:8px;text-transform:uppercase">Patient Details</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><div style="font-size:10px;color:var(--text3)">Name</div><div style="font-size:14px;font-weight:500">${o.patientName||'—'}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Age/Sex</div><div style="font-size:14px;font-weight:500">${o.age||'—'} ${o.sex||''}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Mobile</div><div style="font-size:14px">${o.phone||'—'}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Ref by</div><div style="font-size:14px">${o.refBy||'—'}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Date</div><div style="font-size:14px">${date}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Order ID</div><div style="font-size:14px;font-family:var(--mono)">#${id}</div></div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px">
+      <div style="padding:10px 16px;border-bottom:0.5px solid var(--border);font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">Tests Ordered</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:6px 8px;font-size:10px;color:var(--text3);text-align:left;font-family:var(--mono)">Test</th>
+          <th style="padding:6px 8px;font-size:10px;color:var(--text3);text-align:left;font-family:var(--mono)">Dept</th>
+          <th style="padding:6px 8px;font-size:10px;color:var(--text3);text-align:right;font-family:var(--mono)">Rate</th>
+        </tr></thead>
+        <tbody>${tests}</tbody>
+      </table>
+    </div>
+    <div style="background:var(--accent);border-radius:12px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.6);font-family:var(--mono)">Total · ${payModeBadge(o.payMode)}</div>
+        ${o.discount>0 ? `<div style="font-size:11px;color:rgba(255,255,255,0.5)">Discount: ₹${o.discount}</div>` : ''}
+      </div>
+      <div style="font-family:var(--serif);font-size:24px;color:#fff;font-weight:500">₹${(o.paidAmount||0).toLocaleString('en-IN')}</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <div style="flex:1;background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">Collected by</div>
+        <div style="font-size:12px;margin-top:2px">${o.createdByName||'—'}</div>
+      </div>
+      <div style="flex:1;background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">Status</div>
+        <div style="font-size:12px;margin-top:2px;color:${o.status==='paid'?'var(--accent)':'var(--gold)'};font-weight:500">${(o.status||'PAID').toUpperCase()}</div>
+      </div>
+    </div>
+    <button class="btn" onclick="shareTRFWhatsApp()" style="margin-bottom:8px">📤 Share via WhatsApp</button>
+  `;
+}
+
+function printTRF() {
+  window.print();
+}
+
+function shareTRFWhatsApp() {
+  if (!lastSavedOrder) return;
+  const o = lastSavedOrder;
+  const id = (o.id||'').slice(-6).toUpperCase();
+  const tests = (o.tests||[]).map(t => `  • ${t.name} — ₹${(t.rate||0).toLocaleString('en-IN')}`).join('
+');
+  const msg = `*OnePLUS Ultrasound Lab® — TRF*
+47, Harsh Vihar, Pitampura, Delhi-34
+Order #${id} · ${o.date}
+
+*Patient:* ${o.patientName}
+*Age/Sex:* ${o.age||'—'} ${o.sex||''}
+*Ref by:* ${o.refBy||'—'}
+
+*Tests:*
+${tests}
+
+*Total Paid:* ₹${(o.paidAmount||0).toLocaleString('en-IN')} (${o.payMode})
+
+_OnePLUS Lab Management System_`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// ══════════════════════════════════════════════════
+//  TEMP ROLE OVERRIDE
+// ══════════════════════════════════════════════════
+let selectedTempRole = '';
+
+function selectTempRole(role) {
+  selectedTempRole = role;
+  document.getElementById('temp-role-val').value = role;
+  ['reception','lab','admin','pathologist'].forEach(r => {
+    document.getElementById('tr-'+r).className = 'tog' + (r===role?' on':'');
+  });
+}
+
+async function grantTempRole() {
+  const email = document.getElementById('temp-email').value.trim();
+  const role = selectedTempRole;
+  const reason = document.getElementById('temp-reason').value.trim();
+  if (!email) { toast('Enter staff email', 'warn'); return; }
+  if (!role) { toast('Select a role', 'warn'); return; }
+  try {
+    // Find staff by email
+    const snap = await db.collection('staff').where('email','==',email).get();
+    if (snap.empty) { toast('Staff not found', 'err'); return; }
+    const staffDoc = snap.docs[0];
+    await db.collection('temp_roles').add({
+      staffId: staffDoc.id,
+      staffName: staffDoc.data().name,
+      staffEmail: email,
+      tempRole: role,
+      reason: reason,
+      date: todayStr(),
+      grantedBy: currentUser.uid,
+      grantedByName: currentProfile?.name || currentUser.email,
+      grantedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      active: true
+    });
+    toast('Temp role granted ✓', 'ok');
+    document.getElementById('temp-email').value = '';
+    document.getElementById('temp-reason').value = '';
+    selectedTempRole = '';
+    ['reception','lab','admin','pathologist'].forEach(r => {
+      document.getElementById('tr-'+r).className = 'tog';
+    });
+    loadTempRoles();
+  } catch(e) { toast('Error: ' + e.message, 'err'); console.error(e); }
+}
+
+async function loadTempRoles() {
+  try {
+    const snap = await db.collection('temp_roles')
+      .where('date','==',todayStr())
+      .where('active','==',true).get();
+    const el = document.getElementById('temp-roles-list');
+    if (snap.empty) { el.innerHTML = '<div class="empty">No temp roles active today</div>'; return; }
+    el.innerHTML = '';
+    snap.forEach(d => {
+      const r = d.data();
+      const div = document.createElement('div');
+      div.className = 'row';
+      div.innerHTML = `
+        <div>
+          <div style="font-size:13px;font-weight:500">${r.staffName}</div>
+          <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${r.tempRole.toUpperCase()} · ${r.reason||'—'}</div>
+        </div>
+        <button class="btn-sm btn btn-danger" onclick="revokeTempRole('${d.id}')">Revoke</button>`;
+      el.appendChild(div);
+    });
+  } catch(e) { console.error(e); }
+}
+
+async function revokeTempRole(id) {
+  try {
+    await db.collection('temp_roles').doc(id).update({ active: false });
+    toast('Temp role revoked', 'ok');
+    loadTempRoles();
+  } catch(e) { toast('Error', 'err'); }
+}
+
+async function loadAdminStaff() {
+  try {
+    const snap = await db.collection('staff').get();
+    const el = document.getElementById('admin-staff-list');
+    el.innerHTML = '';
+    snap.forEach(d => {
+      const s = d.data();
+      const div = document.createElement('div');
+      div.className = 'staff-row';
+      const initials = (s.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      div.innerHTML = `
+        <div class="avatar av-green">${initials}</div>
+        <div class="staff-info">
+          <div class="staff-name">${s.name||'—'}</div>
+          <div class="staff-roles">${s.role?.toUpperCase()||'—'} · ${s.email||''}</div>
+        </div>`;
+      el.appendChild(div);
+    });
+    if (snap.empty) el.innerHTML = '<div class="empty">No staff registered</div>';
+  } catch(e) { console.error(e); }
+}
+
+// ══════════════════════════════════════════════════
+//  SESSION RESUME — idle re-lock after 30 min
+// ══════════════════════════════════════════════════
+let lastActivity = Date.now();
+let sessionLocked = false;
+const IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+function resetIdleTimer() { lastActivity = Date.now(); sessionLocked = false; }
+
+document.addEventListener('touchstart', resetIdleTimer);
+document.addEventListener('click', resetIdleTimer);
+document.addEventListener('keydown', resetIdleTimer);
+
+setInterval(() => {
+  if (currentUser && !sessionLocked && Date.now() - lastActivity > IDLE_TIMEOUT) {
+    sessionLocked = true;
+    setupPinScreen();
+    screenStack = ['s-pin'];
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active','exit'));
+    document.getElementById('s-pin').classList.add('active');
+    toast('Session locked — enter PIN', 'warn');
+  }
+}, 60000); // check every minute
 
 // ══════════════════════════════════════════════════
 //  HELPERS

@@ -92,7 +92,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 /* SEARCH */
 .search-wrap{position:relative;margin-bottom:12px}
 .search-ico{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3)}
-.suggest-list{background:var(--surface);border:0.5px solid var(--border-strong);border-radius:var(--radius-lg);overflow:hidden;margin-top:4px;max-height:240px;overflow-y:auto}
+.suggest-list{background:var(--surface);border:0.5px solid var(--border-strong);border-radius:var(--radius-lg);overflow:hidden;margin-top:4px;max-height:240px;overflow-y:auto;position:relative;z-index:100;box-shadow:0 4px 16px rgba(0,0,0,0.12)}
 .suggest-item{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-bottom:0.5px solid var(--border)}
 .suggest-item:last-child{border-bottom:none}
 .suggest-item:hover{background:var(--surface2)}
@@ -277,11 +277,11 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
     <div id="step2" style="display:none">
       <button onclick="showStep(1)" style="font-size:12px;color:var(--text2);font-family:var(--mono);margin-bottom:12px;padding:4px 0;background:none;border:none;cursor:pointer">&#8592; Back to Patient Info</button>
-      <div class="search-wrap">
-        <span class="search-ico">&#128269;</span>
-        <input style="width:100%;padding:9px 11px 9px 36px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px" type="text" id="test-q" placeholder="Search tests..." oninput="searchTests(this.value)">
+      <div style="position:relative;margin-bottom:4px">
+        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3);pointer-events:none">&#128269;</span>
+        <input style="width:100%;padding:9px 11px 9px 36px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px" type="text" id="test-q" placeholder="Search tests..." oninput="searchTests(this.value)" autocomplete="off">
       </div>
-      <div id="test-suggest" class="suggest-list" style="display:none"></div>
+      <div id="test-suggest" class="suggest-list" style="display:none;margin-bottom:8px"></div>
       <div id="sel-tests" class="chip-list"></div>
       <div id="est-strip" class="est-strip" style="display:none">
         <div><div style="font-size:12px;color:rgba(255,255,255,0.6);font-family:var(--mono)">Estimated Total</div></div>
@@ -423,9 +423,9 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 
     <!-- SAMPLE REQUIREMENTS TAB -->
     <div id="pa-requirements">
-      <div class="search-wrap">
-        <span class="search-ico">&#128269;</span>
-        <input style="width:100%;padding:9px 11px 9px 36px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px" type="text" id="pa-search" placeholder="Search test name..." oninput="searchPA(this.value)">
+      <div style="position:relative;margin-bottom:4px">
+        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3);pointer-events:none">&#128269;</span>
+        <input style="width:100%;padding:9px 11px 9px 36px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px" type="text" id="pa-search" placeholder="Search test name..." oninput="searchPA(this.value)" autocomplete="off">
       </div>
       <div id="pa-results"><div class="empty" style="padding:20px">Search a test to see sample requirements</div></div>
     </div>

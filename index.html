@@ -301,7 +301,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
           <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password">
         </div>
         <button class="auth-btn" id="auth-login-btn" onclick="doLogin()">Sign In</button>
-        <div class="auth-link" onclick="doResetPassword()">Forgot password?</div>
+        <div class="auth-link" onclick="showResetModal()">Forgot password?</div>
         <div class="auth-err" id="auth-err"></div>
       </div>
 
@@ -366,6 +366,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <button class="pin-key" onclick="pinKey('clear')" style="font-size:11px;color:rgba(255,255,255,0.5)">CLR</button>
       </div>
       <div class="pin-logout" onclick="doSignOut()">Sign out · use different account</div>
+      <div class="pin-logout" onclick="showResetModal()" style="margin-top:6px">Forgot password?</div>
     </div>
   </div>
 
@@ -706,6 +707,25 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
   </div>
 
+  <!-- ══ RESET PASSWORD MODAL ══ -->
+  <div class="modal-bg" id="reset-modal">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Reset Password</div>
+      <div class="modal-sub">Enter your registered email. We'll send a reset link.</div>
+      <div class="field">
+        <label style="color:var(--text3)">Email</label>
+        <input type="email" id="reset-email-input" placeholder="your@email.com" autocomplete="email"
+          style="width:100%;padding:10px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:14px">
+      </div>
+      <div id="reset-modal-err" style="font-size:12px;color:var(--red);margin-bottom:10px;min-height:16px"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeResetModal()">Cancel</button>
+        <button class="btn btn-primary" id="reset-send-btn" onclick="sendResetEmail()">Send Link</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ TOAST ══ -->
   <div id="toast"></div>
 </div>
@@ -890,14 +910,41 @@ function friendlyAuthError(code) {
   return map[code] || 'Something went wrong. Try again.';
 }
 
-async function doResetPassword() {
-  const email = document.getElementById('auth-email').value.trim();
-  if (!email) { document.getElementById('auth-err').textContent = 'Enter your email first'; return; }
+function showResetModal() {
+  // Pre-fill from login field if already typed
+  const existing = document.getElementById('auth-email')?.value?.trim() || '';
+  document.getElementById('reset-email-input').value = existing;
+  document.getElementById('reset-modal-err').textContent = '';
+  document.getElementById('reset-send-btn').disabled = false;
+  document.getElementById('reset-send-btn').textContent = 'Send Link';
+  document.getElementById('reset-modal').classList.add('open');
+  setTimeout(() => document.getElementById('reset-email-input').focus(), 300);
+}
+
+function closeResetModal() {
+  document.getElementById('reset-modal').classList.remove('open');
+}
+
+async function sendResetEmail() {
+  const email = document.getElementById('reset-email-input').value.trim();
+  const errEl = document.getElementById('reset-modal-err');
+  const btn = document.getElementById('reset-send-btn');
+  if (!email) { errEl.textContent = 'Please enter your email address'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Enter a valid email address'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  errEl.textContent = '';
   try {
     await auth.sendPasswordResetEmail(email);
-    toast('Reset email sent!', 'ok');
+    closeResetModal();
+    toast('Reset link sent to ' + email, 'ok');
+    // Also prefill the login email field
+    const loginEmail = document.getElementById('auth-email');
+    if (loginEmail) loginEmail.value = email;
   } catch(e) {
-    document.getElementById('auth-err').textContent = friendlyAuthError(e.code);
+    errEl.textContent = friendlyAuthError(e.code);
+    btn.disabled = false;
+    btn.textContent = 'Send Link';
   }
 }
 

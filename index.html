@@ -142,6 +142,16 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 .ho-confirm-title{font-size:15px;font-weight:600;margin-bottom:6px}
 .ho-confirm-sub{font-size:13px;color:var(--text2);margin-bottom:18px}
 .ho-confirm-actions{display:flex;gap:8px}
+/* Urgent flag */
+.urgent-toggle{display:flex;align-items:center;gap:12px;background:#FFF7ED;border:1.5px solid #FB923C;border-radius:var(--radius-lg);padding:12px 14px;margin-bottom:14px;cursor:pointer;transition:all 0.15s}
+.urgent-toggle.on{background:#FEF2F2;border-color:#EF4444}
+.urgent-icon{font-size:22px;flex-shrink:0}
+.urgent-label{font-size:13px;font-weight:500;color:#C2410C}
+.urgent-label.on{color:#DC2626}
+.urgent-sub{font-size:11px;color:#EA580C;margin-top:1px}
+.urgent-sub.on{color:#B91C1C}
+.urgent-check{margin-left:auto;width:22px;height:22px;border-radius:50%;border:2px solid #FB923C;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;color:transparent;transition:all 0.15s}
+.urgent-check.on{background:#EF4444;border-color:#EF4444;color:#fff}
 /* Edit Order Modal */
 .edit-modal-bg{position:fixed;inset:0;background:rgba(20,15,5,0.55);z-index:400;display:flex;align-items:flex-end;justify-content:center}
 .edit-modal{background:var(--surface);border-radius:20px 20px 0 0;padding:20px 20px 40px;width:100%;max-width:430px;max-height:88vh;overflow-y:auto;transform:translateY(100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1)}
@@ -616,8 +626,17 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <button class="back-btn" onclick="goBack()">&#8592;</button>
     <div style="flex:1"><div class="topbar-title">All Orders</div><div class="topbar-sub" id="orders-lbl">Loading...</div></div>
   </div>
-  <div class="scroll-body">
-    <input type="text" placeholder="Search patient..." oninput="filterOrders(this.value)" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;margin-bottom:16px">
+  <!-- Date navigation bar -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 16px;border-bottom:0.5px solid var(--border);background:var(--surface);flex-shrink:0">
+    <button onclick="ordersShiftDate(-1)" style="width:32px;height:32px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">&#8592;</button>
+    <div style="text-align:center">
+      <div style="font-size:13px;font-weight:500" id="orders-date-lbl">Today</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--text3)" id="orders-date-val"></div>
+    </div>
+    <button onclick="ordersShiftDate(1)" id="orders-next-btn" style="width:32px;height:32px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">&#8594;</button>
+  </div>
+  <div class="scroll-body" style="padding-top:12px">
+    <input type="text" id="orders-search" placeholder="Search patient..." oninput="filterOrders(this.value)" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;margin-bottom:16px">
     <div id="orders-list"><div class="empty">Loading...</div></div>
   </div>
 </div>
@@ -1062,7 +1081,7 @@ function showScreen(id) {
   if (id !== 's-field' && fieldUnsubscribe) { fieldUnsubscribe(); fieldUnsubscribe=null; }
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   document.getElementById(id).classList.add('active');
-  if (id === 's-orders') loadOrders();
+  if (id === 's-orders') { ordersDateOffset=0; loadOrders(); }
   if (id === 's-order-detail') {} // loaded by openOrderDetail()
   if (id === 's-ho') loadHO();
   if (id === 's-eod') loadEOD();
@@ -1392,6 +1411,10 @@ function toggleHomeCollection() {
   var src = document.getElementById('pt-source').value;
   var hcf = document.getElementById('home-collection-fields');
   hcf.style.display = src==='Home Collection' ? 'block' : 'none';
+  if (src==='Home Collection') {
+    // Auto-start GPS capture when home collection is selected
+    setTimeout(captureGPS, 300);
+  }
   if (src!=='Home Collection') { curGPS=null; document.getElementById('gps-status').textContent='Not captured';
   isUrgent=false; discountApproved=false;
   var utog=document.getElementById('urgent-toggle'); if(utog){utog.classList.remove('on'); document.getElementById('urgent-label').classList.remove('on'); document.getElementById('urgent-label').textContent='Mark as Urgent'; document.getElementById('urgent-sub').classList.remove('on'); document.getElementById('urgent-sub').textContent='Tap to flag for priority processing'; document.getElementById('urgent-check').classList.remove('on'); document.getElementById('urgent-check').textContent='';} }
@@ -1671,14 +1694,47 @@ function newOrder() {
 }
 
 // ── ALL ORDERS ──
+var ordersDateOffset = 0; // 0=today, -1=yesterday, etc.
+
+function ordersDateStr(offset) {
+  var d = new Date();
+  d.setDate(d.getDate() + (offset||0));
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function ordersDateLabel(offset) {
+  if (offset === 0) return 'Today';
+  if (offset === -1) return 'Yesterday';
+  if (offset === 1) return 'Tomorrow';
+  var d = new Date(); d.setDate(d.getDate() + offset);
+  return d.toLocaleDateString('en-IN', {weekday:'short', day:'2-digit', month:'short'});
+}
+
+function ordersShiftDate(delta) {
+  ordersDateOffset += delta;
+  // Don't go future beyond today
+  if (ordersDateOffset > 0) ordersDateOffset = 0;
+  loadOrders();
+}
+
 function loadOrders() {
+  var dateStr = ordersDateStr(ordersDateOffset);
   document.getElementById('orders-list').innerHTML='<div class="empty">Loading...</div>';
-  db.collection('orders').where('date','==',todayStr()).get().then(function(snap){
+  document.getElementById('orders-date-lbl').textContent = ordersDateLabel(ordersDateOffset);
+  document.getElementById('orders-date-val').textContent = dateStr;
+  // Hide forward button when on today
+  var nextBtn = document.getElementById('orders-next-btn');
+  if (nextBtn) nextBtn.style.opacity = ordersDateOffset >= 0 ? '0.3' : '1';
+  // Clear search
+  var sq = document.getElementById('orders-search');
+  if (sq) sq.value = '';
+  db.collection('orders').where('date','==',dateStr).get().then(function(snap){
     allOrders=[];
     snap.forEach(function(d){ allOrders.push(Object.assign({id:d.id},d.data())); });
     allOrders.sort(function(a,b){ return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0); });
     renderOrders(allOrders);
-    document.getElementById('orders-lbl').textContent=allOrders.length+' orders today';
+    var label = ordersDateLabel(ordersDateOffset);
+    document.getElementById('orders-lbl').textContent=allOrders.length+' orders – '+label;
   }).catch(function(e){
     document.getElementById('orders-list').innerHTML='<div class="empty">Error: '+e.message+'</div>';
   });

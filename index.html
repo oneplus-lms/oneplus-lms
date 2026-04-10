@@ -913,13 +913,32 @@ function goTo(id, push) {
   if (id === 's-eod') loadEOD();
   if (id === 's-admin') loadAdminScreen();
   if (id === 's-order') { curOrder={}; selTests=[]; showStep(1); renderTests(); }
+  // Push a dummy history state so Android back button fires popstate instead of closing the app
+  if (push !== false) history.pushState({screen: id}, '', '');
 }
 function goBack() {
   stack.pop();
   var prev = stack[stack.length-1] || 's-dash';
+  if (prev !== 's-ho' && hoUnsubscribe) { hoUnsubscribe(); hoUnsubscribe=null; }
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   document.getElementById(prev).classList.add('active');
+  // Load screen data if needed
+  if (prev === 's-orders') loadOrders();
+  if (prev === 's-ho') loadHO();
+  if (prev === 's-eod') loadEOD();
 }
+// Push initial history state so first back press doesn't exit the app
+history.replaceState({screen: 's-dash'}, '', '');
+
+// Intercept Android hardware back button / browser back gesture
+window.addEventListener('popstate', function(e) {
+  if (stack.length > 1) {
+    goBack();
+  } else {
+    // At root — push state again to prevent app exit
+    history.pushState({screen: 's-dash'}, '', '');
+  }
+});
 
 // ── AUTH STATE ──
 var loadTO = setTimeout(function(){

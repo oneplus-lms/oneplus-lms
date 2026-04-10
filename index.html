@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>OnePLUS LMS</title>
+<!-- LMS v5.0 | Built 2026-04-10 | Node-verified -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1A4A3A">
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F4F1EC;--surface:#FDFCFA;--surface2:#EEE9E0;--border:rgba(60,50,30,0.12);--border-strong:rgba(60,50,30,0.22);--text:#1C1810;--text2:#6B6050;--text3:#A09080;--accent:#1A4A3A;--accent-light:#E4EDE9;--accent2:#C8501A;--accent2-light:#FAF0EB;--gold:#8B6914;--gold-light:#F5EDD0;--red:#8B1A1A;--red-light:#F5E4E4;--radius:10px;--radius-lg:16px;--mono:'DM Mono',monospace;--serif:'Fraunces',serif;--sans:'DM Sans',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);font-family:var(--sans);color:var(--text);font-size:15px;line-height:1.5;overscroll-behavior:none}
+button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
+#app{height:100vh;display:flex;flex-direction:column;max-width:430px;margin:0 auto;position:relative;overflow:hidden}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1),opacity 0.28s;transform:translateX(100%);opacity:0;pointer-events:none}
+.screen.active{transform:translateX(0);opacity:1;pointer-events:all}
+.topbar{padding:14px 18px 10px;display:flex;align-items:center;gap:10px;border-bottom:0.5px solid var(--border);background:var(--surface);flex-shrink:0}
+.topbar-logo{font-family:var(--serif);font-size:18px;font-weight:500;color:var(--accent)}
+.topbar-title{font-size:14px;font-weight:500;color:var(--text);flex:1}
+.topbar-sub{font-size:11px;color:var(--text3);font-family:var(--mono)}
+.back-btn{width:32px;height:32px;border-radius:8px;border:0.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:16px}
+.scroll-body{flex:1;overflow-y:auto;padding:16px 18px 100px}
+.card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px}
+.card-title{font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border)}
+.row:last-child{border-bottom:none}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-family:var(--mono);color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em}
+.field input,.field select{width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.ferr{font-size:12px;color:var(--red);margin-top:4px;display:none}
+.ferr.on{display:block}
+.tog{flex:1;padding:8px 6px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;color:var(--text2);text-align:center;cursor:pointer;transition:all 0.15s;background:var(--surface)}
+.tog.on{border-color:var(--accent);background:var(--accent-light);color:var(--accent);font-weight:500}
+.badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:11px;font-family:var(--mono);font-weight:500}
+.badge-green{background:var(--accent-light);color:var(--accent)}
+.badge-gold{background:var(--gold-light);color:var(--gold)}
+.badge-red{background:var(--red-light);color:var(--red)}
+.btn{width:100%;padding:12px;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;transition:all 0.15s;border:0.5px solid var(--border-strong);background:var(--surface);color:var(--text)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-danger{background:var(--red);border-color:var(--red);color:#fff}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+.btn-sm{padding:6px 12px;font-size:12px;width:auto;border-radius:8px}
+.empty{text-align:center;padding:32px 16px;color:var(--text3);font-size:13px}
+/* AUTH */
+#s-auth{background:var(--accent);justify-content:flex-start;align-items:stretch;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.auth-wrap{width:100%;padding:32px 28px 60px;box-sizing:border-box}
+.auth-logo{font-family:var(--serif);font-size:38px;font-weight:300;color:#fff;letter-spacing:-1px;margin-bottom:4px}
+.auth-sub{font-size:13px;color:rgba(255,255,255,0.55);font-family:var(--mono);margin-bottom:32px}
+.auth-tabs{display:flex;gap:0;margin-bottom:24px;background:rgba(255,255,255,0.1);border-radius:var(--radius);padding:3px}
+.auth-tab{flex:1;padding:8px;border-radius:8px;font-size:13px;color:rgba(255,255,255,0.6);text-align:center;cursor:pointer;transition:all 0.15s;font-family:var(--mono)}
+.auth-tab.active{background:rgba(255,255,255,0.18);color:#fff;font-weight:500}
+.auth-field label{display:block;font-size:11px;color:rgba(255,255,255,0.5);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px}
+.auth-field input{width:100%;padding:12px 14px;border:0.5px solid rgba(255,255,255,0.2);border-radius:var(--radius);background:rgba(255,255,255,0.08);color:#fff;font-size:15px;margin-bottom:14px}
+.auth-field input::placeholder{color:rgba(255,255,255,0.3)}
+.auth-btn{width:100%;padding:13px;border-radius:var(--radius);background:#fff;color:var(--accent);font-size:14px;font-weight:500;border:none;cursor:pointer;margin-top:8px}
+.auth-err{color:rgba(255,200,180,1);font-size:13px;margin-top:10px;min-height:18px;font-family:var(--mono)}
+.auth-link{color:rgba(255,255,255,0.5);font-size:12px;font-family:var(--mono);margin-top:12px;cursor:pointer;text-align:center}
+/* PIN */
+#s-pin{background:var(--accent);justify-content:flex-start;align-items:stretch;overflow-y:auto}
+.pin-wrap{width:100%;padding:32px 28px;box-sizing:border-box}
+.pin-user{font-family:var(--serif);font-size:24px;font-weight:300;color:#fff;margin-bottom:4px}
+.pin-hint{font-size:12px;color:rgba(255,255,255,0.5);font-family:var(--mono);margin-bottom:32px}
+.pin-dots{display:flex;gap:14px;justify-content:center;margin:20px 0 8px}
+.pin-dot{width:12px;height:12px;border-radius:50%;border:1.5px solid rgba(255,255,255,0.4);transition:all 0.15s}
+.pin-dot.filled{background:#fff;border-color:#fff}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+.pin-key{height:54px;border-radius:var(--radius);border:0.5px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:18px;font-family:var(--mono);cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.pin-key:active{background:rgba(255,255,255,0.22)}
+.pin-err{color:rgba(255,180,160,1);font-size:12px;font-family:var(--mono);text-align:center;margin-top:8px;min-height:16px}
+.pin-logout{color:rgba(255,255,255,0.4);font-size:11px;font-family:var(--mono);text-align:center;margin-top:20px;cursor:pointer}
+/* DASH */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px}
+.stat-num{font-family:var(--serif);font-size:28px;font-weight:500;color:var(--text)}
+.stat-label{font-size:11px;font-family:var(--mono);color:var(--text3);margin-top:2px}
+.quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.qa-btn{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px;cursor:pointer;text-align:left;transition:all 0.15s}
+.qa-icon{font-size:20px;margin-bottom:8px}
+.qa-label{font-size:13px;font-weight:500;color:var(--text)}
+.qa-sub{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px}
+/* ORDER STEPS */
+.step-bar{display:flex;gap:4px;padding:0 18px 12px;flex-shrink:0}
+.step-seg{flex:1;height:3px;border-radius:2px;background:var(--border);transition:background 0.3s}
+.step-seg.done{background:var(--accent)}
+.step-seg.curr{background:var(--accent2)}
+/* SEARCH */
+.search-wrap{position:relative;margin-bottom:12px}
+.search-ico{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3)}
+.suggest-list{background:var(--surface);border:0.5px solid var(--border-strong);border-radius:var(--radius-lg);overflow:hidden;margin-top:4px;max-height:240px;overflow-y:auto}
+.suggest-item{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-bottom:0.5px solid var(--border)}
+.suggest-item:last-child{border-bottom:none}
+.suggest-item:hover{background:var(--surface2)}
+.chip-list{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;min-height:40px}
+.chip{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:9px 12px}
+.chip-del{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:14px}
+.chip-del:hover{background:var(--red-light);color:var(--red)}
+.est-strip{background:var(--accent);border-radius:var(--radius-lg);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+/* BILLING */
+.bill-total-strip{background:var(--accent);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:14px}
+.bill-total-lbl{font-size:11px;color:rgba(255,255,255,0.6);font-family:var(--mono);margin-bottom:2px}
+.bill-total-amt{font-family:var(--serif);font-size:26px;font-weight:500;color:#fff}
+.pay-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.pay-mode-btn{padding:11px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;color:var(--text2);text-align:center;cursor:pointer;background:var(--surface);transition:all 0.15s}
+.pay-mode-btn.on{border-color:var(--accent);background:var(--accent-light);color:var(--accent);font-weight:500}
+.pay-mode-btn.on-credit{border-color:var(--gold);background:var(--gold-light);color:var(--gold);font-weight:500}
+/* HANDOVER */
+.ho-summary-strip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border);border-bottom:0.5px solid var(--border);flex-shrink:0}
+.ho-summary-cell{background:var(--surface);padding:10px 12px;text-align:center}
+.ho-summary-val{font-family:var(--serif);font-size:20px;font-weight:500;color:var(--text)}
+.ho-summary-val.green{color:var(--accent)}
+.ho-summary-val.red{color:var(--accent2)}
+.ho-summary-lbl{font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-top:2px}
+.ho-handover-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);margin-bottom:10px;overflow:hidden}
+.ho-card-header{display:flex;justify-content:space-between;padding:9px 12px;border-bottom:0.5px solid var(--border);background:var(--surface2)}
+.ho-card-body{padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.ho-card-k{font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase}
+.ho-card-v{font-size:13px;font-weight:500;color:var(--text)}
+.ho-card-v.amount{font-family:var(--serif);font-size:18px;color:var(--accent)}
+/* EOD */
+.wa-preview{background:#E8F5E9;border-radius:var(--radius-lg);padding:14px 16px;font-family:var(--mono);font-size:12px;color:#1B5E20;white-space:pre-wrap;line-height:1.7;margin-bottom:12px;border:0.5px solid #A5D6A7}
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(20,15,5,0.5);z-index:200;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.2s}
+.modal-bg.open{opacity:1;pointer-events:all}
+.modal{background:var(--surface);border-radius:20px 20px 0 0;padding:20px 20px 36px;width:100%;max-width:430px;transform:translateY(100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1)}
+.modal-bg.open .modal{transform:translateY(0)}
+.modal-handle{width:36px;height:3px;border-radius:2px;background:var(--border-strong);margin:0 auto 16px}
+.modal-title{font-size:15px;font-weight:500;color:var(--text);margin-bottom:4px}
+.modal-sub{font-size:13px;color:var(--text2);margin-bottom:16px}
+.modal-actions{display:flex;gap:8px;margin-top:14px}
+.modal-actions button{flex:1}
+/* DONE */
+.done-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px}
+.done-ring{width:64px;height:64px;border-radius:50%;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:16px}
+.done-title{font-family:var(--serif);font-size:24px;font-weight:300;color:var(--text);margin-bottom:6px;text-align:center}
+.done-sub{font-size:13px;color:var(--text2);text-align:center;margin-bottom:28px;font-family:var(--mono)}
+/* LOADING */
+.loading-overlay{position:fixed;inset:0;background:rgba(244,241,236,0.95);z-index:900;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.loading-spinner{width:36px;height:36px;border:3px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* TOAST */
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:#1C1810;color:#fff;padding:10px 18px;border-radius:30px;font-size:13px;font-family:var(--mono);opacity:0;transition:all 0.25s;z-index:500;white-space:nowrap;pointer-events:none}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{background:var(--accent)}
+#toast.warn{background:var(--gold)}
+#toast.err{background:var(--red)}
+/* STAFF */
+.staff-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--border)}
+.staff-row:last-child{border-bottom:none}
+.avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0;background:var(--accent-light);color:var(--accent)}
+/* ORDER CARD */
+.order-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px}
+.order-footer{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loading">
+  <div class="loading-spinner"></div>
+  <div style="font-size:12px;font-family:var(--mono);color:var(--text3)" id="load-txt">connecting...</div>
+  <button id="load-retry" onclick="location.reload()" style="display:none;margin-top:12px;padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">Tap to retry</button>
+</div>
+
+<!-- AUTH -->
+<div id="s-auth" class="screen">
+  <div class="auth-wrap">
+    <div class="auth-logo">OnePLUS</div>
+    <div class="auth-sub">Ultrasound Lab - Pitampura</div>
+    <div class="auth-tabs">
+      <div class="auth-tab active" id="tab-login" onclick="switchTab('login')">Sign In</div>
+      <div class="auth-tab" id="tab-reg" onclick="switchTab('reg')">Register</div>
+    </div>
+    <div id="form-login">
+      <div class="auth-field"><label>Email</label><input type="email" id="a-email" placeholder="you@lab.com" autocomplete="email"></div>
+      <div class="auth-field"><label>Password</label><input type="password" id="a-pass" placeholder="Password" autocomplete="current-password"></div>
+      <button class="auth-btn" id="login-btn" onclick="doLogin()">Sign In</button>
+      <div class="auth-link" onclick="showReset()">Forgot password?</div>
+      <div class="auth-err" id="login-err"></div>
+    </div>
+    <div id="form-reg" style="display:none">
+      <div class="auth-field"><label>Full Name</label><input type="text" id="r-name" placeholder="Dr. Name"></div>
+      <div class="auth-field"><label>Email</label><input type="email" id="r-email" placeholder="you@lab.com"></div>
+      <div class="auth-field"><label>Password</label><input type="password" id="r-pass" placeholder="Min 6 chars"></div>
+      <div class="auth-field">
+        <label>Role</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
+          <button type="button" class="tog" id="role-reception" onclick="setRole('reception')" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)">Reception</button>
+          <button type="button" class="tog" id="role-lab" onclick="setRole('lab')" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)">Lab Tech</button>
+          <button type="button" class="tog" id="role-admin" onclick="setRole('admin')" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)">Admin</button>
+          <button type="button" class="tog" id="role-pathologist" onclick="setRole('pathologist')" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)">Pathologist</button>
+        </div>
+      </div>
+      <div class="auth-field"><label>PIN (4 digits)</label><input type="password" id="r-pin" placeholder="4 digit PIN" maxlength="4" inputmode="numeric"></div>
+      <button class="auth-btn" id="reg-btn" onclick="doRegister()">Create Account</button>
+      <div class="auth-err" id="reg-err"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PIN -->
+<div id="s-pin" class="screen">
+  <div class="pin-wrap">
+    <div class="pin-user" id="pin-name">Good morning</div>
+    <div class="pin-hint" id="pin-role">Enter PIN to continue</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="pin-err" id="pin-err"></div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pk('1')">1</button><button class="pin-key" onclick="pk('2')">2</button><button class="pin-key" onclick="pk('3')">3</button>
+      <button class="pin-key" onclick="pk('4')">4</button><button class="pin-key" onclick="pk('5')">5</button><button class="pin-key" onclick="pk('6')">6</button>
+      <button class="pin-key" onclick="pk('7')">7</button><button class="pin-key" onclick="pk('8')">8</button><button class="pin-key" onclick="pk('9')">9</button>
+      <button class="pin-key" onclick="pk('back')" style="font-size:14px">&#9003;</button>
+      <button class="pin-key" onclick="pk('0')">0</button>
+      <button class="pin-key" onclick="pk('clear')" style="font-size:11px;color:rgba(255,255,255,0.5)">CLR</button>
+    </div>
+    <div class="pin-logout" onclick="doSignOut()">Sign out</div>
+    <div class="pin-logout" onclick="showReset()" style="margin-top:6px">Forgot password?</div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="s-dash" class="screen">
+  <div class="topbar">
+    <div class="topbar-logo" style="flex:1">OnePLUS <span id="sync-dot" style="font-size:11px;font-family:var(--mono);color:var(--text3)"></span></div>
+    <button onclick="doSignOut()" style="font-size:11px;font-family:var(--mono);color:var(--text3);padding:4px 8px;border:0.5px solid var(--border);border-radius:6px">Sign out</button>
+  </div>
+  <div class="scroll-body">
+    <div style="padding:16px 0 8px">
+      <div style="font-family:var(--serif);font-size:24px;font-weight:300;color:var(--text);margin-bottom:2px" id="dash-greet">Good morning</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--text3)" id="dash-role"></div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-num" id="st-orders">-</div><div class="stat-label">Orders today</div></div>
+      <div class="stat-card"><div class="stat-num" id="st-rev">-</div><div class="stat-label">Revenue today</div></div>
+      <div class="stat-card"><div class="stat-num" id="st-pend">-</div><div class="stat-label">Pending bills</div></div>
+      <div class="stat-card"><div class="stat-num" id="st-ho">-</div><div class="stat-label">Handovers</div></div>
+    </div>
+    <div class="quick-actions">
+      <button class="qa-btn" onclick="goTo('s-order')"><div class="qa-icon">&#129514;</div><div class="qa-label">New Order</div><div class="qa-sub">Register patient</div></button>
+      <button class="qa-btn" onclick="goTo('s-orders')"><div class="qa-icon">&#128203;</div><div class="qa-label">All Orders</div><div class="qa-sub">View &amp; billing</div></button>
+      <button class="qa-btn" onclick="goTo('s-ho')"><div class="qa-icon">&#128176;</div><div class="qa-label">Cash Handover</div><div class="qa-sub">EOD settlement</div></button>
+      <button class="qa-btn" onclick="goTo('s-eod')"><div class="qa-icon">&#128202;</div><div class="qa-label">EOD Report</div><div class="qa-sub">WhatsApp summary</div></button>
+      <button class="qa-btn" onclick="goTo('s-preanalytical')"><div class="qa-icon">&#128300;</div><div class="qa-label">Pre-Analytical</div><div class="qa-sub">Sample guide & rejections</div></button>
+    </div>
+    <div class="card"><div class="card-title">Recent Orders</div><div id="dash-recent"><div class="empty">No orders yet today</div></div></div>
+  </div>
+</div>
+
+<!-- NEW ORDER -->
+<div id="s-order" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="goBack()">&#8592;</button>
+    <div style="flex:1"><div class="topbar-title">New Order</div><div class="topbar-sub" id="order-step-lbl">Step 1 - Patient Info</div></div>
+  </div>
+  <div class="step-bar">
+    <div class="step-seg curr" id="seg0"></div><div class="step-seg" id="seg1"></div><div class="step-seg" id="seg2"></div>
+  </div>
+  <div class="scroll-body">
+    <div id="step1">
+      <div class="field"><label>Patient Name *</label><input type="text" id="pt-name" placeholder="Full name"><div class="ferr" id="err-name">Required</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field"><label>Age</label><input type="number" id="pt-age" placeholder="35" min="0" max="120"></div>
+        <div class="field"><label>Sex</label><select id="pt-sex"><option value="">-</option><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
+      </div>
+      <div class="field"><label>Mobile</label><input type="tel" id="pt-phone" placeholder="9876543210" maxlength="10" inputmode="numeric"></div>
+      <div class="field"><label>Referred by</label><input type="text" id="pt-ref" placeholder="Dr. name or self"></div>
+      <button class="btn btn-primary" onclick="step1Next()">Next - Select Tests</button>
+    </div>
+    <div id="step2" style="display:none">
+      <button onclick="showStep(1)" style="font-size:12px;color:var(--text2);font-family:var(--mono);margin-bottom:12px;padding:4px 0;background:none;border:none;cursor:pointer">&#8592; Back to Patient Info</button>
+      <div class="search-wrap">
+        <span class="search-ico">&#128269;</span>
+        <input style="width:100%;padding:9px 11px 9px 36px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px" type="text" id="test-q" placeholder="Search tests..." oninput="searchTests(this.value)">
+      </div>
+      <div id="test-suggest" class="suggest-list" style="display:none"></div>
+      <div id="sel-tests" class="chip-list"></div>
+      <div id="est-strip" class="est-strip" style="display:none">
+        <div><div style="font-size:12px;color:rgba(255,255,255,0.6);font-family:var(--mono)">Estimated Total</div></div>
+        <div style="font-family:var(--serif);font-size:22px;font-weight:500;color:#fff" id="est-amt">Rs.0</div>
+      </div>
+      <button class="btn btn-primary" id="step2-btn" onclick="step2Next()" disabled>Next - Billing</button>
+    </div>
+    <div id="step3" style="display:none">
+      <button onclick="showStep(2)" style="font-size:12px;color:var(--text2);font-family:var(--mono);margin-bottom:12px;padding:4px 0;background:none;border:none;cursor:pointer">&#8592; Back to Tests</button>
+      <div class="bill-total-strip">
+        <div class="bill-total-lbl">Total Amount</div>
+        <div class="bill-total-amt" id="bill-amt">Rs.0</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.55);font-family:var(--mono);margin-top:2px" id="bill-note"></div>
+      </div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Payment Mode</div>
+      <div class="pay-mode-grid">
+        <button class="pay-mode-btn" id="pm-cash" onclick="setPay('cash')">&#128181; Cash</button>
+        <button class="pay-mode-btn" id="pm-upi" onclick="setPay('upi')">&#128241; UPI</button>
+        <button class="pay-mode-btn" id="pm-card" onclick="setPay('card')">&#128179; Card</button>
+        <button class="pay-mode-btn on-credit" id="pm-credit" onclick="setPay('credit')">&#128218; Credit</button>
+      </div>
+      <div class="field" id="paid-field"><label>Amount Paid (Rs.)</label><input type="number" id="paid-amt" placeholder="0" inputmode="numeric"></div>
+      <div class="field"><label>Discount (Rs.)</label><input type="number" id="discount" placeholder="0" inputmode="numeric" oninput="applyDiscount()"></div>
+      <div class="field"><label>Notes</label><input type="text" id="bill-notes" placeholder="Remarks..."></div>
+      <button class="btn btn-primary" onclick="submitOrder()">Save Order</button>
+    </div>
+  </div>
+</div>
+
+<!-- ORDER DONE -->
+<div id="s-done" class="screen">
+  <div class="topbar"><div class="topbar-logo">OnePLUS</div></div>
+  <div class="done-wrap">
+    <div class="done-ring">&#10003;</div>
+    <div class="done-title">Order Saved</div>
+    <div class="done-sub" id="done-id">Synced to Firebase</div>
+    <button class="btn btn-primary" style="max-width:260px" onclick="goTo('s-dash')">Back to Dashboard</button>
+    <div style="height:8px"></div>
+    <button class="btn" style="max-width:260px" onclick="newOrder()">+ New Order</button>
+  </div>
+</div>
+
+<!-- ALL ORDERS -->
+<div id="s-orders" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="goBack()">&#8592;</button>
+    <div style="flex:1"><div class="topbar-title">All Orders</div><div class="topbar-sub" id="orders-lbl">Loading...</div></div>
+  </div>
+  <div class="scroll-body">
+    <input type="text" placeholder="Search patient..." oninput="filterOrders(this.value)" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;margin-bottom:16px">
+    <div id="orders-list"><div class="empty">Loading...</div></div>
+  </div>
+</div>
+
+<!-- CASH HANDOVER -->
+<div id="s-ho" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="goBack()">&#8592;</button>
+    <div style="flex:1"><div class="topbar-title">Cash Handover</div><div class="topbar-sub" id="ho-date"></div></div>
+  </div>
+  <div class="ho-summary-strip">
+    <div class="ho-summary-cell"><div class="ho-summary-val green" id="ho-cash">Rs.0</div><div class="ho-summary-lbl">Cash</div></div>
+    <div class="ho-summary-cell"><div class="ho-summary-val" id="ho-upi">Rs.0</div><div class="ho-summary-lbl">UPI</div></div>
+    <div class="ho-summary-cell"><div class="ho-summary-val red" id="ho-credit">Rs.0</div><div class="ho-summary-lbl">Credit</div></div>
+  </div>
+  <div class="scroll-body" style="padding-top:16px">
+    <div class="card">
+      <div class="card-title">Record Handover</div>
+      <div class="field"><label>Handover To</label><input type="text" id="ho-to" placeholder="Dr. Nitin / Accountant"></div>
+      <div class="field"><label>Cash Amount (Rs.)</label><input type="number" id="ho-amt" placeholder="0" inputmode="numeric"></div>
+      <div class="field"><label>Notes</label><input type="text" id="ho-notes" placeholder="Shift, remarks..."></div>
+      <button class="btn btn-primary" onclick="submitHandover()">Record Handover</button>
+    </div>
+    <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Today's Handovers</div>
+    <div id="ho-list"><div class="empty">No handovers recorded yet</div></div>
+  </div>
+</div>
+
+<!-- EOD REPORT -->
+<div id="s-eod" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="goBack()">&#8592;</button>
+    <div style="flex:1"><div class="topbar-title">EOD Report</div><div class="topbar-sub" id="eod-date"></div></div>
+  </div>
+  <div class="scroll-body">
+    <div class="card">
+      <div class="card-title">Today's Numbers</div>
+      <div class="row"><span style="font-size:13px;color:var(--text2)">Total Orders</span><span style="font-size:13px;font-weight:500" id="eod-orders">-</span></div>
+      <div class="row"><span style="font-size:13px;color:var(--text2)">Cash</span><span style="font-size:13px;font-weight:500" id="eod-cash">-</span></div>
+      <div class="row"><span style="font-size:13px;color:var(--text2)">UPI</span><span style="font-size:13px;font-weight:500" id="eod-upi">-</span></div>
+      <div class="row"><span style="font-size:13px;color:var(--text2)">Card</span><span style="font-size:13px;font-weight:500" id="eod-card">-</span></div>
+      <div class="row"><span style="font-size:13px;color:var(--text2)">Credit</span><span style="font-size:13px;font-weight:500" id="eod-credit">-</span></div>
+      <div class="row"><span style="font-size:13px;font-weight:500">Total Revenue</span><span style="font-size:16px;font-weight:500;color:var(--accent)" id="eod-total">-</span></div>
+    </div>
+    <div class="wa-preview" id="wa-text">Generating...</div>
+    <button class="btn btn-primary" onclick="shareWA()">Share on WhatsApp</button>
+    <div style="height:8px"></div>
+    <button class="btn" onclick="saveEOD()">Save EOD Report</button>
+  </div>
+</div>
+
+<!-- RESET PASSWORD MODAL -->
+<div class="modal-bg" id="reset-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Reset Password</div>
+    <div class="modal-sub">Enter your email to receive a reset link.</div>
+    <div class="field"><label>Email</label><input type="email" id="reset-email" placeholder="your@email.com" style="width:100%;padding:10px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:14px"></div>
+    <div id="reset-err" style="font-size:12px;color:var(--red);margin-bottom:10px;min-height:16px"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeReset()">Cancel</button>
+      <button class="btn btn-primary" id="reset-btn" onclick="sendReset()">Send Link</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- PRE-ANALYTICAL MODULE -->
+<div id="s-preanalytical" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="goBack()">&#8592;</button>
+    <div style="flex:1"><div class="topbar-title">Pre-Analytical Guide</div><div class="topbar-sub">Sample requirements & prep</div></div>
+  </div>
+  <div class="scroll-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+      <button class="qa-btn" onclick="showPATab('requirements')" id="pa-tab-req" style="border-color:var(--accent);background:var(--accent-light)">
+        <div class="qa-icon">&#129514;</div><div class="qa-label">Sample Guide</div><div class="qa-sub">Tube, volume, prep</div>
+      </button>
+      <button class="qa-btn" onclick="showPATab('rejection')" id="pa-tab-rej">
+        <div class="qa-icon">&#128683;</div><div class="qa-label">Rejection Log</div><div class="qa-sub">Record rejections</div>
+      </button>
+      <button class="qa-btn" onclick="showPATab('patientprep')" id="pa-tab-prep">
+        <div class="qa-icon">&#128241;</div><div class="qa-label">Patient Prep</div><div class="qa-sub">WhatsApp instructions</div>
+      </button>
+      <button class="qa-btn" onclick="showPATab('rejlog')" id="pa-tab-log">
+        <div class="qa-icon">&#128202;</div><div class="qa-label">Rejection History</div><div class="qa-sub">View past rejections</div>
+      </button>
+    </div>
+
+    <!-- SAMPLE REQUIREMENTS TAB -->
+    <div id="pa-requirements">
+      <div class="search-wrap">
+        <span class="search-ico">&#128269;</span>
+        <input style="width:100%;padding:9px 11px 9px 36px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px" type="text" id="pa-search" placeholder="Search test name..." oninput="searchPA(this.value)">
+      </div>
+      <div id="pa-results"><div class="empty" style="padding:20px">Search a test to see sample requirements</div></div>
+    </div>
+
+    <!-- SAMPLE REJECTION LOG TAB -->
+    <div id="pa-rejection" style="display:none">
+      <div class="card">
+        <div class="card-title">Record Sample Rejection</div>
+        <div class="field"><label>Patient Name</label><input type="text" id="rej-patient" placeholder="Patient name"></div>
+        <div class="field"><label>Test / Panel</label><input type="text" id="rej-test" placeholder="Test name"></div>
+        <div class="field">
+          <label>Rejection Reason</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:4px" id="rej-reason-grid">
+            <button type="button" class="tog" id="rr-hemolysis" onclick="setRejReason('Hemolyzed sample')">Hemolyzed</button>
+            <button type="button" class="tog" id="rr-clotted" onclick="setRejReason('Clotted sample')">Clotted</button>
+            <button type="button" class="tog" id="rr-insufficient" onclick="setRejReason('Insufficient volume')">Insufficient vol.</button>
+            <button type="button" class="tog" id="rr-wrong-tube" onclick="setRejReason('Wrong tube used')">Wrong tube</button>
+            <button type="button" class="tog" id="rr-unlabelled" onclick="setRejReason('Unlabelled sample')">Unlabelled</button>
+            <button type="button" class="tog" id="rr-delayed" onclick="setRejReason('Delayed transport')">Delayed</button>
+            <button type="button" class="tog" id="rr-lipemic" onclick="setRejReason('Lipemic sample')">Lipemic</button>
+            <button type="button" class="tog" id="rr-other" onclick="setRejReason('Other')">Other</button>
+          </div>
+        </div>
+        <div class="field"><label>Notes (optional)</label><input type="text" id="rej-notes" placeholder="Additional details"></div>
+        <div class="field"><label>Referred by</label><input type="text" id="rej-ref" placeholder="Referring doctor"></div>
+        <button class="btn btn-primary" onclick="submitRejection()">Record Rejection</button>
+      </div>
+    </div>
+
+    <!-- PATIENT PREP WHATSAPP TAB -->
+    <div id="pa-patientprep" style="display:none">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Select instruction type to send to patient via WhatsApp:</div>
+      <div style="display:flex;flex-direction:column;gap:8px" id="prep-list"></div>
+    </div>
+
+    <!-- REJECTION HISTORY TAB -->
+    <div id="pa-rejlog" style="display:none">
+      <div id="rejection-history"><div class="empty">Loading...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+</div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+
+// ── FIREBASE ──
+var FB_CONFIG = {
+  apiKey: "AIzaSyChTDf2CdK4fBomsYlFlL5Uvsb-eUFaNkE",
+  authDomain: "oneplus-lms.firebaseapp.com",
+  projectId: "oneplus-lms",
+  storageBucket: "oneplus-lms.firebasestorage.app",
+  messagingSenderId: "869836991266",
+  appId: "1:869836991266:web:a754fb93663b2a65c4137b"
+};
+firebase.initializeApp(FB_CONFIG);
+var auth = firebase.auth();
+var db = firebase.firestore();
+
+// Kill old service workers
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    regs.forEach(function(r){ r.unregister(); });
+  });
+  if ('caches' in window) {
+    caches.keys().then(function(keys){
+      keys.forEach(function(k){ caches.delete(k); });
+    });
+  }
+}
+
+// ── STATE ──
+var curUser = null;
+var curProfile = null;
+var pinBuf = '';
+var curOrder = {};
+var selTests = [];
+var payMode = 'cash';
+var allOrders = [];
+var selRole = 'reception';
+var stack = [];
+var lastOrder = null;
+
+// ── NAVIGATION ──
+function goTo(id, push) {
+  if (push !== false) stack.push(id);
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+  if (id === 's-orders') loadOrders();
+  if (id === 's-ho') loadHO();
+  if (id === 's-eod') loadEOD();
+  if (id === 's-order') { curOrder={}; selTests=[]; showStep(1); renderTests(); }
+}
+function goBack() {
+  stack.pop();
+  var prev = stack[stack.length-1] || 's-dash';
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+  document.getElementById(prev).classList.add('active');
+}
+
+// ── AUTH STATE ──
+var loadTO = setTimeout(function(){
+  document.getElementById('load-txt').textContent = 'Taking too long...';
+  document.getElementById('load-retry').style.display = 'block';
+}, 10000);
+
+// Global error safety net
+window.addEventListener('error', function(e) {
+  var loading = document.getElementById('loading');
+  if (loading && loading.style.display !== 'none') {
+    document.getElementById('load-txt').textContent = 'Error: ' + (e.message || 'Unknown error');
+    document.getElementById('load-retry').style.display = 'block';
+  }
+  console.error('Global error:', e.message, e.filename, e.lineno);
+});
+
+auth.onAuthStateChanged(function(user) {
+  clearTimeout(loadTO);
+  document.getElementById('loading').style.display = 'none';
+  if (!user) { goTo('s-auth', false); stack = ['s-auth']; return; }
+  curUser = user;
+  db.collection('staff').doc(user.uid).get().then(function(snap) {
+    if (snap.exists) {
+      curProfile = snap.data();
+    } else {
+      curProfile = { name: user.email, role: 'admin', pin: '' };
+    }
+    setupPin();
+    stack = ['s-pin'];
+    goTo('s-pin', false);
+  }).catch(function() {
+    curProfile = { name: user.email, role: 'admin', pin: '' };
+    loadDash();
+    stack = ['s-dash'];
+    goTo('s-dash', false);
+  });
+});
+
+// ── AUTH TABS ──
+function switchTab(t) {
+  document.getElementById('tab-login').className = 'auth-tab' + (t==='login'?' active':'');
+  document.getElementById('tab-reg').className = 'auth-tab' + (t==='reg'?' active':'');
+  document.getElementById('form-login').style.display = t==='login'?'block':'none';
+  document.getElementById('form-reg').style.display = t==='reg'?'block':'none';
+}
+
+function setRole(r) {
+  selRole = r;
+  ['reception','lab','admin','pathologist'].forEach(function(x){
+    var btn = document.getElementById('role-'+x);
+    if (x===r) {
+      btn.style.background='rgba(255,255,255,0.22)';
+      btn.style.borderColor='rgba(255,255,255,0.6)';
+      btn.style.color='#fff';
+    } else {
+      btn.style.background='rgba(255,255,255,0.06)';
+      btn.style.borderColor='rgba(255,255,255,0.2)';
+      btn.style.color='rgba(255,255,255,0.6)';
+    }
+  });
+}
+
+function doLogin() {
+  var email = document.getElementById('a-email').value.trim();
+  var pass = document.getElementById('a-pass').value;
+  var err = document.getElementById('login-err');
+  var btn = document.getElementById('login-btn');
+  if (!email||!pass) { err.textContent='Enter email and password'; return; }
+  btn.disabled=true; btn.textContent='Signing in...';
+  auth.signInWithEmailAndPassword(email, pass).catch(function(e){
+    err.textContent = authErr(e.code);
+    btn.disabled=false; btn.textContent='Sign In';
+  });
+}
+
+function doRegister() {
+  var name = document.getElementById('r-name').value.trim();
+  var email = document.getElementById('r-email').value.trim();
+  var pass = document.getElementById('r-pass').value;
+  var pin = document.getElementById('r-pin').value;
+  var err = document.getElementById('reg-err');
+  var btn = document.getElementById('reg-btn');
+  if (!name||!email||!pass) { err.textContent='Fill all fields'; return; }
+  if (!/^[0-9]{4}$/.test(pin)) { err.textContent='PIN must be 4 digits'; return; }
+  btn.disabled=true; btn.textContent='Creating...';
+  auth.createUserWithEmailAndPassword(email, pass).then(function(cred){
+    return db.collection('staff').doc(cred.user.uid).set({
+      name:name, email:email, role:selRole, pin:pin, uid:cred.user.uid,
+      createdAt:firebase.firestore.FieldValue.serverTimestamp(), active:true
+    });
+  }).then(function(){ toast('Account created!','ok'); })
+  .catch(function(e){ err.textContent=authErr(e.code); btn.disabled=false; btn.textContent='Create Account'; });
+}
+
+function authErr(code) {
+  var map = {
+    'auth/user-not-found':'No account with that email',
+    'auth/wrong-password':'Incorrect password',
+    'auth/email-already-in-use':'Email already registered',
+    'auth/weak-password':'Password too short (min 6)',
+    'auth/invalid-email':'Invalid email',
+    'auth/too-many-requests':'Too many attempts, try later',
+    'auth/network-request-failed':'No internet connection'
+  };
+  return map[code] || 'Error: ' + code;
+}
+
+function doSignOut() {
+  auth.signOut().then(function(){
+    curUser=null; curProfile=null; pinBuf='';
+    stack=[];
+    goTo('s-auth', false); stack=['s-auth'];
+  });
+}
+
+// ── RESET PASSWORD ──
+function showReset() {
+  var email = document.getElementById('a-email');
+  if (email) document.getElementById('reset-email').value = email.value||'';
+  document.getElementById('reset-err').textContent='';
+  document.getElementById('reset-btn').disabled=false;
+  document.getElementById('reset-btn').textContent='Send Link';
+  document.getElementById('reset-modal').classList.add('open');
+}
+function closeReset() { document.getElementById('reset-modal').classList.remove('open'); }
+function sendReset() {
+  var email = document.getElementById('reset-email').value.trim();
+  var err = document.getElementById('reset-err');
+  var btn = document.getElementById('reset-btn');
+  if (!email) { err.textContent='Enter your email'; return; }
+  btn.disabled=true; btn.textContent='Sending...';
+  auth.sendPasswordResetEmail(email).then(function(){
+    closeReset();
+    toast('Reset link sent to '+email,'ok');
+  }).catch(function(e){ err.textContent=authErr(e.code); btn.disabled=false; btn.textContent='Send Link'; });
+}
+
+// ── PIN ──
+function setupPin() {
+  var h = new Date().getHours();
+  var g = h<12?'Good morning':h<17?'Good afternoon':'Good evening';
+  var name = curProfile && curProfile.name ? curProfile.name.split(' ')[0] : 'Doctor';
+  document.getElementById('pin-name').textContent = g + ', ' + name;
+  document.getElementById('pin-role').textContent = (curProfile&&curProfile.role||'staff').toUpperCase() + ' - Enter PIN';
+  pinBuf=''; renderDots();
+}
+function pk(k) {
+  document.getElementById('pin-err').textContent='';
+  if (k==='back') pinBuf=pinBuf.slice(0,-1);
+  else if (k==='clear') pinBuf='';
+  else if (pinBuf.length<4) pinBuf+=k;
+  renderDots();
+  if (pinBuf.length===4) setTimeout(checkPin,150);
+}
+function renderDots() {
+  for (var i=0;i<4;i++) {
+    document.getElementById('pd'+i).className='pin-dot'+(i<pinBuf.length?' filled':'');
+  }
+}
+function checkPin() {
+  var stored = curProfile && curProfile.pin ? curProfile.pin : '';
+  if (!stored || pinBuf===stored) { unlock(); }
+  else { document.getElementById('pin-err').textContent='Incorrect PIN'; pinBuf=''; renderDots(); }
+}
+function unlock() {
+  loadDash();
+  stack=['s-dash'];
+  goTo('s-dash', false);
+}
+
+// ── DASHBOARD ──
+function loadDash() {
+  var h = new Date().getHours();
+  var g = h<12?'Good morning':h<17?'Good afternoon':'Good evening';
+  var name = curProfile && curProfile.name ? curProfile.name.split(' ')[0] : 'Doctor';
+  document.getElementById('dash-greet').textContent = g + ', ' + name;
+  document.getElementById('dash-role').textContent = (curProfile&&curProfile.role||'staff').toUpperCase() + ' - OnePLUS Pitampura';
+  document.getElementById('sync-dot').textContent = navigator.onLine ? 'Live' : 'Offline';
+  loadStats();
+  loadRecent();
+}
+function loadStats() {
+  var today = todayStr();
+  db.collection('orders').where('date','==',today).get().then(function(snap){
+    var rev=0, pend=0;
+    snap.forEach(function(d){ var o=d.data(); rev+=(o.paidAmount||0); if(o.payMode==='credit') pend++; });
+    document.getElementById('st-orders').textContent=snap.size;
+    document.getElementById('st-rev').textContent='Rs.'+rev.toLocaleString('en-IN');
+    document.getElementById('st-pend').textContent=pend;
+  }).catch(function(){});
+  db.collection('handovers').where('date','==',todayStr()).get().then(function(snap){
+    document.getElementById('st-ho').textContent=snap.size;
+  }).catch(function(){});
+}
+function loadRecent() {
+  db.collection('orders').where('date','==',todayStr()).get().then(function(snap){
+    var el=document.getElementById('dash-recent');
+    if (snap.empty) { el.innerHTML='<div class="empty">No orders yet today</div>'; return; }
+    var rows=[];
+    snap.forEach(function(d){ rows.push(d.data()); });
+    rows.sort(function(a,b){ return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0); });
+    el.innerHTML = rows.slice(0,5).map(function(o){
+      return '<div class="row"><div><div style="font-size:13px;font-weight:500">'+esc(o.patientName)+'</div><div style="font-size:11px;color:var(--text3)">'+esc((o.tests||[]).map(function(t){return t.name;}).join(', '))+'</div></div><div style="text-align:right"><div style="font-size:13px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div><div style="font-size:10px;color:var(--text3)">'+esc(o.payMode||'')+'</div></div></div>';
+    }).join('');
+  }).catch(function(){});
+}
+
+// ── TEST CATALOGUE ──
+var CATALOGUE = [{"dept": "BIOCHEMISTRY", "name": "ACID Phosphatase", "short": "ACP", "rate": 350}, {"dept": "BIOCHEMISTRY", "name": "ACID Phosphatase Prostatic", "short": "PAP", "rate": 350}, {"dept": "BIOCHEMISTRY", "name": "ACTH", "short": "ACTH", "rate": 1700}, {"dept": "BIOCHEMISTRY", "name": "ADA SERUM", "short": "ADA", "rate": 700}, {"dept": "BIOCHEMISTRY", "name": "ANCA -PR3 (serin Proteinase 3\u00a0Antibodies)", "short": "ANCA-PR3", "rate": 1800}, {"dept": "BIOCHEMISTRY", "name": "Albumin", "short": "", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "Alcohol (ethanol)", "short": "", "rate": 750}, {"dept": "BIOCHEMISTRY", "name": "Aldehyde", "short": "", "rate": 300}, {"dept": "BIOCHEMISTRY", "name": "Aldolase", "short": "", "rate": 700}, {"dept": "BIOCHEMISTRY", "name": "Aldosterone, PLASMA", "short": "", "rate": 2000}, {"dept": "BIOCHEMISTRY", "name": "Alkaline Phosphatase", "short": "ALP", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "Ammonia", "short": "", "rate": 1000}, {"dept": "BIOCHEMISTRY", "name": "Amylase", "short": "", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "Androstenedione", "short": "", "rate": 2000}, {"dept": "BIOCHEMISTRY", "name": "BSF (blood SUGAR Fasting)", "short": "BSF", "rate": 100}, {"dept": "BIOCHEMISTRY", "name": "BSPP (blood SUGAR Pp)", "short": "BSPP", "rate": 100}, {"dept": "BIOCHEMISTRY", "name": "BSR (blood SUGAR Random)", "short": "BSR", "rate": 100}, {"dept": "BIOCHEMISTRY", "name": "BUN (blood UREA Nitrogen)", "short": "BUN", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "BUN/Creatinine RATIO", "short": "BUN/Cr", "rate": 300}, {"dept": "BIOCHEMISTRY", "name": "Bilirubin Total,direct,indirect", "short": "Bilirubin", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "C Peptide (fasting)", "short": "C-Peptide", "rate": 1050}, {"dept": "BIOCHEMISTRY", "name": "C Peptide (pp)", "short": "C-Peptide PP", "rate": 1050}, {"dept": "BIOCHEMISTRY", "name": "CHYLE  Examination", "short": "", "rate": 450}, {"dept": "BIOCHEMISTRY", "name": "CK (creatine Kinase)", "short": "CK", "rate": 350}, {"dept": "BIOCHEMISTRY", "name": "COPPER , SERUM", "short": "Cu", "rate": 1500}, {"dept": "BIOCHEMISTRY", "name": "COPPER 24 HOUR URINE", "short": "Cu (24h urine)", "rate": 2000}, {"dept": "BIOCHEMISTRY", "name": "CPK-MB", "short": "CPK-MB", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "CRP (c-Reactive Protein)", "short": "CRP", "rate": 400}, {"dept": "BIOCHEMISTRY", "name": "Calcitonin", "short": "", "rate": 2200}, {"dept": "BIOCHEMISTRY", "name": "Calcium", "short": "Ca", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "Catecholamines (plasma)", "short": "", "rate": 7500}, {"dept": "BIOCHEMISTRY", "name": "Ceruloplasmin", "short": "", "rate": 1200}, {"dept": "BIOCHEMISTRY", "name": "Chloride (cl-)", "short": "Cl", "rate": 200}, {"dept": "BIOCHEMISTRY", "name": "Cholesterol", "short": "", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "Cortisol FREE 24HRS URINE", "short": "", "rate": 1000}, {"dept": "BIOCHEMISTRY", "name": "Creatinine", "short": "Cr", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "Creatinine Clearance TEST", "short": "CCT", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "Cystatin C", "short": "", "rate": 1500}, {"dept": "BIOCHEMISTRY", "name": "DHEA Dehydroepiandrosterone", "short": "DHEA", "rate": 2500}, {"dept": "BIOCHEMISTRY", "name": "DRUGS OF Abuse: 7 DRUGS URINE SCREEN", "short": "Drug Screen", "rate": 5000}, {"dept": "BIOCHEMISTRY", "name": "Electrolytes(na/K)", "short": "Electrolytes", "rate": 400}, {"dept": "BIOCHEMISTRY", "name": "Extended LIPID Profile", "short": "", "rate": 2000}, {"dept": "BIOCHEMISTRY", "name": "FLUID FOR ADA", "short": "", "rate": 700}, {"dept": "BIOCHEMISTRY", "name": "FLUID FOR Albumin", "short": "", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "FLUID FOR Amylase", "short": "", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "FLUID FOR Creatinine", "short": "", "rate": 120}, {"dept": "BIOCHEMISTRY", "name": "FLUID FOR LDH", "short": "", "rate": 400}, {"dept": "BIOCHEMISTRY", "name": "FLUID FOR Protein", "short": "", "rate": 300}, {"dept": "BIOCHEMISTRY", "name": "FLUID FOR UREA", "short": "", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "GAMMA Gt(ggt)", "short": "GGT", "rate": 300}, {"dept": "BIOCHEMISTRY", "name": "GCT SINGLE SAMPLE (glucose Challenge TEST 50Gm/1 Hr)", "short": "GCT", "rate": 100}, {"dept": "BIOCHEMISTRY", "name": "GCT SINGLE SAMPLE (glucose Challenge TEST 75Gm/2 Hr)", "short": "GCT", "rate": 100}, {"dept": "BIOCHEMISTRY", "name": "GCT TWO SAMPLE (glucose Challenge TEST 75Gm/2 Hr))", "short": "GCT", "rate": 200}, {"dept": "BIOCHEMISTRY", "name": "GTT 2 SAMPLE (glucose Tolerance Test)", "short": "GTT", "rate": 200}, {"dept": "BIOCHEMISTRY", "name": "GTT 3 SAMPLE (glucose Tolerance TEST )", "short": "GTT", "rate": 300}, {"dept": "BIOCHEMISTRY", "name": "GTT 4 SAMPLE (glucose Tolerance Test)", "short": "GTT", "rate": 400}, {"dept": "BIOCHEMISTRY", "name": "GTT 5 SAMPLE (glucose Tolerance TEST )", "short": "GTT", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "GTT 6 SAMPLE ( Glucose Tolerance Test)", "short": "GTT", "rate": 600}, {"dept": "BIOCHEMISTRY", "name": "Gastrin LEVEL", "short": "", "rate": 1300}, {"dept": "BIOCHEMISTRY", "name": "Globulin", "short": "", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "Glucose Pp(100 Gm.glucose 2Hrs)", "short": "PPBS", "rate": 100}, {"dept": "BIOCHEMISTRY", "name": "Glucose Pp(50 Gm. Glucose AFTER 1HRS )", "short": "PPBS", "rate": 100}, {"dept": "BIOCHEMISTRY", "name": "Glucose Tolerance TEST (gtt) Pregnancy,100G Glucose", "short": "GTT", "rate": 300}, {"dept": "BIOCHEMISTRY", "name": "HDL Cholesterol", "short": "HDL", "rate": 300}, {"dept": "BIOCHEMISTRY", "name": "HOMA-Ir", "short": "HOMA-IR", "rate": 900}, {"dept": "BIOCHEMISTRY", "name": "HS CRP", "short": "hsCRP", "rate": 750}, {"dept": "BIOCHEMISTRY", "name": "Helicobacter PYLORI PANEL IGA + IgG", "short": "H. Pylori", "rate": 3200}, {"dept": "BIOCHEMISTRY", "name": "Homocysteine Quantitative SERUM", "short": "Homocysteine", "rate": 1000}, {"dept": "BIOCHEMISTRY", "name": "IRON", "short": "Fe", "rate": 350}, {"dept": "BIOCHEMISTRY", "name": "IRON Profile", "short": "", "rate": 700}, {"dept": "BIOCHEMISTRY", "name": "Inorganic Phosphorus", "short": "Phosphorus", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "Ionized Calcium", "short": "iCa", "rate": 600}, {"dept": "BIOCHEMISTRY", "name": "KETONE BODY (beta Hydroxybutyrate), SERUM", "short": "Ketone", "rate": 2000}, {"dept": "BIOCHEMISTRY", "name": "Kappa/Lambda LIGHT CHAINS Free(serum)", "short": "FLC", "rate": 7500}, {"dept": "BIOCHEMISTRY", "name": "Kft(kidney Function Test)", "short": "KFT", "rate": 800}, {"dept": "BIOCHEMISTRY", "name": "LDH SERUM", "short": "LDH", "rate": 400}, {"dept": "BIOCHEMISTRY", "name": "LDL Cholesterol", "short": "LDL", "rate": 350}, {"dept": "BIOCHEMISTRY", "name": "LIPASE", "short": "", "rate": 600}, {"dept": "BIOCHEMISTRY", "name": "LIPID Profile", "short": "", "rate": 800}, {"dept": "BIOCHEMISTRY", "name": "LIVER KIDNEY Microsomal(lkm)", "short": "LKM", "rate": 1600}, {"dept": "BIOCHEMISTRY", "name": "Lactate", "short": "", "rate": 1000}, {"dept": "BIOCHEMISTRY", "name": "Lft(liver Function Test)", "short": "LFT", "rate": 800}, {"dept": "BIOCHEMISTRY", "name": "Lipoprotein A  Lp(a)", "short": "Lp(a)", "rate": 1000}, {"dept": "BIOCHEMISTRY", "name": "Magnesium", "short": "Mg", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "Myoglobin, SERUM", "short": "Myoglobin", "rate": null}, {"dept": "BIOCHEMISTRY", "name": "PLASMA Renin, DIRECT", "short": "Renin", "rate": 5500}, {"dept": "BIOCHEMISTRY", "name": "Phenytoin", "short": "", "rate": 1000}, {"dept": "BIOCHEMISTRY", "name": "Potassium(k+)", "short": "K+", "rate": 200}, {"dept": "BIOCHEMISTRY", "name": "Protein Electrophoresis, 24-Hour URINE", "short": "UPEP", "rate": 4200}, {"dept": "BIOCHEMISTRY", "name": "S. Fructosamine", "short": "Fructosamine", "rate": 550}, {"dept": "BIOCHEMISTRY", "name": "SERUM Ascites Albumin Gradient (saag)", "short": "SAAG", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "SERUM BILE ACID", "short": "", "rate": 1750}, {"dept": "BIOCHEMISTRY", "name": "SERUM Bicarbonate", "short": "HCO3", "rate": 700}, {"dept": "BIOCHEMISTRY", "name": "SODIUM (na+)", "short": "Na+", "rate": 200}, {"dept": "BIOCHEMISTRY", "name": "STONE Analysis", "short": "", "rate": 1200}, {"dept": "BIOCHEMISTRY", "name": "Sca(spinocerebeller Ataxia) Panal", "short": "SCA Panel", "rate": 18000}, {"dept": "BIOCHEMISTRY", "name": "Sgot(ast)", "short": "AST", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "Sgpt(alt)", "short": "ALT", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "Sm/Rnp Antibodies, SERUM", "short": "Sm/RNP", "rate": 2500}, {"dept": "BIOCHEMISTRY", "name": "TIBC (total IRON Binding Capacity)", "short": "TIBC", "rate": 600}, {"dept": "BIOCHEMISTRY", "name": "TOTAL Protein", "short": "TP", "rate": 200}, {"dept": "BIOCHEMISTRY", "name": "TPMT (thiopurine METHYL Transferase) Genotyping", "short": "TPMT", "rate": 6000}, {"dept": "BIOCHEMISTRY", "name": "Transferrin", "short": "", "rate": 1200}, {"dept": "BIOCHEMISTRY", "name": "Triglyceride", "short": "TG", "rate": 300}, {"dept": "BIOCHEMISTRY", "name": "Tryptase", "short": "", "rate": 9500}, {"dept": "BIOCHEMISTRY", "name": "UIBC", "short": "UIBC", "rate": 600}, {"dept": "BIOCHEMISTRY", "name": "UREA", "short": "", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "URIC ACID", "short": "UA", "rate": 150}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Albumin Creatinine RATIO (spot)", "short": "ACR", "rate": 300}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Albumin SPOT", "short": "", "rate": 120}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Calcium (24 Hrs)", "short": "Urine Ca (24h)", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Calcium (spot)", "short": "Urine Ca", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Creatinine (24 Hrs)", "short": "Urine Cr (24h)", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Creatinine(spot)", "short": "Urine Cr", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Glucose RANDOM (24 Hrs)", "short": "", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR MICRO Albumin (24 Hrs)", "short": "MAU (24h)", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR MICRO Albumin (spot)", "short": "MAU", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR MICRO Albumin Creatinine RATIO (spot)", "short": "MACR", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR MICRO Albumin Creatinine Ratio(24 Hrs)", "short": "MACR (24h)", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Potassium (24 Hrs)", "short": "Urine K (24h)", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Potassium SPOT", "short": "Urine K", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Pp(glucose)", "short": "", "rate": 100}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Protein (spot)", "short": "UProt", "rate": 300}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Protein 24Hrs", "short": "UProt (24h)", "rate": 350}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Protein Calcium RATIO", "short": "PCR", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Protein Creatinine RATIO (spot)", "short": "UPCR", "rate": 500}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Protein Creatinine RATIO 24 HRS", "short": "UPCR (24h)", "rate": 1000}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR SODIUM (24 Hrs)", "short": "Urine Na (24h)", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR SODIUM SPOT", "short": "Urine Na", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR UREA 24Hrs.", "short": "Urine Urea (24h)", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR URIC ACID (24 Hrs)", "short": "Urine UA (24h)", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR URIC ACID (spot)", "short": "Urine UA", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "URINE FOR Urea(spot)", "short": "Urine Urea", "rate": 250}, {"dept": "BIOCHEMISTRY", "name": "VLDL Cholesterol", "short": "VLDL", "rate": 800}, {"dept": "BIOCHEMISTRY", "name": "ZINC", "short": "Zn", "rate": 2000}, {"dept": "CARDIOLOGY", "name": "Dse/Dobutamine STRESS Echocardiography", "short": "DSE", "rate": 5500}, {"dept": "CARDIOLOGY", "name": "E.c.g. (home Visit)", "short": "ECG", "rate": 400}, {"dept": "CARDIOLOGY", "name": "ECG", "short": "ECG", "rate": 500}, {"dept": "CARDIOLOGY", "name": "Echocardiography (2D And M-Mode)", "short": "2D Echo", "rate": 3500}, {"dept": "CARDIOLOGY", "name": "Echocardiography Pediatric", "short": "Echo (Paed)", "rate": 4000}, {"dept": "CARDIOLOGY", "name": "HOLTER Monitoring", "short": "Holter", "rate": 5000}, {"dept": "CARDIOLOGY", "name": "HOLTER Monitoring (48 Hrs.)", "short": "Holter 48h", "rate": 7000}, {"dept": "CARDIOLOGY", "name": "HS Troponin-T (high Sensitive)", "short": "hs-TnT", "rate": 2000}, {"dept": "CARDIOLOGY", "name": "TMT (stress Test)", "short": "TMT", "rate": 2500}, {"dept": "CLINICAL PATHOLOGY", "name": "Catecholamines 24 Hrs URINE", "short": "Catecholamines", "rate": 5000}, {"dept": "CLINICAL PATHOLOGY", "name": "FECAL Calprotectin Qualitative", "short": "Fecal Calprotectin", "rate": 3000}, {"dept": "CLINICAL PATHOLOGY", "name": "FECAL Calprotectin Quantitative", "short": "Fecal Calprotectin Quant", "rate": 3700}, {"dept": "CLINICAL PATHOLOGY", "name": "FLUID Routine Examination (bio, Micro)", "short": "", "rate": 950}, {"dept": "CLINICAL PATHOLOGY", "name": "SEMEN Routine Analysis (manual/Microscopy)", "short": "Semen Analysis", "rate": 500}, {"dept": "CLINICAL PATHOLOGY", "name": "SPERM DNA Fragmentation TEST", "short": "DNA Frag", "rate": 5500}, {"dept": "CLINICAL PATHOLOGY", "name": "SPERM Wash/Semen WASH", "short": "", "rate": 1300}, {"dept": "CLINICAL PATHOLOGY", "name": "STOOL  PH", "short": "Stool pH", "rate": 100}, {"dept": "CLINICAL PATHOLOGY", "name": "STOOL Hanging Drop", "short": "", "rate": 200}, {"dept": "CLINICAL PATHOLOGY", "name": "STOOL OCCULT BLOOD", "short": "FOB", "rate": 150}, {"dept": "CLINICAL PATHOLOGY", "name": "STOOL Rotavirus Antigen", "short": "Rotavirus Ag", "rate": 1200}, {"dept": "CLINICAL PATHOLOGY", "name": "STOOL Routine(manual Method/Microscopy)", "short": "Stool R/E", "rate": 150}, {"dept": "CLINICAL PATHOLOGY", "name": "Semen Fructose, Qualitative", "short": "", "rate": 300}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE BENCE JONES Proteins", "short": "BJP", "rate": 600}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE Continine", "short": "Cotinine", "rate": null}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR Albumin Creatinine Ratio(24 Hrs)", "short": "ACR (24h)", "rate": 350}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR BILE SALT AND BILE Pigment (bs/Bp)", "short": "BS/BP", "rate": 250}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR CHYLE TEST", "short": "", "rate": 600}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR Cadmium", "short": "", "rate": null}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR Leucocytes", "short": "", "rate": 120}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR Mercury", "short": "", "rate": null}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR Organic ACIDS", "short": "", "rate": null}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR Oxalate ( Random)", "short": "Urine Oxalate", "rate": null}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR Ph", "short": "Urine pH", "rate": 120}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR Porphobilinogen, Qualitative", "short": "PBG", "rate": 3800}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR Porphobilinogen, Quantative (24 Hrs)", "short": "PBG (24h)", "rate": 3800}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR TB-PCR", "short": "Urine TB-PCR", "rate": 2200}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE FOR Urobilinogen", "short": "Urobilinogen", "rate": 150}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE KETONE AND SUGAR", "short": "", "rate": 200}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE KETONE BODY", "short": "Urine Ketone", "rate": 100}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE Nitrite", "short": "", "rate": null}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE Osmolality", "short": "Urine Osm", "rate": null}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE Pregnancy TEST", "short": "UPT", "rate": 150}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE Routine (strip/Microscopy)", "short": "Urine R/E", "rate": 150}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE SUGAR 1 HRS", "short": "", "rate": 80}, {"dept": "CLINICAL PATHOLOGY", "name": "URINE SUGAR 3 HRS", "short": "", "rate": 80}, {"dept": "CLINICAL PATHOLOGY", "name": "Urethral SMEAR (gram Stain)", "short": "", "rate": 390}, {"dept": "CLINICAL PATHOLOGY", "name": "VMA  24 HOURS URINE", "short": "VMA", "rate": 3800}, {"dept": "CLINICAL PATHOLOGY", "name": "VMA  RANDOM URINE", "short": "VMA", "rate": 3800}, {"dept": "CYTOLOGY", "name": "Cytology FOR FUNGAL Elements", "short": "", "rate": 850}, {"dept": "CYTOLOGY", "name": "FLUID FOR Cytology", "short": "", "rate": 850}, {"dept": "CYTOLOGY", "name": "FLUID FOR Cytology BOTH SIDE", "short": "", "rate": 1600}, {"dept": "CYTOLOGY", "name": "FLUID FOR WET MOUNT Examination", "short": "Wet Mount", "rate": 850}, {"dept": "CYTOLOGY", "name": "FNAC", "short": "FNAC", "rate": 1000}, {"dept": "CYTOLOGY", "name": "FNAC (both Testes)", "short": "FNAC", "rate": 1800}, {"dept": "CYTOLOGY", "name": "FNAC FROM Multiple SITES", "short": "FNAC", "rate": 1800}, {"dept": "CYTOLOGY", "name": "FNAC SLIDE", "short": "FNAC", "rate": 600}, {"dept": "CYTOLOGY", "name": "HPV Qualitative PCR", "short": "HPV PCR", "rate": 1750}, {"dept": "CYTOLOGY", "name": "Lbc, LIQUID BASED Cytology", "short": "LBC", "rate": 1200}, {"dept": "CYTOLOGY", "name": "Lbc, Liquid Based Cytology+ HPV PCR Qualitative", "short": "LBC+HPV", "rate": 2950}, {"dept": "CYTOLOGY", "name": "SPUTUM FOR Cytology", "short": "", "rate": 850}, {"dept": "CYTOLOGY", "name": "Scraping Cytology (buccal/Oral)", "short": "", "rate": 850}, {"dept": "CYTOLOGY", "name": "Vaginal Cytology", "short": "", "rate": 850}, {"dept": "CYTOLOGY", "name": "Vaginal SWAB Aspiration AND Cytology", "short": "", "rate": 850}, {"dept": "CYTOLOGY", "name": "WET MOUNT Examination", "short": "Wet Mount", "rate": 350}, {"dept": "ENDOCRINOLOGY", "name": "17 Hydroxy Progesterone", "short": "17-OHP", "rate": 1400}, {"dept": "ENDOCRINOLOGY", "name": "2Nd Trimester Pre-Ecclampsia Screening", "short": "PE Screen", "rate": 8500}, {"dept": "ENDOCRINOLOGY", "name": "AFP (alpha Fetoprotein)", "short": "AFP", "rate": 900}, {"dept": "ENDOCRINOLOGY", "name": "ANA 17 Profile Immunoblot", "short": "ANA Profile", "rate": 6000}, {"dept": "ENDOCRINOLOGY", "name": "ANA Profile", "short": "ANA Profile", "rate": null}, {"dept": "ENDOCRINOLOGY", "name": "ANA/Anf (hep2/Ifa)", "short": "ANA/ANF", "rate": 2500}, {"dept": "ENDOCRINOLOGY", "name": "ANTI CCP", "short": "Anti-CCP", "rate": 1750}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Cardiolipin Antibody IgA", "short": "aCL IgA", "rate": 850}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Cardiolipin Antibody IgG", "short": "aCL IgG", "rate": 850}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Cardiolipin Antibody IgM", "short": "aCL IgM", "rate": 850}, {"dept": "ENDOCRINOLOGY", "name": "ANTI DS DNA Antibody", "short": "Anti-dsDNA", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Dnase B; Antideoxyribonuclease B", "short": "Anti-DNase B", "rate": 1500}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Histone Antibodies (aha)", "short": "AHA", "rate": 1600}, {"dept": "ENDOCRINOLOGY", "name": "ANTI JO -1 Antibody", "short": "Anti-Jo1", "rate": 2000}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Mitochondrial Antibody(ama)", "short": "AMA", "rate": 2400}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Phospholipid Antibody IgA", "short": "aPL IgA", "rate": 850}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Phospholipid Antibody IgG", "short": "aPL IgG", "rate": 850}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Phospholipid Antibody IgM", "short": "aPL IgM", "rate": 850}, {"dept": "ENDOCRINOLOGY", "name": "ANTI SMOOTH MUSCLE Antibody(asma)", "short": "ASMA", "rate": 2300}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Thyroglobulin Antibody (tg)", "short": "Anti-TG", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "ANTI Thyroid Peroxidase (tpo)", "short": "Anti-TPO", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "ASCA (anti-Saccharomyces Cerevisiae Antibodies , IgA", "short": "ASCA IgA", "rate": 1500}, {"dept": "ENDOCRINOLOGY", "name": "ASCA (anti-Saccharomyces Cerevisiae Antibodies , IgG", "short": "ASCA IgG", "rate": 1500}, {"dept": "ENDOCRINOLOGY", "name": "Aldosterone/Renin Ratio (supine)", "short": "ARR", "rate": 7200}, {"dept": "ENDOCRINOLOGY", "name": "Aldosterone/Renin Ratio (upright)", "short": "ARR", "rate": 7200}, {"dept": "ENDOCRINOLOGY", "name": "Alpha-1 Antitrypsin", "short": "A1AT", "rate": 2200}, {"dept": "ENDOCRINOLOGY", "name": "Amenorrhea Profile", "short": "", "rate": 2300}, {"dept": "ENDOCRINOLOGY", "name": "Androgen INDEX", "short": "FAI", "rate": 3000}, {"dept": "ENDOCRINOLOGY", "name": "Antithrombin Activity Functional", "short": "AT Activity", "rate": null}, {"dept": "ENDOCRINOLOGY", "name": "Antithrombin III", "short": "AT III", "rate": 3200}, {"dept": "ENDOCRINOLOGY", "name": "Apoliporotein- A1", "short": "Apo A1", "rate": 600}, {"dept": "ENDOCRINOLOGY", "name": "Apoliporotein- B", "short": "Apo B", "rate": 600}, {"dept": "ENDOCRINOLOGY", "name": "BETA 2 Glycoprotein IgA", "short": "\u03b22GP IgA", "rate": 1000}, {"dept": "ENDOCRINOLOGY", "name": "BETA 2 Glycoprotein IgG", "short": "\u03b22GP IgG", "rate": 1000}, {"dept": "ENDOCRINOLOGY", "name": "BETA 2 Glycoprotein IgM", "short": "\u03b22GP IgM", "rate": 1000}, {"dept": "ENDOCRINOLOGY", "name": "BETA 2 Glycoprotein PANEL Igg+Iga+Igm", "short": "\u03b22GP Panel", "rate": 3000}, {"dept": "ENDOCRINOLOGY", "name": "BETA 2 Microglobulin (serum)", "short": "\u03b22M", "rate": 1400}, {"dept": "ENDOCRINOLOGY", "name": "BETA HCG (quantitative)", "short": "\u03b2-hCG", "rate": 700}, {"dept": "ENDOCRINOLOGY", "name": "BLOOD Allergy Profile", "short": "", "rate": 9500}, {"dept": "ENDOCRINOLOGY", "name": "Bnp; B - TYPE Natriuretic Peptide", "short": "BNP", "rate": 1900}, {"dept": "ENDOCRINOLOGY", "name": "CA 125", "short": "CA-125", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "CA 15.3 (breast CANCER Marker)", "short": "CA 15.3", "rate": 1500}, {"dept": "ENDOCRINOLOGY", "name": "CA 27.29", "short": "CA 27.29", "rate": 8000}, {"dept": "ENDOCRINOLOGY", "name": "CA 72.4", "short": "CA 72.4", "rate": 1600}, {"dept": "ENDOCRINOLOGY", "name": "CA19.9", "short": "CA 19.9", "rate": 1500}, {"dept": "ENDOCRINOLOGY", "name": "CEA (carcino Embryonic Antigen)", "short": "CEA", "rate": 750}, {"dept": "ENDOCRINOLOGY", "name": "Comprehensive BLOOD Allergy Profile (immuno Cap)", "short": "ImmunoCAP", "rate": 15000}, {"dept": "ENDOCRINOLOGY", "name": "Cortisol (am)", "short": "Cortisol AM", "rate": 550}, {"dept": "ENDOCRINOLOGY", "name": "Cortisol (pm)", "short": "Cortisol PM", "rate": 550}, {"dept": "ENDOCRINOLOGY", "name": "Cortisol Stimulation BY ACTH", "short": "ACTH Stim", "rate": 2000}, {"dept": "ENDOCRINOLOGY", "name": "Cortisol Suppression BY Dexamethasone, Overnight LOW DOSE", "short": "DST", "rate": null}, {"dept": "ENDOCRINOLOGY", "name": "DHEA Sulphate (dheas)", "short": "DHEAS", "rate": 1000}, {"dept": "ENDOCRINOLOGY", "name": "DOUBLE Marker(dual) + PRE Eclampsia Screening", "short": "Double Marker", "rate": 4000}, {"dept": "ENDOCRINOLOGY", "name": "Des-Gamma Carboxy Prothrombin (dcp)/PIVKA Ii, SERUM", "short": "PIVKA-II", "rate": 4000}, {"dept": "ENDOCRINOLOGY", "name": "Digoxin", "short": "", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "Drug Allergy Profile", "short": "", "rate": 3000}, {"dept": "ENDOCRINOLOGY", "name": "E2(estradiol)", "short": "E2", "rate": 600}, {"dept": "ENDOCRINOLOGY", "name": "ENA Profile", "short": "ENA", "rate": 8500}, {"dept": "ENDOCRINOLOGY", "name": "Endomysial Antibody IgA", "short": "EMA IgA", "rate": 2000}, {"dept": "ENDOCRINOLOGY", "name": "FIRST Trimester QUAD Screening", "short": "FTS", "rate": 4500}, {"dept": "ENDOCRINOLOGY", "name": "FOLATE (folic Acid)", "short": "Folate", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "FOOD Allergy NON Vegetarian", "short": "", "rate": null}, {"dept": "ENDOCRINOLOGY", "name": "FOOD Allergy VAG & NON Vegetarian", "short": "", "rate": 5000}, {"dept": "ENDOCRINOLOGY", "name": "FOOD Allergy Vegetarian", "short": "", "rate": 3000}, {"dept": "ENDOCRINOLOGY", "name": "FREE T3", "short": "fT3", "rate": 300}, {"dept": "ENDOCRINOLOGY", "name": "FREE T3 AND FREE T4 (add TO Package)", "short": "fT3 & fT4", "rate": null}, {"dept": "ENDOCRINOLOGY", "name": "FREE T4", "short": "fT4", "rate": 300}, {"dept": "ENDOCRINOLOGY", "name": "FREE Thyroid Profile", "short": "fT3/fT4/TSH", "rate": 750}, {"dept": "ENDOCRINOLOGY", "name": "Ferritin", "short": "", "rate": 700}, {"dept": "ENDOCRINOLOGY", "name": "Fibrinogen Levels", "short": "Fibrinogen", "rate": 800}, {"dept": "ENDOCRINOLOGY", "name": "Fsh(follicle Stimulating Hormone)", "short": "FSH", "rate": 550}, {"dept": "ENDOCRINOLOGY", "name": "GAD-65 (glutamic ACID Decarboxylase- 65), IgG", "short": "GAD-65", "rate": 6700}, {"dept": "ENDOCRINOLOGY", "name": "GROWTH Hormone", "short": "GH", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "GROWTH Hormone 30MINTS", "short": "GH 30min", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "GROWTH Hormone 60MINTS", "short": "GH 60min", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "GROWTH Hormone 90MINTS", "short": "GH 90min", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "GROWTH Hormone Stimulation TEST", "short": "GH Stim", "rate": 3200}, {"dept": "ENDOCRINOLOGY", "name": "GROWTH Hormone Suppression BY Glucose", "short": "GH Suppression", "rate": 2400}, {"dept": "ENDOCRINOLOGY", "name": "Galactomannan (aspergillus Antigen), SERUM", "short": "Galactomannan", "rate": 5500}, {"dept": "ENDOCRINOLOGY", "name": "Gliadin Deamidated Antibodies Panel, IgA & IgG", "short": "DGP Panel", "rate": 3800}, {"dept": "ENDOCRINOLOGY", "name": "HE 4 (human Epididymis Protein 4)", "short": "HE4", "rate": 3000}, {"dept": "ENDOCRINOLOGY", "name": "HIAA 24 Hrs. URINE (hydroxy INDOLE ACETIC Acid)", "short": "5-HIAA", "rate": 3800}, {"dept": "ENDOCRINOLOGY", "name": "Hypersensitivity Pneumonitis (hp) PANEL Extended", "short": "HP Panel", "rate": 12000}, {"dept": "ENDOCRINOLOGY", "name": "IGF BP3", "short": "IGFBP-3", "rate": 7500}, {"dept": "ENDOCRINOLOGY", "name": "IGF-1", "short": "IGF-1", "rate": 4500}, {"dept": "ENDOCRINOLOGY", "name": "IL-6 (interleukin 6)", "short": "IL-6", "rate": 3000}, {"dept": "ENDOCRINOLOGY", "name": "IgE (serum)", "short": "IgE", "rate": 800}, {"dept": "ENDOCRINOLOGY", "name": "IgG Subclass 4", "short": "IgG4", "rate": 7000}, {"dept": "ENDOCRINOLOGY", "name": "Immunofixation  Electrophoresis (serum)", "short": "IFE", "rate": 6700}, {"dept": "ENDOCRINOLOGY", "name": "Immunoglobulin A ( Iga)serum", "short": "IgA", "rate": 600}, {"dept": "ENDOCRINOLOGY", "name": "Immunoglobulin G ( Igg) SERUM", "short": "IgG", "rate": 600}, {"dept": "ENDOCRINOLOGY", "name": "Immunoglobulin M ( Igm) SERUM", "short": "IgM", "rate": 600}, {"dept": "ENDOCRINOLOGY", "name": "Inhibin B", "short": "Inhibin B", "rate": 2500}, {"dept": "ENDOCRINOLOGY", "name": "Insulin RANDOM", "short": "Insulin", "rate": 700}, {"dept": "ENDOCRINOLOGY", "name": "Insulin(fasting)", "short": "Fasting Insulin", "rate": 700}, {"dept": "ENDOCRINOLOGY", "name": "Insulin(pp)", "short": "PP Insulin", "rate": 700}, {"dept": "ENDOCRINOLOGY", "name": "Intrinsic FACTOR Antibody", "short": "IF Ab", "rate": 3000}, {"dept": "ENDOCRINOLOGY", "name": "LH AND FSH", "short": "LH & FSH", "rate": 1100}, {"dept": "ENDOCRINOLOGY", "name": "Lh(luteinizing Hormone)", "short": "LH", "rate": 550}, {"dept": "ENDOCRINOLOGY", "name": "Lithium", "short": "", "rate": 550}, {"dept": "ENDOCRINOLOGY", "name": "NEURON Specific Enolase(nse)serum", "short": "NSE", "rate": 4000}, {"dept": "ENDOCRINOLOGY", "name": "P-ANCA", "short": "P-ANCA", "rate": 2000}, {"dept": "ENDOCRINOLOGY", "name": "PAPP - A", "short": "PAPP-A", "rate": 830}, {"dept": "ENDOCRINOLOGY", "name": "PENTA Screening", "short": "Penta Screen", "rate": 5500}, {"dept": "ENDOCRINOLOGY", "name": "PSA FREE", "short": "Free PSA", "rate": 900}, {"dept": "ENDOCRINOLOGY", "name": "PSA Free/PSA TOTAL RATIO", "short": "PSA Ratio", "rate": 1700}, {"dept": "ENDOCRINOLOGY", "name": "PSA TOTAL", "short": "PSA", "rate": 800}, {"dept": "ENDOCRINOLOGY", "name": "PTH (intact)", "short": "iPTH", "rate": 1600}, {"dept": "ENDOCRINOLOGY", "name": "Phadiatop Allergy  BY IMMUNO CAP", "short": "Phadiatop", "rate": 1200}, {"dept": "ENDOCRINOLOGY", "name": "Phenobarbitone", "short": "", "rate": 1000}, {"dept": "ENDOCRINOLOGY", "name": "Placental Growth Factor (pigf)", "short": "PlGF", "rate": null}, {"dept": "ENDOCRINOLOGY", "name": "Procalcitonin", "short": "PCT", "rate": 2800}, {"dept": "ENDOCRINOLOGY", "name": "Progesterone", "short": "Prog", "rate": 600}, {"dept": "ENDOCRINOLOGY", "name": "Prolactin", "short": "PRL", "rate": 550}, {"dept": "ENDOCRINOLOGY", "name": "Prolactin ( POOLED Sample)", "short": "PRL (pooled)", "rate": 550}, {"dept": "ENDOCRINOLOGY", "name": "Protein C Functional", "short": "Protein C", "rate": 4000}, {"dept": "ENDOCRINOLOGY", "name": "Protein S Functional", "short": "Protein S", "rate": 4000}, {"dept": "ENDOCRINOLOGY", "name": "Quadruple MARKER (integrated)", "short": "Quad Marker", "rate": 3500}, {"dept": "ENDOCRINOLOGY", "name": "Quadruple TEST", "short": "Quad Test", "rate": 3200}, {"dept": "ENDOCRINOLOGY", "name": "SCL-70 (scleroderma) Antibody", "short": "Anti-Scl70", "rate": 1300}, {"dept": "ENDOCRINOLOGY", "name": "SERUM Chromogranin A", "short": "CgA", "rate": 7500}, {"dept": "ENDOCRINOLOGY", "name": "SERUM EPO ( Erythropoietin)", "short": "EPO", "rate": 2500}, {"dept": "ENDOCRINOLOGY", "name": "SHBG  SEX Hormone Binding Globulin", "short": "SHBG", "rate": 2500}, {"dept": "ENDOCRINOLOGY", "name": "SSA Or Ro Antibody", "short": "Anti-SSA", "rate": 1600}, {"dept": "ENDOCRINOLOGY", "name": "SSB Or La Antibody", "short": "Anti-SSB", "rate": 1600}, {"dept": "ENDOCRINOLOGY", "name": "Selenium, SERUM", "short": "Se", "rate": 4000}, {"dept": "ENDOCRINOLOGY", "name": "Sm(smith) Antibody IgG", "short": "Anti-Sm", "rate": 1100}, {"dept": "ENDOCRINOLOGY", "name": "T3", "short": "T3", "rate": 250}, {"dept": "ENDOCRINOLOGY", "name": "T3 AND T4", "short": "T3 & T4", "rate": 500}, {"dept": "ENDOCRINOLOGY", "name": "T4", "short": "T4", "rate": 250}, {"dept": "ENDOCRINOLOGY", "name": "TRIPLE TEST", "short": "Triple Test", "rate": 2500}, {"dept": "ENDOCRINOLOGY", "name": "TSH", "short": "TSH", "rate": 300}, {"dept": "ENDOCRINOLOGY", "name": "TSH Receptor Antibody", "short": "TRAb", "rate": 4500}, {"dept": "ENDOCRINOLOGY", "name": "TSH Ultrasensitive", "short": "usTSH", "rate": 400}, {"dept": "ENDOCRINOLOGY", "name": "TTG (tissue Transglutaminase)-DGP SCREEN", "short": "TTG-DGP", "rate": null}, {"dept": "ENDOCRINOLOGY", "name": "TTG IGA (tissue Transglutaminase Antibody)", "short": "TTG IgA", "rate": 1100}, {"dept": "ENDOCRINOLOGY", "name": "Testosterone - TOTAL", "short": "Testosterone", "rate": 700}, {"dept": "ENDOCRINOLOGY", "name": "Testosterone FREE", "short": "Free Testosterone", "rate": 1850}, {"dept": "ENDOCRINOLOGY", "name": "Thyroid Profile(t3,t4,tsh)", "short": "TFT", "rate": 700}, {"dept": "ENDOCRINOLOGY", "name": "Valproic ACID (valproate)", "short": "VPA", "rate": 900}, {"dept": "ENDOCRINOLOGY", "name": "Vitamin A (retinol)", "short": "Vit A", "rate": 6000}, {"dept": "ENDOCRINOLOGY", "name": "Vitamin B12", "short": "B12", "rate": 1000}, {"dept": "ENDOCRINOLOGY", "name": "Vitamin D25 Hydroxy", "short": "Vit D", "rate": 1550}, {"dept": "ENDOCRINOLOGY", "name": "eFTS (enhanced Fts)", "short": "eFTS", "rate": 4500}, {"dept": "GENETICS", "name": "Beta Thalassemia Mutation Amnio/CVS", "short": "Beta Thal Mutation", "rate": 7000}, {"dept": "GENETICS", "name": "CF GENE Sequencing", "short": "CF Gene Seq", "rate": 28000}, {"dept": "GENETICS", "name": "CFTR Mutation", "short": "CFTR", "rate": 7000}, {"dept": "GENETICS", "name": "Carrier Screening FOR SMA (mlpa)", "short": "SMA Screen", "rate": 7000}, {"dept": "GENETICS", "name": "Chromosomal Microarray 750K (blood)", "short": "CMA 750K", "rate": 22000}, {"dept": "GENETICS", "name": "Clinical EXOME Sequencing", "short": "CES", "rate": 35000}, {"dept": "GENETICS", "name": "DMD Mutation Analysis", "short": "DMD", "rate": 9000}, {"dept": "GENETICS", "name": "DOUBLE Marker/Dual TEST", "short": "Double Marker", "rate": 2500}, {"dept": "GENETICS", "name": "Extended NIPT", "short": "NIPT Extended", "rate": 22000}, {"dept": "GENETICS", "name": "FACTOR V LEIDEN", "short": "FVL", "rate": 6000}, {"dept": "GENETICS", "name": "FETAL Seq. POC", "short": "", "rate": 10000}, {"dept": "GENETICS", "name": "FISH (products OF Conception)", "short": "FISH POC", "rate": 12000}, {"dept": "GENETICS", "name": "FISH FOR 5 Chromosomes", "short": "FISH", "rate": 6000}, {"dept": "GENETICS", "name": "Genetic Consultation", "short": "", "rate": 1500}, {"dept": "GENETICS", "name": "Genetic Consultation FOLLOW UP", "short": "", "rate": 1000}, {"dept": "GENETICS", "name": "HBA1/HBA2 GENE Deletion/Duplication STUDY BY MLPA FOR ALPHA Thalassemia", "short": "Alpha Thal MLPA", "rate": 12000}, {"dept": "GENETICS", "name": "HBB GENE TARGET Mutation Analysis", "short": "HBB", "rate": 8000}, {"dept": "GENETICS", "name": "Hereditary CANCER GENE PANEL", "short": "Hereditary Cancer Panel", "rate": null}, {"dept": "GENETICS", "name": "Integrated KT/Microarray 315K", "short": "KT+CMA", "rate": 15000}, {"dept": "GENETICS", "name": "Karyotype POC BY NGS", "short": "Karyotype NGS", "rate": 10000}, {"dept": "GENETICS", "name": "Karyotype+FISH", "short": "Karyotype+FISH", "rate": 15000}, {"dept": "GENETICS", "name": "Karyotype,  (chorosome Analysis, Blood)", "short": "Karyotype", "rate": 3500}, {"dept": "GENETICS", "name": "Karyotype, COUPLE (chorosome Analysis, Blood)", "short": "Karyotype (Couple)", "rate": 6500}, {"dept": "GENETICS", "name": "Karyotyping (+/- Fish) Products OF Conception", "short": "Karyotype POC", "rate": 7000}, {"dept": "GENETICS", "name": "Karyotyping Products OF Conception", "short": "Karyotype POC", "rate": 7500}, {"dept": "GENETICS", "name": "MLPA FOR BWS", "short": "BWS MLPA", "rate": 15000}, {"dept": "GENETICS", "name": "MLPA FOR DMD", "short": "DMD MLPA", "rate": 10000}, {"dept": "GENETICS", "name": "MLPA FOR SMA", "short": "SMA MLPA", "rate": 14000}, {"dept": "GENETICS", "name": "Microarray (315K)", "short": "CMA 315K", "rate": 17000}, {"dept": "GENETICS", "name": "Microarray (750K)", "short": "CMA 750K", "rate": 20000}, {"dept": "GENETICS", "name": "Microarray Products OF Conception", "short": "CMA POC", "rate": 18000}, {"dept": "GENETICS", "name": "NEW BORN Screening Extended", "short": "NBS Extended", "rate": 5500}, {"dept": "GENETICS", "name": "NIPT (5 Chromosomes)", "short": "NIPT", "rate": 12000}, {"dept": "GENETICS", "name": "NIPT (All Chromosomes)", "short": "NIPT All", "rate": 14000}, {"dept": "GENETICS", "name": "Newborn Screening PANEL 7", "short": "NBS Panel 7", "rate": 2500}, {"dept": "GENETICS", "name": "Procedure + WES + CNV + QF PCR + MCC (cvs)", "short": "WES+CNV (CVS)", "rate": 30000}, {"dept": "GENETICS", "name": "QF PCR+MCC+Microarray (cma) 750K", "short": "QF-PCR+CMA", "rate": 18000}, {"dept": "GENETICS", "name": "QF-PCR", "short": "QF-PCR", "rate": 7000}, {"dept": "GENETICS", "name": "SINGLE Variant Analysis", "short": "SVA", "rate": 7000}, {"dept": "GENETICS", "name": "TORCH PCR- AMNIO", "short": "TORCH PCR", "rate": 7500}, {"dept": "GENETICS", "name": "WHOLE EXOME Sequencing", "short": "WES", "rate": 30000}, {"dept": "GENETICS", "name": "WHOLE EXOME Sequencing TRIO", "short": "WES Trio", "rate": 45000}, {"dept": "HAEMATOLOGY", "name": "APTT/Pttk(activated Partial Thromboplastin Time)", "short": "APTT", "rate": 500}, {"dept": "HAEMATOLOGY", "name": "Absolute Eosinophil COUNT", "short": "AEC", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "Absolute Neutrophil Count", "short": "ANC", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "BT (bleeding TIME )", "short": "BT", "rate": 200}, {"dept": "HAEMATOLOGY", "name": "Blood Group RH Type", "short": "Blood Group", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "CBC (complete BLOOD Count)", "short": "CBC", "rate": 350}, {"dept": "HAEMATOLOGY", "name": "CD19", "short": "CD19", "rate": 2500}, {"dept": "HAEMATOLOGY", "name": "CD20", "short": "CD20", "rate": 2500}, {"dept": "HAEMATOLOGY", "name": "CT (clotting Time)", "short": "CT", "rate": 200}, {"dept": "HAEMATOLOGY", "name": "Complete Haemogram", "short": "CBC", "rate": 450}, {"dept": "HAEMATOLOGY", "name": "D-Dimer", "short": "D-Dimer", "rate": 1200}, {"dept": "HAEMATOLOGY", "name": "DCT (Direct Coombs Test)", "short": "DCT", "rate": 500}, {"dept": "HAEMATOLOGY", "name": "Dlc(differential)", "short": "DLC", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "ESR", "short": "ESR", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "FACTOR VIII Functional", "short": "Factor VIII", "rate": 2000}, {"dept": "HAEMATOLOGY", "name": "FDP (fibrinogen Degradation Products)", "short": "FDP", "rate": 1200}, {"dept": "HAEMATOLOGY", "name": "FLUID FOR DLC", "short": "", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "FLUID FOR TLC", "short": "", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "G6PD", "short": "G6PD", "rate": 700}, {"dept": "HAEMATOLOGY", "name": "HB  Electrophoresis (hplc)", "short": "Hb Electrophoresis", "rate": 1000}, {"dept": "HAEMATOLOGY", "name": "HB (haemoglobin)", "short": "Hb", "rate": 120}, {"dept": "HAEMATOLOGY", "name": "HLA - B5 (b*51/52)", "short": "HLA-B51", "rate": 5000}, {"dept": "HAEMATOLOGY", "name": "Hba1C (glycosylated Hb)", "short": "HbA1c", "rate": 500}, {"dept": "HAEMATOLOGY", "name": "Hematocrit (pcv)", "short": "PCV", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "ICT (indirect COOMB Test)", "short": "ICT", "rate": 500}, {"dept": "HAEMATOLOGY", "name": "JAK 2 V617F REFLEX TO JAK 2 EXON 12 Mutation Detection", "short": "JAK2", "rate": 9000}, {"dept": "HAEMATOLOGY", "name": "LUPUS Anticoagulant (lac) BY DRVVT", "short": "LAC", "rate": 1900}, {"dept": "HAEMATOLOGY", "name": "MCH", "short": "MCH", "rate": 100}, {"dept": "HAEMATOLOGY", "name": "MCHC", "short": "MCHC", "rate": 100}, {"dept": "HAEMATOLOGY", "name": "MCV", "short": "MCV", "rate": 100}, {"dept": "HAEMATOLOGY", "name": "MEAN Platelet VOLUME", "short": "MPV", "rate": 350}, {"dept": "HAEMATOLOGY", "name": "MTHFR (methyl Tetrahydro Folate Reductase) Gene Mutation, PCR", "short": "MTHFR", "rate": 4000}, {"dept": "HAEMATOLOGY", "name": "Malaria PV AND PF Antigen", "short": "Malaria Ag", "rate": 600}, {"dept": "HAEMATOLOGY", "name": "Malaria Parasite (mp)", "short": "MP", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "NK CELLS", "short": "NK Cells", "rate": 5000}, {"dept": "HAEMATOLOGY", "name": "Osmotic Fragility TEST", "short": "OFT", "rate": 700}, {"dept": "HAEMATOLOGY", "name": "PCT", "short": "PCT", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "PDW", "short": "PDW", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "PNH (paroxysmal Nocturnal Hemoglobinuria) Confirmation TEST", "short": "PNH", "rate": 7500}, {"dept": "HAEMATOLOGY", "name": "PRP (platelet-Rich Plasma)", "short": "PRP", "rate": 1500}, {"dept": "HAEMATOLOGY", "name": "Platelet COUNT", "short": "Platelets", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "Protein Electrophoresis", "short": "SPEP", "rate": 1000}, {"dept": "HAEMATOLOGY", "name": "Prothrombin GENE Mutation", "short": "Factor II", "rate": 4000}, {"dept": "HAEMATOLOGY", "name": "Prothrombin Time(pt Inr)", "short": "PT/INR", "rate": 350}, {"dept": "HAEMATOLOGY", "name": "RBC COUNT", "short": "RBC", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "Reticulocyte Count", "short": "Retics", "rate": 300}, {"dept": "HAEMATOLOGY", "name": "Thalassemia GENE Mutation TRIO", "short": "Thal Trio", "rate": 24000}, {"dept": "HAEMATOLOGY", "name": "Thrombophilia Profile", "short": "Thrombophilia", "rate": 16000}, {"dept": "HAEMATOLOGY", "name": "Tlc(total Leucocyte Count)", "short": "TLC", "rate": 150}, {"dept": "HAEMATOLOGY", "name": "Transferrin Saturation", "short": "TSAT", "rate": 600}, {"dept": "HAEMATOLOGY", "name": "Von Willebrand Factor Activity", "short": "vWF Activity", "rate": 10000}, {"dept": "HAEMATOLOGY", "name": "Von Willebrand Factor Antigen", "short": "vWF Ag", "rate": 10000}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY AFB STAIN", "short": "", "rate": 500}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY Appendix", "short": "", "rate": 800}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY B/L BREAST", "short": "", "rate": 3000}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY B/L Mastectomy", "short": "", "rate": 3000}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY BLOCK", "short": "", "rate": null}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY Cervical", "short": "", "rate": 800}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY Endometrium", "short": "", "rate": 800}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY Endoscopic", "short": "", "rate": 800}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY Fallopian TUBES", "short": "", "rate": 800}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY GALL Bladder", "short": "", "rate": 1200}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY LARGE Complex", "short": "", "rate": 4200}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY LARGE Complex / CANCER Specimen", "short": "", "rate": 4200}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY LARGE TISSUE", "short": "", "rate": 1500}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY MEDIUM TISSUE", "short": "", "rate": 1200}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY Products OF Conception", "short": "Biopsy POC", "rate": 1200}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY Prostate", "short": "", "rate": 1200}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY SLIDE (return TO Patient", "short": "", "rate": null}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY SMALL TISSUE", "short": "", "rate": 800}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY SMALL TISSUE 1 SEC", "short": "", "rate": 800}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY SMALL TISSUE 2 SEC", "short": "", "rate": 1600}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY TRUCUT", "short": "Trucut Biopsy", "rate": 800}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY TRUCUT /CORE", "short": "Core Biopsy", "rate": 800}, {"dept": "HISTOPATHOLOGY", "name": "BIOPSY USG GUIDED KIDNEY", "short": "", "rate": 3800}, {"dept": "HISTOPATHOLOGY", "name": "ER PR HER 2 NEU (ihc ON Biopsy)", "short": "ER/PR/HER2", "rate": 6000}, {"dept": "HISTOPATHOLOGY", "name": "Histopathology KIDNEY BIOPSY PANEL 1", "short": "", "rate": 5000}, {"dept": "HISTOPATHOLOGY", "name": "Histopathology, Special Stain, ACID FAST (z.n Stain)", "short": "ZN Stain", "rate": 500}, {"dept": "HISTOPATHOLOGY", "name": "Histopathology, Special Stain, GIEMSA", "short": "Giemsa", "rate": 500}, {"dept": "HISTOPATHOLOGY", "name": "Immunohistochemistry: Comprehensive PANEL", "short": "IHC Panel", "rate": null}, {"dept": "HISTOPATHOLOGY", "name": "TISSUE Karyotyping", "short": "Karyotype", "rate": 6500}, {"dept": "MICROBIOLOGY", "name": "AFB  STAIN", "short": "AFB", "rate": 300}, {"dept": "MICROBIOLOGY", "name": "AFB Culture (mycobacteria)", "short": "AFB Culture", "rate": 1500}, {"dept": "MICROBIOLOGY", "name": "BLOOD Culture AND Sensitivity", "short": "Blood C/S", "rate": 1200}, {"dept": "MICROBIOLOGY", "name": "Culture AND Sensitivity THROAT SWAB", "short": "Throat C/S", "rate": 800}, {"dept": "MICROBIOLOGY", "name": "Culture AND Sensitivity( BACTEC Method)", "short": "BACTEC C/S", "rate": 1200}, {"dept": "MICROBIOLOGY", "name": "FECAL Elastase", "short": "FE-1", "rate": 5500}, {"dept": "MICROBIOLOGY", "name": "FUNGAL Culture And Sensitivity", "short": "Fungal C/S", "rate": 1300}, {"dept": "MICROBIOLOGY", "name": "FUNGAL STAIN", "short": "Fungal Stain", "rate": 500}, {"dept": "MICROBIOLOGY", "name": "GRAM Stain", "short": "Gram Stain", "rate": 300}, {"dept": "MICROBIOLOGY", "name": "Genexpert", "short": "GeneXpert", "rate": 3600}, {"dept": "MICROBIOLOGY", "name": "HIGH Vaginal SWAB Culture Sensitivity", "short": "HVS C/S", "rate": 900}, {"dept": "MICROBIOLOGY", "name": "KOH Staining", "short": "KOH", "rate": 300}, {"dept": "MICROBIOLOGY", "name": "PAIRED BLOOD Culture & Sensitivity", "short": "Paired BC", "rate": 2000}, {"dept": "MICROBIOLOGY", "name": "PUS Culture AND Sensitivity", "short": "Pus C/S", "rate": 800}, {"dept": "MICROBIOLOGY", "name": "PUS FOR AFB STAIN", "short": "AFB", "rate": 300}, {"dept": "MICROBIOLOGY", "name": "Quantiferon -TB Gold/Platinum)", "short": "QFT", "rate": 3200}, {"dept": "MICROBIOLOGY", "name": "SEMEN Culture AND Sensitivity", "short": "Semen C/S", "rate": 800}, {"dept": "MICROBIOLOGY", "name": "SPUTUM Culture AND Sensitivity", "short": "Sputum C/S", "rate": 800}, {"dept": "MICROBIOLOGY", "name": "SPUTUM FOR AFB STAIN", "short": "Sputum AFB", "rate": 300}, {"dept": "MICROBIOLOGY", "name": "SPUTUM Routine Examination", "short": "Sputum R/E", "rate": 400}, {"dept": "MICROBIOLOGY", "name": "STD PANEL", "short": "STD Panel", "rate": null}, {"dept": "MICROBIOLOGY", "name": "STOOL Culture AND Sensitivity", "short": "Stool C/S", "rate": 800}, {"dept": "MICROBIOLOGY", "name": "STOOL Reducing Substances", "short": "", "rate": 100}, {"dept": "MICROBIOLOGY", "name": "TB PCR (Product Of Conception)", "short": "TB PCR POC", "rate": 2200}, {"dept": "MICROBIOLOGY", "name": "TB- Pcr(menstrual Blood)", "short": "TB PCR", "rate": 2200}, {"dept": "MICROBIOLOGY", "name": "TB-PCR", "short": "TB PCR", "rate": 2200}, {"dept": "MICROBIOLOGY", "name": "THROAT SWAB FOR GRAM STAIN", "short": "Throat Gram", "rate": 300}, {"dept": "MICROBIOLOGY", "name": "URINE Culture AND Sensitivity", "short": "Urine C/S", "rate": 800}, {"dept": "MICROBIOLOGY", "name": "URINE FOR AFB STAIN", "short": "Urine AFB", "rate": 300}, {"dept": "MICROBIOLOGY", "name": "URINE FOR GRAMS STAIN", "short": "Urine Gram", "rate": 300}, {"dept": "MISC", "name": "1,3 BETA D GLUCAN", "short": "BDG", "rate": 12000}, {"dept": "MISC", "name": "Biotinidase Activity, Quantitative, BLOOD", "short": "Biotinidase", "rate": 5000}, {"dept": "MISC", "name": "Carbamazepine (tegretol)", "short": "CBZ", "rate": 700}, {"dept": "MISC", "name": "Centromere Antibody", "short": "ACA", "rate": 2000}, {"dept": "MISC", "name": "Eeg(electro Encephalogra)", "short": "EEG", "rate": 2200}, {"dept": "MISC", "name": "FOOD Intolerance TEST", "short": "", "rate": null}, {"dept": "MISC", "name": "HPV (human Papilloma Virus) Advanced PCR", "short": "HPV PCR", "rate": 4500}, {"dept": "MISC", "name": "Histoplasma Capsulatum Antigen", "short": "Histoplasma Ag", "rate": 15000}, {"dept": "MISC", "name": "Inhibin A", "short": "Inhibin A", "rate": 2500}, {"dept": "MISC", "name": "LYME Disease (borrelia Burgdorferi) Antibodies IgG & IgM", "short": "Lyme Ab", "rate": 4500}, {"dept": "MISC", "name": "Lymphocyte SUBSET Enumeration (tbnk) FOR COVID Severity Assessment", "short": "TBNK", "rate": 6000}, {"dept": "MISC", "name": "NAAT FOR Lymphogranuloma Venereum/Chlamydia Trachomatis  PCR", "short": "LGV/CT NAAT", "rate": 4500}, {"dept": "MISC", "name": "NCV BOTH UPPER LIMBS", "short": "NCV", "rate": 3000}, {"dept": "MISC", "name": "NCV Both Lower Limbs", "short": "NCV", "rate": 3000}, {"dept": "MISC", "name": "Neuromyelitis Optica(nmo) AB IgG", "short": "NMO-IgG", "rate": 4500}, {"dept": "MISC", "name": "Parvovirus B19 Antibodies Panel, IgG & IgM", "short": "Parvo B19", "rate": 5000}, {"dept": "MISC", "name": "ROMA (risk OF Ovarian Malignancy), SERUM", "short": "ROMA", "rate": 4200}, {"dept": "MISC", "name": "Sexually Transmitted Disease(sti) PANEL Qualitative BY REAL TIME PCR", "short": "STI PCR Panel", "rate": null}, {"dept": "MISC", "name": "Sleep Study", "short": "", "rate": 16000}, {"dept": "MISC", "name": "Toxoplasma GONDII Qualitative PCR", "short": "Toxo PCR", "rate": 4500}, {"dept": "OPD PACKAGE", "name": "ANEMIA Profile", "short": "", "rate": 3000}, {"dept": "OPD PACKAGE", "name": "ANEMIA Profile", "short": "Anemia Profile", "rate": 3000}, {"dept": "OPD PACKAGE", "name": "Arthritis Profile", "short": "", "rate": 2500}, {"dept": "OPD PACKAGE", "name": "Autoimmune Encephalitis PANEL", "short": "AE Panel", "rate": 18000}, {"dept": "OPD PACKAGE", "name": "Autoimmune Hepatitis PANEL", "short": "AIH Panel", "rate": 6700}, {"dept": "OPD PACKAGE", "name": "BAD Obstetric History Panel, BASIC", "short": "BOH Basic", "rate": 6500}, {"dept": "OPD PACKAGE", "name": "BOH (bad Obstetric History) Profile", "short": "BOH Profile", "rate": null}, {"dept": "OPD PACKAGE", "name": "CANCER Screening Profile TEST FEMALE", "short": "Cancer Screen", "rate": 15500}, {"dept": "OPD PACKAGE", "name": "COVID Package", "short": "", "rate": 7000}, {"dept": "OPD PACKAGE", "name": "Cardiac/Hypertensive Profile (45 Parameters)", "short": "Cardiac Profile", "rate": null}, {"dept": "OPD PACKAGE", "name": "Cardiac/Hypertensive Profile 50 Parameters", "short": "Cardiac Profile", "rate": null}, {"dept": "OPD PACKAGE", "name": "Coagulation Profile", "short": "", "rate": 1300}, {"dept": "OPD PACKAGE", "name": "Comprehensive Metabolic PANEL", "short": "CMP", "rate": null}, {"dept": "OPD PACKAGE", "name": "Diabetes Profile 1", "short": "Diabetic Profile", "rate": null}, {"dept": "OPD PACKAGE", "name": "Diabetic Package (50 Parameters)", "short": "Diabetic Package", "rate": null}, {"dept": "OPD PACKAGE", "name": "Diabetic Profile", "short": "Diabetic Profile", "rate": null}, {"dept": "OPD PACKAGE", "name": "EXEC Cardiac/Hypertensive Checkup (50 Parameters)+Echo", "short": "Cardiac Checkup+Echo", "rate": 4000}, {"dept": "OPD PACKAGE", "name": "Executive @home Checkup: (~65 Parameters)", "short": "Home Checkup", "rate": 3000}, {"dept": "OPD PACKAGE", "name": "Executive Cardiac/Hypertensive Checkup (50 Parameters)+TMT", "short": "Cardiac Checkup+TMT", "rate": 4000}, {"dept": "OPD PACKAGE", "name": "Executive Checkup - MINI", "short": "Mini Checkup", "rate": null}, {"dept": "OPD PACKAGE", "name": "Executive HEALTH CHECK Up(70 Parameters)", "short": "Executive Checkup", "rate": 3500}, {"dept": "OPD PACKAGE", "name": "Executive HOME Checkup", "short": "Home Checkup", "rate": null}, {"dept": "OPD PACKAGE", "name": "Executive HOME Checkup (65 Parameters)", "short": "Executive Home Checkup", "rate": 3000}, {"dept": "OPD PACKAGE", "name": "Executive Profile WITH (hba1C,microalbuminurea)", "short": "", "rate": null}, {"dept": "OPD PACKAGE", "name": "Executive Profile WITH (hba1C,microalbuminurea,vit D3)", "short": "", "rate": null}, {"dept": "OPD PACKAGE", "name": "Executive Senior Citizen (50 Parameters)", "short": "Senior Citizen", "rate": null}, {"dept": "OPD PACKAGE", "name": "Extended Allergy Profile", "short": "", "rate": null}, {"dept": "OPD PACKAGE", "name": "Extended Executive Checkup", "short": "", "rate": null}, {"dept": "OPD PACKAGE", "name": "FEMALE Hormonal Profile", "short": "", "rate": 2500}, {"dept": "OPD PACKAGE", "name": "FEMALE Infertility", "short": "", "rate": 3000}, {"dept": "OPD PACKAGE", "name": "FEVER PANEL (30 Parameters)", "short": "Fever Panel", "rate": 900}, {"dept": "OPD PACKAGE", "name": "FEVER PANEL 1 (25 Parameters)", "short": "Fever Panel 1", "rate": 1800}, {"dept": "OPD PACKAGE", "name": "FEVER PANEL 2 (25 Parameters)", "short": "Fever Panel 2", "rate": 1800}, {"dept": "OPD PACKAGE", "name": "FEVER PANEL 2 (25 Parameters)", "short": "Fever Panel 2", "rate": 1800}, {"dept": "OPD PACKAGE", "name": "General HEALTH CHECK UP", "short": "Basic Checkup", "rate": null}, {"dept": "OPD PACKAGE", "name": "General SENIOR Citizen 40 Parameters FEMALE", "short": "Senior Citizen (F)", "rate": null}, {"dept": "OPD PACKAGE", "name": "General SENIOR Citizen 40 Parameters MALE", "short": "Senior Citizen (M)", "rate": null}, {"dept": "OPD PACKAGE", "name": "Hepatic Profile", "short": "LFT Panel", "rate": null}, {"dept": "OPD PACKAGE", "name": "Hirsutism Profile", "short": "", "rate": 4100}, {"dept": "OPD PACKAGE", "name": "Immunity Profile", "short": "", "rate": null}, {"dept": "OPD PACKAGE", "name": "N Pre-Operative Profile", "short": "Pre-Op Profile", "rate": 2000}, {"dept": "OPD PACKAGE", "name": "PCOD Profile", "short": "PCOD", "rate": 3000}, {"dept": "OPD PACKAGE", "name": "Preoperative Bariatric Checkup", "short": "Pre-Op Bariatric", "rate": null}, {"dept": "OPD PACKAGE", "name": "RENAL Profile", "short": "Renal Profile", "rate": null}, {"dept": "OPD PACKAGE", "name": "Thalassemia Profile", "short": "Thal Profile", "rate": 1600}, {"dept": "OPD PACKAGE", "name": "Vasculitis PANEL", "short": "", "rate": 8000}, {"dept": "OPD PACKAGE", "name": "Vitamin B12 & D3", "short": "B12 & Vit D", "rate": null}, {"dept": "OPD PACKAGE", "name": "WHOLE BODY Checkup", "short": "Full Body Checkup", "rate": 5000}, {"dept": "SEROLOGY", "name": "ANTI HBC IgM", "short": "HBc IgM", "rate": 1100}, {"dept": "SEROLOGY", "name": "ANTI HCV Antibodies", "short": "HCV Ab", "rate": 1250}, {"dept": "SEROLOGY", "name": "ANTI Hav(igg)", "short": "HAV IgG", "rate": 1200}, {"dept": "SEROLOGY", "name": "ANTI Hav(igm)", "short": "HAV IgM", "rate": 1200}, {"dept": "SEROLOGY", "name": "ANTI Hbc Total", "short": "HBc Total", "rate": 1100}, {"dept": "SEROLOGY", "name": "ANTI Hbe Ab", "short": "HBe Ab", "rate": 900}, {"dept": "SEROLOGY", "name": "ANTI Hbe Ag", "short": "HBe Ag", "rate": 900}, {"dept": "SEROLOGY", "name": "ANTI Hev(igg)", "short": "HEV IgG", "rate": 1800}, {"dept": "SEROLOGY", "name": "ANTI Hev(igm)", "short": "HEV IgM", "rate": 1800}, {"dept": "SEROLOGY", "name": "ANTI Measles Antibody (igm)", "short": "Measles IgM", "rate": 1800}, {"dept": "SEROLOGY", "name": "ANTI SPERM Antibody", "short": "ASA", "rate": 1100}, {"dept": "SEROLOGY", "name": "ASO Quantitative", "short": "ASO", "rate": 550}, {"dept": "SEROLOGY", "name": "Amoebic Serology IgG", "short": "Amoebic IgG", "rate": 1500}, {"dept": "SEROLOGY", "name": "Aspergillus Antibody IgG", "short": "Asp IgG", "rate": 1900}, {"dept": "SEROLOGY", "name": "Aspergillus Antibody IgG IgM", "short": "Asp IgG+IgM", "rate": 3800}, {"dept": "SEROLOGY", "name": "Aspergillus IgM Antibody", "short": "Asp IgM", "rate": 1900}, {"dept": "SEROLOGY", "name": "Brucella Agglutination TEST", "short": "BAT", "rate": 900}, {"dept": "SEROLOGY", "name": "Brucella IgG Antibody", "short": "Brucella IgG", "rate": 1300}, {"dept": "SEROLOGY", "name": "Brucella IgM Antibody", "short": "Brucella IgM", "rate": 1300}, {"dept": "SEROLOGY", "name": "C3 Complement", "short": "C3", "rate": 700}, {"dept": "SEROLOGY", "name": "C4 Complement", "short": "C4", "rate": 700}, {"dept": "SEROLOGY", "name": "CD3,cd4&cd8 COUNTS", "short": "CD4 Count", "rate": 6600}, {"dept": "SEROLOGY", "name": "CMV IgG", "short": "CMV IgG", "rate": 600}, {"dept": "SEROLOGY", "name": "CMV IgG Avidity", "short": "CMV IgG Avidity", "rate": 600}, {"dept": "SEROLOGY", "name": "CMV IgM", "short": "CMV IgM", "rate": 600}, {"dept": "SEROLOGY", "name": "Chikungunya Antibody (igm)", "short": "Chikungunya IgM", "rate": 1000}, {"dept": "SEROLOGY", "name": "Chikungunya IGM ELISA", "short": "Chikungunya IgM", "rate": 1000}, {"dept": "SEROLOGY", "name": "Chikungunya PCR", "short": "Chikungunya PCR", "rate": 2200}, {"dept": "SEROLOGY", "name": "Chlamydia Trachomatis IgG Antibody", "short": "Chlamydia IgG", "rate": 1500}, {"dept": "SEROLOGY", "name": "Chlamydia Trachomatis IgM Antibody", "short": "Chlamydia IgM", "rate": 1500}, {"dept": "SEROLOGY", "name": "DENGUE IgG", "short": "Dengue IgG", "rate": 1000}, {"dept": "SEROLOGY", "name": "DENGUE IgG & IgM", "short": "Dengue IgG+IgM", "rate": 2000}, {"dept": "SEROLOGY", "name": "DENGUE IgG (elisa)", "short": "Dengue IgG", "rate": 1000}, {"dept": "SEROLOGY", "name": "DENGUE IgM", "short": "Dengue IgM", "rate": 1000}, {"dept": "SEROLOGY", "name": "DENGUE IgM (elisa)", "short": "Dengue IgM", "rate": 1000}, {"dept": "SEROLOGY", "name": "DENGUE NS1 & IgM & IgG", "short": "Dengue NS1+IgM+IgG", "rate": 2500}, {"dept": "SEROLOGY", "name": "DENGUE NS1 (immunochromatography)", "short": "Dengue NS1", "rate": 1500}, {"dept": "SEROLOGY", "name": "DENGUE NS1 Antigen(elisa)", "short": "Dengue NS1", "rate": 1500}, {"dept": "SEROLOGY", "name": "Echinococcus (hydatid Serology)  SERUM", "short": "Hydatid", "rate": 1500}, {"dept": "SEROLOGY", "name": "Epstein BARR VIRUS (ebv) IgG", "short": "EBV IgG", "rate": 2000}, {"dept": "SEROLOGY", "name": "Epstein BARR VIRUS (ebv) IgG + IgM", "short": "EBV", "rate": 3500}, {"dept": "SEROLOGY", "name": "Epstein BARR VIRUS (ebv) IgM", "short": "EBV IgM", "rate": 2000}, {"dept": "SEROLOGY", "name": "Fta-Abs( Fluorescent Treponemal Antibody Absorption)", "short": "FTA-ABS", "rate": 2000}, {"dept": "SEROLOGY", "name": "HBV DNA PCR - Qualitative", "short": "HBV DNA PCR", "rate": 4500}, {"dept": "SEROLOGY", "name": "HBV DNA PCR - Quantitative", "short": "HBV Viral Load", "rate": 8000}, {"dept": "SEROLOGY", "name": "HCV ( Hepatitis C Virus) IgG", "short": "HCV IgG", "rate": 1450}, {"dept": "SEROLOGY", "name": "HCV ( Hepatitis C Virus) IgM", "short": "HCV IgM", "rate": 1450}, {"dept": "SEROLOGY", "name": "HCV Genotype", "short": "HCV Genotype", "rate": 7000}, {"dept": "SEROLOGY", "name": "HCV RNA Quantitative", "short": "HCV Viral Load", "rate": 5500}, {"dept": "SEROLOGY", "name": "HIV 1 & 2 ( P 24 Antigen)", "short": "HIV p24", "rate": 600}, {"dept": "SEROLOGY", "name": "HIV 1&2 Western BLOT", "short": "HIV WB", "rate": 3600}, {"dept": "SEROLOGY", "name": "HIV ELISA", "short": "HIV ELISA", "rate": 1000}, {"dept": "SEROLOGY", "name": "HIV I & II Antibody (immunochromatography)", "short": "HIV Ab", "rate": 550}, {"dept": "SEROLOGY", "name": "HIV RNA Quantitive REAL TIME PCR", "short": "HIV Viral Load", "rate": 6000}, {"dept": "SEROLOGY", "name": "HLA -B27", "short": "HLA-B27", "rate": 2500}, {"dept": "SEROLOGY", "name": "HSV IgG AND IgM HERPES Simplex 1+2 VIRUS", "short": "HSV IgG+IgM", "rate": 1500}, {"dept": "SEROLOGY", "name": "HSV IgG HERPES Simplex 1+2 VIRUS", "short": "HSV IgG", "rate": 750}, {"dept": "SEROLOGY", "name": "HSV IgM HERPES Simplex 1+2 VIRUS", "short": "HSV IgM", "rate": 750}, {"dept": "SEROLOGY", "name": "HbsAg ELISA", "short": "HBsAg ELISA", "rate": 1000}, {"dept": "SEROLOGY", "name": "Hbsag", "short": "HBsAg", "rate": 500}, {"dept": "SEROLOGY", "name": "Helicobacter PYLORI (h. Pylori)  IgA", "short": "H. Pylori IgA", "rate": 1800}, {"dept": "SEROLOGY", "name": "Hepatitis B Profile", "short": "Hep B Profile", "rate": null}, {"dept": "SEROLOGY", "name": "Leptospira Antibody IgG", "short": "Leptospira IgG", "rate": 1400}, {"dept": "SEROLOGY", "name": "MUMPS VIRUS Antibodies IgG", "short": "Mumps IgG", "rate": 1800}, {"dept": "SEROLOGY", "name": "MUMPS VIRUS Antibodies IgM", "short": "Mumps IgM", "rate": 1800}, {"dept": "SEROLOGY", "name": "Mantoux Test", "short": "Mantoux", "rate": 200}, {"dept": "SEROLOGY", "name": "RA FACTOR Quantitative (nephelometry Method)", "short": "RF", "rate": 450}, {"dept": "SEROLOGY", "name": "Rubella (igg)", "short": "Rubella IgG", "rate": 600}, {"dept": "SEROLOGY", "name": "Rubella IgM", "short": "Rubella IgM", "rate": 600}, {"dept": "SEROLOGY", "name": "Rubella IgM & IgG", "short": "Rubella IgG+IgM", "rate": 1200}, {"dept": "SEROLOGY", "name": "Rubella VIRUS RNA Detection Qualitative,pcr", "short": "Rubella PCR", "rate": 4500}, {"dept": "SEROLOGY", "name": "SCRUB TYPHUS (tsutsugamushi) Antibody Igm, EIA", "short": "Scrub Typhus", "rate": 1000}, {"dept": "SEROLOGY", "name": "Syphilis Igg/Igm", "short": "Syphilis", "rate": null}, {"dept": "SEROLOGY", "name": "TORCH IgG", "short": "TORCH IgG", "rate": 2000}, {"dept": "SEROLOGY", "name": "TORCH IgG & IgM", "short": "TORCH", "rate": 4000}, {"dept": "SEROLOGY", "name": "TORCH IgM", "short": "TORCH IgM", "rate": 2000}, {"dept": "SEROLOGY", "name": "Toxoplasma IgG", "short": "Toxo IgG", "rate": 600}, {"dept": "SEROLOGY", "name": "Toxoplasma IgM", "short": "Toxo IgM", "rate": 600}, {"dept": "SEROLOGY", "name": "Typhidot IgM", "short": "Typhoid IgM", "rate": 400}, {"dept": "SEROLOGY", "name": "VDRL", "short": "VDRL", "rate": 200}, {"dept": "SEROLOGY", "name": "Varicella ZOSTER VIRUS Antibodies IgG", "short": "VZV IgG", "rate": 1300}, {"dept": "SEROLOGY", "name": "Varicella ZOSTER VIRUS Antibodies IgM", "short": "VZV IgM", "rate": 1300}, {"dept": "SEROLOGY", "name": "WEIL FELIX TEST", "short": "Weil Felix", "rate": 1000}, {"dept": "SEROLOGY", "name": "WIDAL TEST", "short": "Widal", "rate": 300}, {"dept": "SEROLOGY", "name": "WIDAL TEST TUBE METHOD", "short": "Widal", "rate": 300}, {"dept": "SPIROMETRY", "name": "PFT (Pulmonary Function Test)", "short": "PFT", "rate": 2000}, {"dept": "SPIROMETRY", "name": "PFT Pre And Post (pulmonary Function Test: Pre & Post Bronchodilator)", "short": "PFT Pre & Post", "rate": null}, {"dept": "SPIROMETRY", "name": "Spirometry", "short": "PFT", "rate": 750}, {"dept": "ULTRASONOGRAPHY", "name": "Cystourethrogram", "short": "", "rate": null}, {"dept": "ULTRASONOGRAPHY", "name": "Doppler ILIAC Vessels", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "FETAL Reduction (double)", "short": "", "rate": 30000}, {"dept": "ULTRASONOGRAPHY", "name": "FETAL Reduction (single)", "short": "", "rate": 15000}, {"dept": "ULTRASONOGRAPHY", "name": "FETAL Reduction With NT NB Scan", "short": "", "rate": 17000}, {"dept": "ULTRASONOGRAPHY", "name": "Karyotype- Amnio/CVS (culture)", "short": "", "rate": 6500}, {"dept": "ULTRASONOGRAPHY", "name": "LIVER Elastography (fibroscan)", "short": "", "rate": 4000}, {"dept": "ULTRASONOGRAPHY", "name": "Limited Obstetric SCAN", "short": "", "rate": 500}, {"dept": "ULTRASONOGRAPHY", "name": "Limited STUDY Doppler TWINS", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "Mammography SINGLE BREAST", "short": "", "rate": 2000}, {"dept": "ULTRASONOGRAPHY", "name": "Mammography+Ultrasound BOTH BREAST", "short": "", "rate": 5500}, {"dept": "ULTRASONOGRAPHY", "name": "Pvru/Post VOID Residual URINE", "short": "", "rate": 500}, {"dept": "ULTRASONOGRAPHY", "name": "Sonomammography", "short": "", "rate": 5500}, {"dept": "ULTRASONOGRAPHY", "name": "USG   ANKLE", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG   AXILLA", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG  BREAST", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG  CHEST", "short": "", "rate": 1800}, {"dept": "ULTRASONOGRAPHY", "name": "USG  ELBOW JOINT", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG  FETAL ECHO", "short": "", "rate": 4000}, {"dept": "ULTRASONOGRAPHY", "name": "USG  FETAL ECHO TWIN", "short": "", "rate": 8000}, {"dept": "ULTRASONOGRAPHY", "name": "USG  FOOT AND ANKLE", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG  HAND", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG  UPPER Abdomen", "short": "", "rate": 1800}, {"dept": "ULTRASONOGRAPHY", "name": "USG 3D GYNAE SCAN", "short": "", "rate": 4500}, {"dept": "ULTRASONOGRAPHY", "name": "USG 3D GYNEE Doppler", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG 3D LOWER ABD", "short": "", "rate": 4500}, {"dept": "ULTRASONOGRAPHY", "name": "USG 3D/4D ANY REGION", "short": "", "rate": 4000}, {"dept": "ULTRASONOGRAPHY", "name": "USG ADD TVS", "short": "", "rate": 700}, {"dept": "ULTRASONOGRAPHY", "name": "USG ALL 4 LIMBS (art + Ven)", "short": "", "rate": 20000}, {"dept": "ULTRASONOGRAPHY", "name": "USG ALL 4 LIMBS (arterial)", "short": "", "rate": null}, {"dept": "ULTRASONOGRAPHY", "name": "USG AORTO ILIAC Doppler", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Abdominal WALL", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Achondroplasia", "short": "", "rate": 6000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Additional 3D/4D/5D", "short": "", "rate": 1500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Additional 3D/4D/5D TWIN", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Amniocentesis", "short": "", "rate": 10000}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH BREAST", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH CALF", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH EYE", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH EYE (r+L)", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH FOOT AND ANKLE", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH HIP JOINT", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH Inguinal REGION", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH KNEE", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH Shoulder", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH TESTIS", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH Tendoachilles", "short": "", "rate": 2000}, {"dept": "ULTRASONOGRAPHY", "name": "USG BOTH WRIST JOINT", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG BRAIN", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG BREAST SINGLE SIDE", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Biophysical Profile", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Biophysical Profile TWINS", "short": "", "rate": 7000}, {"dept": "ULTRASONOGRAPHY", "name": "USG COLOR Doppler TWINS", "short": "", "rate": 7000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Cardiac Activity", "short": "", "rate": 800}, {"dept": "ULTRASONOGRAPHY", "name": "USG Cardiac Screening", "short": "", "rate": 1500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Cranium", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler  ILLIAC Vesseles", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler ART & VEN SINGLE LIMB", "short": "", "rate": 7000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler Arterial AND VENOUS BOTH LIMBS", "short": "", "rate": 14000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler Arterial BOTH LIMBS", "short": "", "rate": 7000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler Arterial SINGLE LIMB", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler FOR Umbilical ARTERY", "short": "", "rate": 1000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OBS + BPS", "short": "", "rate": 4500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OBS + BPS TWINS", "short": "", "rate": 9000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF Carotid/Neck", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF F.p.p. / A.f.i. (twin)", "short": "", "rate": 6000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF LEFT HAND", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF LOWER Abdomen", "short": "", "rate": 4500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF LT ANKLE (heel)jt.", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF NECK Vesseles", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF PENIS", "short": "", "rate": 4500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF PORTAL Vessels", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF SMALL PARTS", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF TESTIS", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler OF Thyroid", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler Obstetrics", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler SINGLE LIMB Arterial", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler SINGLE LIMB VENOUS", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler Splenoportal AXIS", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler UPPER LIMB Arterial", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler VENOUS BOTH LIMBS", "short": "", "rate": 7000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Doppler VENOUS SINGLE LIMB", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG EARLY Anomaly SCAN", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG EARLY Anomaly SCAN TWINS", "short": "", "rate": 7000}, {"dept": "ULTRASONOGRAPHY", "name": "USG EARLY Morphology Scan/Early LEVEL II SCAN", "short": "", "rate": 4000}, {"dept": "ULTRASONOGRAPHY", "name": "USG EARLY Pregnancy 3D", "short": "", "rate": null}, {"dept": "ULTRASONOGRAPHY", "name": "USG EARLY Pregnancy COLOR Doopler", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG EARLY Pregnancy SCAN TVS", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG EYE (one Side)", "short": "", "rate": 2000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Extremity", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG F.w.b FOR AFI", "short": "", "rate": 500}, {"dept": "ULTRASONOGRAPHY", "name": "USG FETAL ECHO Triplets", "short": "", "rate": 12000}, {"dept": "ULTRASONOGRAPHY", "name": "USG FETAL SPINE", "short": "", "rate": 1000}, {"dept": "ULTRASONOGRAPHY", "name": "USG FETAL WELL BEING WITH BPS", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG FOR AFI", "short": "", "rate": 800}, {"dept": "ULTRASONOGRAPHY", "name": "USG FOR Cervical LENGTH", "short": "", "rate": 800}, {"dept": "ULTRASONOGRAPHY", "name": "USG FOR Endometrial Thickness", "short": "", "rate": 1000}, {"dept": "ULTRASONOGRAPHY", "name": "USG FOR FETAL HEART", "short": "", "rate": 500}, {"dept": "ULTRASONOGRAPHY", "name": "USG FOR FETAL HEART TWINS", "short": "", "rate": 1000}, {"dept": "ULTRASONOGRAPHY", "name": "USG FOR FREE FLUID (abdomen)", "short": "", "rate": 1000}, {"dept": "ULTRASONOGRAPHY", "name": "USG FOR SCAR Thickness", "short": "", "rate": null}, {"dept": "ULTRASONOGRAPHY", "name": "USG FWB (early Obs.)", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Follicular STUDY (five Days)", "short": "", "rate": 4500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Follicular STUDY Previous Package", "short": "", "rate": null}, {"dept": "ULTRASONOGRAPHY", "name": "USG Folliculr STUDY (one Day)", "short": "", "rate": 1100}, {"dept": "ULTRASONOGRAPHY", "name": "USG GUIDED Abscess Drainage", "short": "", "rate": null}, {"dept": "ULTRASONOGRAPHY", "name": "USG GUIDED F.n.a.c", "short": "USG-FNAC", "rate": 3850}, {"dept": "ULTRASONOGRAPHY", "name": "USG GUIDED FLUID Aspiration", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG GUIDED FNAC Procedure", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG GUIDED Procedure", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG GUIDED Procedure (small Parts)", "short": "", "rate": null}, {"dept": "ULTRASONOGRAPHY", "name": "USG GUIDED Procedure Cranium", "short": "", "rate": null}, {"dept": "ULTRASONOGRAPHY", "name": "USG GUIDED Procedure MUSCLE", "short": "", "rate": null}, {"dept": "ULTRASONOGRAPHY", "name": "USG GYNAE Doppler", "short": "", "rate": 4000}, {"dept": "ULTRASONOGRAPHY", "name": "USG HIP JOINT", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG KNEE", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG KUB", "short": "", "rate": 1800}, {"dept": "ULTRASONOGRAPHY", "name": "USG KUB WITH PVR", "short": "", "rate": 1800}, {"dept": "ULTRASONOGRAPHY", "name": "USG LEFT THIGH", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG LEFT Tendoachilles", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG LEG", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG LEVEL 2", "short": "", "rate": 4000}, {"dept": "ULTRASONOGRAPHY", "name": "USG LEVEL 2 / Anomaly SCAN", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG LEVEL 2 TWIN", "short": "", "rate": 8000}, {"dept": "ULTRASONOGRAPHY", "name": "USG LOWER Abdomen", "short": "", "rate": 1800}, {"dept": "ULTRASONOGRAPHY", "name": "USG LOWER Abdomen (obs.) TWINS", "short": "", "rate": 4000}, {"dept": "ULTRASONOGRAPHY", "name": "USG LOWER Abdomen (tvs)", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG LOWER Abdomen Obstetric", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG LOWER Abdomen Obstetric EARLY", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG LOWER Abdomen TVS (obs)", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG LOWER Abdomen WITH Perineum", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Limited STUDY -- Obs.", "short": "", "rate": 1000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Localised Abdomen", "short": "", "rate": 1000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Marking FOR Ascitic TAP", "short": "", "rate": 700}, {"dept": "ULTRASONOGRAPHY", "name": "USG NECK", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG NT/NB (ultrasound Obstetrics  Scan)", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG NT/NB TWIN", "short": "", "rate": 7000}, {"dept": "ULTRASONOGRAPHY", "name": "USG NT/NB Triplets", "short": "", "rate": 10500}, {"dept": "ULTRASONOGRAPHY", "name": "USG NT/NF SCAN", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Neurosonogram", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG ORBIT BOTH", "short": "", "rate": 5000}, {"dept": "ULTRASONOGRAPHY", "name": "USG ORBIT SINGLE", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Obstetrics  FETAL WELL BEING", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Obstetrics FETAL WELL BEING (twin)", "short": "", "rate": 5000}, {"dept": "ULTRASONOGRAPHY", "name": "USG PENIS", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG Parotid GLAND", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Perineum", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Popliteal REGION", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG SMALL PARTS", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG SOFT TISSUE", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG SPA Doppler", "short": "SPA Doppler", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Scapular Joint", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Scrotum /Testis", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Shoulder", "short": "", "rate": 2500}, {"dept": "ULTRASONOGRAPHY", "name": "USG TVS FOR SCAR Thickness", "short": "", "rate": 700}, {"dept": "ULTRASONOGRAPHY", "name": "USG Thyroid", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Transrectal (trus)", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG Umbilical ARTERY Doppler", "short": "", "rate": 1000}, {"dept": "ULTRASONOGRAPHY", "name": "USG WHOLE Abdomen", "short": "", "rate": 2300}, {"dept": "ULTRASONOGRAPHY", "name": "USG WHOLE Abdomen AND T.v.s", "short": "", "rate": 3000}, {"dept": "ULTRASONOGRAPHY", "name": "USG WHOLE Abdomen WITH Obs. SCAN", "short": "", "rate": 3500}, {"dept": "ULTRASONOGRAPHY", "name": "USG WHOLE Abdomen WITH PVR", "short": "", "rate": 2300}, {"dept": "ULTRASONOGRAPHY", "name": "USG WRIST", "short": "", "rate": 2500}, {"dept": "X-RAY DIGITAL", "name": "Digital Abdomen  KUB (child)", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital Abdomen AP", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital Abdomen ERECT", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital Abdomen ERECT & Supine", "short": "", "rate": 800}, {"dept": "X-RAY DIGITAL", "name": "Digital Abdomen KUB", "short": "", "rate": 800}, {"dept": "X-RAY DIGITAL", "name": "Digital Abdomen(supine)", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital BARIUM Enema (single/Double)", "short": "", "rate": 3600}, {"dept": "X-RAY DIGITAL", "name": "Digital BARIUM MEAL &  FOLLOW Through (bmft)", "short": "", "rate": 3000}, {"dept": "X-RAY DIGITAL", "name": "Digital BERIUM MEAL UGIT", "short": "", "rate": 3000}, {"dept": "X-RAY DIGITAL", "name": "Digital BOTH ANKLE AP VIEW", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital DISTAL Cologram", "short": "", "rate": 2400}, {"dept": "X-RAY DIGITAL", "name": "Digital I.v.p", "short": "", "rate": 3000}, {"dept": "X-RAY DIGITAL", "name": "Digital K.u.b.", "short": "", "rate": 800}, {"dept": "X-RAY DIGITAL", "name": "Digital K.u.b. (child)", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital LEFT IND FINGER AP/LAT", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital NASAL BONE LAT VIEW (both Sides)", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital Sinogram/Fistulagram", "short": "", "rate": 3500}, {"dept": "X-RAY DIGITAL", "name": "Digital T-TUBE Cholangiography", "short": "", "rate": 3000}, {"dept": "X-RAY DIGITAL", "name": "Digital Thoracic LAT VIEW", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital Thoracic SPINE AP/LAT", "short": "", "rate": 800}, {"dept": "X-RAY DIGITAL", "name": "Digital Tmp.bone Intra-Orbital", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital Upp.half Thoracic AP", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "Digital Upp.half Thoracic AP/LAT", "short": "", "rate": 800}, {"dept": "X-RAY DIGITAL", "name": "MCU + RGU", "short": "", "rate": 7000}, {"dept": "X-RAY DIGITAL", "name": "Micturition Cystourethrogram (mcu)", "short": "", "rate": 5500}, {"dept": "X-RAY DIGITAL", "name": "PNS COLD VIEW", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "PNS TOWNS VIEW", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "PNS WATER VIEW", "short": "", "rate": 400}, {"dept": "X-RAY DIGITAL", "name": "RGU / Digital Retrograde Urethrogram", "short": "RGU", "rate": 5000}, {"dept": "X-RAY DIGITAL", "name": "X RAY Reporting", "short": "", "rate": null}, {"dept": "X-RAY DIGITAL", "name": "XRAY ANKLE JOINT AP & LAT (both Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY ANKLE JOINT AP & LAT (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY ANKLE JOINT AP (both Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY ANKLE JOINT LAT (both Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY ANKLE JOINT LAT (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY ARM AP/LAT", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY ARM WITH ELBOW  AP & LAT (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY B/L Clavicle AP", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY B/L FEET", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY BOTH HIP FROG VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY BOTH Shoulder JOINT AP & LAT", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Cervical SPINE AP & LAT FLEX & EXT VIEW", "short": "", "rate": 1200}, {"dept": "X-RAY DIGITAL", "name": "XRAY Cervical SPINE AP & LAT VIEW", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Cervical SPINE AP VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Cervical SPINE LAT VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Cervicodors0 SPINE AP & LAT VIEW", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Cervicodors0 SPINE AP VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Cervicodors0 SPINE LAT VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Clavicle AP", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY DORSAL SPINE AP & LAT VIEW", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY DORSAL SPINE AP VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY DORSAL SPINE LAT VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY DORSO LUMBAR SPINE AP LAT", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY ELBOW AP & LAT VIEW (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY ELBOW Flex/Ext", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY FINGER AP & LAT & Oblique (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY FOOT AP & LAT &  Oblique View(both Sides)", "short": "", "rate": 1800}, {"dept": "X-RAY DIGITAL", "name": "XRAY FOOT AP & LAT &  Oblique View(single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY FOOT AP & LAT VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY FOOT AP & Oblique View(single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Forearm  AP & LAT (both Sides)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Forearm  AP & LAT (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY HAND AP", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY HAND AP  (both Sides)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY HAND AP & LAT & Oblique (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY HAND AP & LAT (both Sides)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY HAND AP & LAT (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY HEEL AP & Axial(both Sides)", "short": "", "rate": 1800}, {"dept": "X-RAY DIGITAL", "name": "XRAY HEEL AP & Axial(single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY HEEL AXIAL VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY HEEL LAT VIEW (both Sides)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY HEEL LAT VIEW (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY HIP AP & LAT (both Sides)", "short": "", "rate": 1300}, {"dept": "X-RAY DIGITAL", "name": "XRAY HIP AP & LAT (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY HIP JOINT AP & LAT VIEW (both Sides)", "short": "", "rate": 1300}, {"dept": "X-RAY DIGITAL", "name": "XRAY HIP JOINT AP & LAT VIEW (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY HIP JOINT AP VIEW (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY HIP WITH THIGH AP & LAT VIEW (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY HIP WITH THIGH AP VIEW (both Sides)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY HIP WITH THIGH AP VIEW (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY KNEE JOINT AP & LAT (both SIDES Standing)", "short": "", "rate": 1700}, {"dept": "X-RAY DIGITAL", "name": "XRAY KNEE JOINT AP & LAT (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY KNEE JOINT AP (both Sides)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY KNEE JOINT AP (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY KUB (onefilm)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY KUB (two Fims)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY LEFT Forearm WITH WRIST AP/LAT", "short": "", "rate": null}, {"dept": "X-RAY DIGITAL", "name": "XRAY LEG AP & LAT", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY LEG AP VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY LEG FULL LENGTH AP & LAT VIEW (both Side)", "short": "", "rate": 1700}, {"dept": "X-RAY DIGITAL", "name": "XRAY LEG FULL LENGTH AP & LAT VIEW (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY LEG FULL LENGTH AP VIEW (both Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY LEG FULL LENGTH AP VIEW (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY LEG FULL LENGTH LAT VIEW (both Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY LEG FULL LENGTH LAT VIEW (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY LEG LAT VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY LUMBAR SPINE AP & LAT   Flex/Ext VIEW", "short": "", "rate": 1700}, {"dept": "X-RAY DIGITAL", "name": "XRAY LUMBAR SPINE AP & LAT &  FLEX & EXT VIEW", "short": "", "rate": 1700}, {"dept": "X-RAY DIGITAL", "name": "XRAY LUMBAR SPINE AP & LAT VIEW", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY LUMBAR SPINE AP & Oblique (both Side)", "short": "", "rate": 1300}, {"dept": "X-RAY DIGITAL", "name": "XRAY LUMBAR SPINE AP & Oblique (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY LUMBAR SPINE AP VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY LUMBAR SPINE LAT VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Mandible AP", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Mandible AP & PA", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Mandible PA", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Mastoid BONE BOTH SIDES", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Mastoid BONE SINGLE SIDE", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY NASAL BONE (both SIDE )", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY NASAL BONE (single SIDE )", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY ORBIT VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY ORBIT VIEW AP", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY ORBIT VIEW LAT Oblique BOTH SIDE", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY ORBIT VIEW LAT Oblique SINGLE SIDE", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY PELVIS AP", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY PELVIS FROG LAT", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY PELVIS SI-Joint AP & Oblique  (both Sides)", "short": "", "rate": 1300}, {"dept": "X-RAY DIGITAL", "name": "XRAY PELVIS SI-Joint AP & Oblique  (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY PELVIS SI-Joint Oblique (both Sides)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY RIGHT Mandible LAT Oblique(each)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY SKULL AP", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY SKULL AP & LAT", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY SKULL PA", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY SMV VIEW/ BASE OF SKULL", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY SOFT NECK AP & LAT", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY STN LAT (adenoid)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Shoulder JOINT AP & AXILLA (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Shoulder JOINT AP & LAT (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Shoulder JOINT AP (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Shoulder JOINT WITH ARM AP & LAT (single Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Shoulder JOINT WITH ARM AP (both Sides)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Shoulder JOINT WITH ARM AP (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Skyline VIEW BOTH SIDES", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Skyline VIEW ONE SIDE", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Sternum BONE AP", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Sternum BONE AP & LAT", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY Sternum BONE LAT", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Stylaoid Process (bone)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY Stylaoid Process LAT (bone SINGLE Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY THIGH AP/Lateral", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY TM JOINT BOTH LAT", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY TM JOINT CLOSE MOUTH", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY TM JOINT LAT SINGLE SIDE", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY TM JOINT OPEN MOUTH", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY TM JOINT OPEN MOUTH (both Side)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY WRIST AP & LAT (both Sides)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY WRIST AP & LAT (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY WRIST AP VIEW", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "XRAY WRIST FLEX & EXT (both Sides)", "short": "", "rate": 900}, {"dept": "X-RAY DIGITAL", "name": "XRAY WRIST FLEX & EXT (single Side)", "short": "", "rate": 500}, {"dept": "X-RAY DIGITAL", "name": "Xray LS Spine Extension & Flexion", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "BARIUM Complete GIT", "short": "", "rate": 4800}, {"dept": "X-RAY ROUTINE", "name": "BARIUM MEAL UGIT", "short": "", "rate": 3000}, {"dept": "X-RAY ROUTINE", "name": "BARIUM Swallow", "short": "", "rate": 3000}, {"dept": "X-RAY ROUTINE", "name": "BARIUM Swallow & MEAL", "short": "", "rate": 4200}, {"dept": "X-RAY ROUTINE", "name": "Fluroscopy CHEST", "short": "", "rate": 1500}, {"dept": "X-RAY ROUTINE", "name": "Hsg(hysterosalphingogram)", "short": "", "rate": 4500}, {"dept": "X-RAY ROUTINE", "name": "I.v.p. (con.)", "short": "", "rate": 3000}, {"dept": "X-RAY ROUTINE", "name": "X RAY PELVIS WITH BOTH HIPS", "short": "", "rate": 400}, {"dept": "X-RAY ROUTINE", "name": "XRAY Abdomen ERECT", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY Abdomen SUPINE", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY B/L Sacroiliac JOINT AP/OBL", "short": "", "rate": 1800}, {"dept": "X-RAY ROUTINE", "name": "XRAY BOTH FOOT AP & LAT VIEW", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY BOTH Shoulder AP/LAT", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY BOTH WRIST AP", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST AP & Oblique VIEW", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST AP Oblique VIEW", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST AP VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST APICAL VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST Decubitas VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST LEFT Lateral VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST LEFT Oblique VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST Lordotic VIEW (ap)", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST PA & LAT VIEW", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST PA AND  LEFT OBL VIEW", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST PA AND  RT Lat. VIEW", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST PA AND RT Oblique", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST PA VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST RIGHT Lat.view", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY CHEST RIGHT Oblique VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY FILM", "short": "", "rate": 300}, {"dept": "X-RAY ROUTINE", "name": "XRAY LEFT KNEE WITH LEG AP/LAT", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY P.n.s (o.m.) AND LAT VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY P.n.s (o.m.) VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY P.n.s Submentover. VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY RIGHT Forearm WITH WRIST AP/LAT", "short": "", "rate": null}, {"dept": "X-RAY ROUTINE", "name": "XRAY RIGHT KNEE WITH LEG AP/LAT", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY SOFT TISSUE NECK AP/LAT", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY SOFT TISSUE NECK LAT", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY Sacroiliac JOINT AP/Oblique", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY Sternum AP VIEW", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY Sternum AP/LAT", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY Styloid PROCES (left)", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY Styloid PROCES (right)", "short": "", "rate": 500}, {"dept": "X-RAY ROUTINE", "name": "XRAY Styloid Process(both)", "short": "", "rate": 900}, {"dept": "X-RAY ROUTINE", "name": "XRAY WRIST Oblique VIEW SINGLE SIDE", "short": "", "rate": 500}];
+
+
+function searchTests(q) {
+  var el = document.getElementById('test-suggest');
+  if (!q||q.length<1) { el.style.display='none'; return; }
+  var lq = q.toLowerCase();
+  var hits = CATALOGUE.filter(function(t){
+    return t.name.toLowerCase().indexOf(lq)>=0 || (t.short&&t.short.toLowerCase().indexOf(lq)>=0) || t.dept.toLowerCase().indexOf(lq)>=0;
+  }).slice(0,10);
+  if (!hits.length) { el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML = hits.map(function(t){
+    return '<div class="suggest-item" onclick="addHit('+i+')">' + '<div><div style="font-size:13px;font-weight:500">' + esc(t.name) + '</div><div style="font-size:11px;color:var(--text3)">' + esc(t.dept) + '</div></div><div style="font-size:13px;color:var(--text2)">Rs.' + (t.rate||0) + '</div></div>';
+  }).join('');
+}
+
+function addTest(t) {
+  if (selTests.find(function(x){ return x.name===t.name; })) { toast('Already added','warn'); return; }
+  selTests.push(t);
+  document.getElementById('test-q').value='';
+  document.getElementById('test-suggest').style.display='none';
+  renderTests();
+}
+function removeTest(i) { selTests.splice(i,1); renderTests(); }
+function renderTests() {
+  var total = selTests.reduce(function(s,t){ return s+(t.rate||0); },0);
+  var el = document.getElementById('sel-tests');
+  el.innerHTML = selTests.length ? selTests.map(function(t,i){
+    return '<div class="chip"><div><div style="font-size:13px;font-weight:500">'+esc(t.name)+'</div><div style="font-size:11px;color:var(--text3);font-family:var(--mono)">'+esc(t.dept)+'</div></div><div style="display:flex;align-items:center;gap:8px"><div style="font-size:13px;color:var(--text2)">Rs.'+(t.rate||0)+'</div><button class="chip-del" onclick="removeTest('+i+')">x</button></div></div>';
+  }).join('') : '<div style="color:var(--text3);font-size:13px;text-align:center;padding:12px">No tests selected</div>';
+  var strip=document.getElementById('est-strip');
+  var btn=document.getElementById('step2-btn');
+  if (selTests.length>0) {
+    strip.style.display='flex';
+    document.getElementById('est-amt').textContent='Rs.'+total.toLocaleString('en-IN');
+    btn.disabled=false;
+  } else { strip.style.display='none'; btn.disabled=true; }
+}
+
+// ── ORDER STEPS ──
+function showStep(n) {
+  document.getElementById('step1').style.display=n===1?'block':'none';
+  document.getElementById('step2').style.display=n===2?'block':'none';
+  document.getElementById('step3').style.display=n===3?'block':'none';
+  var labels=['Step 1 - Patient Info','Step 2 - Select Tests','Step 3 - Billing'];
+  document.getElementById('order-step-lbl').textContent=labels[n-1];
+  ['seg0','seg1','seg2'].forEach(function(id,i){
+    document.getElementById(id).className='step-seg'+(i<n-1?' done':i===n-1?' curr':'');
+  });
+}
+function step1Next() {
+  var name=document.getElementById('pt-name').value.trim();
+  if (!name) { document.getElementById('err-name').classList.add('on'); return; }
+  document.getElementById('err-name').classList.remove('on');
+  curOrder.patientName=name;
+  curOrder.age=document.getElementById('pt-age').value;
+  curOrder.sex=document.getElementById('pt-sex').value;
+  curOrder.phone=document.getElementById('pt-phone').value;
+  curOrder.refBy=document.getElementById('pt-ref').value;
+  selTests=[]; renderTests(); showStep(2);
+}
+function step2Next() {
+  if (!selTests.length) { toast('Select at least one test','warn'); return; }
+  curOrder.tests=selTests;
+  var total=selTests.reduce(function(s,t){ return s+(t.rate||0); },0);
+  curOrder.totalAmount=total;
+  document.getElementById('bill-amt').textContent='Rs.'+total.toLocaleString('en-IN');
+  document.getElementById('paid-amt').value=total;
+  document.getElementById('discount').value='';
+  document.getElementById('bill-note').textContent='';
+  setPay('cash'); showStep(3);
+}
+function setPay(m) {
+  payMode=m;
+  ['cash','upi','card','credit'].forEach(function(x){
+    document.getElementById('pm-'+x).className='pay-mode-btn'+(x===m?(m==='credit'?' on-credit':' on'):'');
+  });
+  document.getElementById('paid-field').style.display=m==='credit'?'none':'block';
+  document.getElementById('bill-note').textContent=m==='credit'?'Amount on credit - collect later':'';
+}
+function applyDiscount() {
+  var disc=parseFloat(document.getElementById('discount').value||0);
+  var net=Math.max(0,curOrder.totalAmount-disc);
+  document.getElementById('bill-amt').textContent='Rs.'+net.toLocaleString('en-IN');
+  document.getElementById('paid-amt').value=net;
+  document.getElementById('bill-note').textContent=disc>0?'Discount: Rs.'+disc+' applied':'';
+}
+function submitOrder() {
+  var disc=parseFloat(document.getElementById('discount').value||0);
+  var paid=payMode==='credit'?0:parseFloat(document.getElementById('paid-amt').value||0);
+  var order={
+    patientName:curOrder.patientName, age:curOrder.age||'', sex:curOrder.sex||'',
+    phone:curOrder.phone||'', refBy:curOrder.refBy||'', tests:curOrder.tests,
+    totalAmount:curOrder.totalAmount, discount:disc,
+    netAmount:Math.max(0,curOrder.totalAmount-disc),
+    paidAmount:paid, dueAmount:Math.max(0,curOrder.totalAmount-disc)-paid,
+    payMode:payMode, notes:document.getElementById('bill-notes').value,
+    date:todayStr(), createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+    createdBy:curUser.uid, createdByName:(curProfile&&curProfile.name)||curUser.email,
+    status:payMode==='credit'?'pending':'paid'
+  };
+  db.collection('orders').add(order).then(function(ref){
+    lastOrder={id:ref.id}; Object.assign(lastOrder,order);
+    document.getElementById('done-id').textContent='Order #'+ref.id.slice(-6).toUpperCase()+' - Synced';
+    goTo('s-done');
+    loadStats();
+  }).catch(function(e){ toast('Save failed - check connection','err'); });
+}
+function newOrder() {
+  curOrder={}; selTests=[]; payMode='cash';
+  ['pt-name','pt-age','pt-phone','pt-ref','bill-notes'].forEach(function(id){
+    document.getElementById(id).value='';
+  });
+  document.getElementById('pt-sex').value='';
+  document.getElementById('test-q').value='';
+  renderTests(); showStep(1); goTo('s-order');
+}
+
+// ── ALL ORDERS ──
+function loadOrders() {
+  document.getElementById('orders-list').innerHTML='<div class="empty">Loading...</div>';
+  db.collection('orders').where('date','==',todayStr()).get().then(function(snap){
+    allOrders=[];
+    snap.forEach(function(d){ allOrders.push(Object.assign({id:d.id},d.data())); });
+    allOrders.sort(function(a,b){ return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0); });
+    renderOrders(allOrders);
+    document.getElementById('orders-lbl').textContent=allOrders.length+' orders today';
+  }).catch(function(e){
+    document.getElementById('orders-list').innerHTML='<div class="empty">Error: '+e.message+'</div>';
+  });
+}
+function filterOrders(q) {
+  if (!q) { renderOrders(allOrders); return; }
+  renderOrders(allOrders.filter(function(o){ return o.patientName&&o.patientName.toLowerCase().indexOf(q.toLowerCase())>=0; }));
+}
+function renderOrders(orders) {
+  var el=document.getElementById('orders-list');
+  if (!orders.length) { el.innerHTML='<div class="empty">No orders found</div>'; return; }
+  el.innerHTML=orders.map(function(o){
+    return '<div class="order-card"><div style="font-size:11px;font-family:var(--mono);color:var(--text3)">#'+o.id.slice(-6).toUpperCase()+' - '+o.date+'</div><div style="font-size:15px;font-weight:500;margin:2px 0">'+esc(o.patientName)+'</div><div style="font-size:12px;color:var(--text2)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+' - Ref: '+esc(o.refBy||'-')+'</div><div style="font-size:11px;color:var(--text3);margin-top:4px">'+esc((o.tests||[]).map(function(t){return t.name;}).join(', '))+'</div><div class="order-footer"><span class="badge '+(o.status==='paid'?'badge-green':'badge-gold')+'">'+(o.status||'paid').toUpperCase()+'</span><div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div></div></div>';
+  }).join('');
+}
+
+// ── CASH HANDOVER ──
+function loadHO() {
+  var today=todayStr();
+  document.getElementById('ho-date').textContent=today;
+  db.collection('orders').where('date','==',today).get().then(function(snap){
+    var cash=0,upi=0,credit=0;
+    snap.forEach(function(d){ var o=d.data(); if(o.payMode==='cash') cash+=(o.paidAmount||0); else if(o.payMode==='upi'||o.payMode==='card') upi+=(o.paidAmount||0); else if(o.payMode==='credit') credit+=(o.totalAmount||0); });
+    document.getElementById('ho-cash').textContent='Rs.'+cash.toLocaleString('en-IN');
+    document.getElementById('ho-upi').textContent='Rs.'+upi.toLocaleString('en-IN');
+    document.getElementById('ho-credit').textContent='Rs.'+credit.toLocaleString('en-IN');
+    document.getElementById('ho-amt').value=cash;
+  }).catch(function(){});
+  db.collection('handovers').where('date','==',today).get().then(function(snap){
+    var el=document.getElementById('ho-list');
+    if (snap.empty) { el.innerHTML='<div class="empty">No handovers recorded yet</div>'; return; }
+    var rows=[];
+    snap.forEach(function(d){ rows.push(Object.assign({id:d.id},d.data())); });
+    el.innerHTML=rows.map(function(h){
+      return '<div class="ho-handover-card"><div class="ho-card-header"><span style="font-size:10px;font-family:var(--mono);color:var(--text3)">#'+h.id.slice(-6).toUpperCase()+'</span><span style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(h.time||'')+'</span></div><div class="ho-card-body"><div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div><div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div></div><div><div class="ho-card-k">By</div><div class="ho-card-v">'+esc(h.recordedByName||'-')+'</div></div><div><div class="ho-card-k">Notes</div><div class="ho-card-v">'+esc(h.notes||'-')+'</div></div></div></div>';
+    }).join('');
+  }).catch(function(){});
+}
+function submitHandover() {
+  var to=document.getElementById('ho-to').value.trim();
+  var amt=parseFloat(document.getElementById('ho-amt').value||0);
+  var notes=document.getElementById('ho-notes').value;
+  if (!to) { toast('Enter handover recipient','warn'); return; }
+  var now=new Date();
+  db.collection('handovers').add({
+    handoverTo:to, amount:amt, notes:notes, date:todayStr(),
+    time:now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+    createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+    recordedBy:curUser.uid, recordedByName:(curProfile&&curProfile.name)||curUser.email
+  }).then(function(){ toast('Handover recorded','ok'); document.getElementById('ho-to').value=''; document.getElementById('ho-notes').value=''; loadHO(); loadStats(); })
+  .catch(function(){ toast('Failed - check connection','err'); });
+}
+
+// ── EOD ──
+function loadEOD() {
+  var today=todayStr();
+  var d=new Date();
+  document.getElementById('eod-date').textContent=today;
+  db.collection('orders').where('date','==',today).get().then(function(snap){
+    var cash=0,upi=0,card=0,credit=0,total=0;
+    snap.forEach(function(doc){ var o=doc.data(); var paid=o.paidAmount||0; total+=paid; if(o.payMode==='cash') cash+=paid; else if(o.payMode==='upi') upi+=paid; else if(o.payMode==='card') card+=paid; else if(o.payMode==='credit') credit+=(o.totalAmount||0); });
+    var fmt=function(n){ return 'Rs.'+n.toLocaleString('en-IN'); };
+    document.getElementById('eod-orders').textContent=snap.size;
+    document.getElementById('eod-cash').textContent=fmt(cash);
+    document.getElementById('eod-upi').textContent=fmt(upi);
+    document.getElementById('eod-card').textContent=fmt(card);
+    document.getElementById('eod-credit').textContent=fmt(credit);
+    document.getElementById('eod-total').textContent=fmt(total);
+    var dateStr=d.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+    var waLines = ['OnePLUS Ultrasound Lab - EOD Report', 'Date: '+dateStr, '', 'Total Orders: '+snap.size, 'Cash: '+fmt(cash), 'UPI: '+fmt(upi), 'Card: '+fmt(card), 'Credit: '+fmt(credit), '------------------------', 'Total Revenue: '+fmt(total), '', 'Prepared by '+((curProfile&&curProfile.name)||curUser.email), 'OnePLUS Lab Management System'];
+    var wa = waLines.join('\n');
+    document.getElementById('wa-text').textContent=wa;
+  }).catch(function(e){ document.getElementById('wa-text').textContent='Error loading: '+e.message; });
+}
+function shareWA() {
+  var text=document.getElementById('wa-text').textContent;
+  window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+}
+function saveEOD() {
+  var today=todayStr();
+  db.collection('eod_reports').doc(today).set({
+    date:today, report:document.getElementById('wa-text').textContent,
+    savedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    savedBy:curUser.uid, savedByName:(curProfile&&curProfile.name)||curUser.email
+  }).then(function(){ toast('EOD report saved','ok'); })
+  .catch(function(){ toast('Save failed','err'); });
+}
+
+// ── PRE-ANALYTICAL MODULE ──
+var PA_DATA = {"BIOCHEMISTRY": {"default": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Any time", "fast": false, "prep": "No special preparation"}, "patterns": [{"match": ["BSF", "fasting", "glucose fasting", "GCT", "GTT", "homa", "insulin fasting", "c peptide fasting"], "data": {"tube": "G", "color": "#4B5563", "label": "Grey (Fluoride)", "vol": "2 mL", "sample": "Plasma", "timing": "After 8-12h fast", "fast": true, "prep": "Patient must fast for 8-12 hours. Water allowed."}}, {"match": ["BSPP", "pp", "post", "ppbs", "glucose pp", "glucose tolerance", "insulin pp", "c peptide pp"], "data": {"tube": "G", "color": "#4B5563", "label": "Grey (Fluoride)", "vol": "2 mL", "sample": "Plasma", "timing": "2h after meal", "fast": false, "prep": "Collect exactly 2 hours after a standard meal. Note meal time."}}, {"match": ["BSR", "random", "glucose random"], "data": {"tube": "G", "color": "#4B5563", "label": "Grey (Fluoride)", "vol": "2 mL", "sample": "Plasma", "timing": "Any time", "fast": false, "prep": "No fasting required."}}, {"match": ["cortisol am"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "8-9 AM strictly", "fast": false, "prep": "Collect between 8-9 AM. Patient should be awake for at least 1 hour."}}, {"match": ["cortisol pm"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "4-6 PM strictly", "fast": false, "prep": "Collect between 4-6 PM."}}, {"match": ["urine", "acr", "albumin creatinine", "micro albumin", "macr", "upcr", "pcr"], "data": {"tube": "U", "color": "#D97706", "label": "Urine Container", "vol": "10 mL", "sample": "Urine", "timing": "Midstream", "fast": false, "prep": "Midstream clean-catch urine. First morning preferred for albumin tests."}}, {"match": ["24 hr", "24 hour", "24hrs"], "data": {"tube": "U", "color": "#D97706", "label": "24h Urine Container", "vol": "24h collection", "sample": "24h Urine", "timing": "Complete 24h collection", "fast": false, "prep": "Discard first morning void. Collect ALL urine for 24h. Refrigerate during collection."}}, {"match": ["electrolyte", "sodium", "potassium", "chloride", "bicarbonate"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Any time", "fast": false, "prep": "Avoid prolonged tourniquet. Do not clench fist repeatedly."}}, {"match": ["ammonia", "lactate"], "data": {"tube": "L", "color": "#8B5CF6", "label": "Lavender (EDTA)", "vol": "3 mL", "sample": "Plasma", "timing": "On ice, process within 15 min", "fast": false, "prep": "Transport on ice immediately. Process within 15 minutes of collection. CRITICAL."}}, {"match": ["lipid", "cholesterol", "hdl", "ldl", "triglyceride", "vldl"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "After 12h fast", "fast": true, "prep": "12 hour fast required. No alcohol 24h prior. Water allowed."}}]}, "HAEMATOLOGY": {"default": {"tube": "L", "color": "#8B5CF6", "label": "Lavender (EDTA)", "vol": "3 mL", "sample": "Whole Blood", "timing": "Any time", "fast": false, "prep": "Mix gently by inversion 8-10 times. Do not shake."}, "patterns": [{"match": ["pt", "inr", "prothrombin", "aptt", "pttk", "fibrinogen", "d-dimer", "fdp", "lupus", "dvvt", "factor"], "data": {"tube": "B", "color": "#2563EB", "label": "Blue (Citrate 3.2%)", "vol": "2.7 mL", "sample": "Plasma", "timing": "Any time", "fast": false, "prep": "Fill tube EXACTLY to mark. Ratio critical (9:1 blood:citrate). Mix gently 4 times."}}, {"match": ["esr"], "data": {"tube": "L", "color": "#8B5CF6", "label": "Lavender (EDTA)", "vol": "2 mL", "sample": "Whole Blood", "timing": "Process within 1h", "fast": false, "prep": "Must be processed within 1 hour of collection."}}, {"match": ["malaria", "mp", "pf", "pv"], "data": {"tube": "L", "color": "#8B5CF6", "label": "Lavender (EDTA) + Slides", "vol": "2 mL + slides", "sample": "Whole Blood + Smear", "timing": "During fever spike preferred", "fast": false, "prep": "Prepare thin and thick smear immediately. Collect during fever spike if possible."}}, {"match": ["hba1c", "glycosylated"], "data": {"tube": "L", "color": "#8B5CF6", "label": "Lavender (EDTA)", "vol": "2 mL", "sample": "Whole Blood", "timing": "Any time, no fasting", "fast": false, "prep": "No fasting required. Reflects 3-month average."}}, {"match": ["blood group", "rh", "ict", "dct", "coombs"], "data": {"tube": "L", "color": "#8B5CF6", "label": "Lavender (EDTA)", "vol": "3 mL", "sample": "Whole Blood", "timing": "Any time", "fast": false, "prep": "Label carefully with patient name and DOB. Critical test."}}]}, "ENDOCRINOLOGY": {"default": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Any time", "fast": false, "prep": "Allow to clot 30 min. Centrifuge before transport."}, "patterns": [{"match": ["fsh", "lh", "prolactin", "progesterone", "estradiol", "testosterone", "dhea", "amh", "inhibin"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Note cycle day", "fast": false, "prep": "Note menstrual cycle day on request form. Prolactin: avoid stress, collect after 30 min rest."}}, {"match": ["prolactin"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Morning, after rest", "fast": false, "prep": "Patient must rest quietly for 30 minutes before collection. Avoid stress, breast stimulation."}}, {"match": ["insulin fasting", "insulin random"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "8-12h fast for fasting", "fast": true, "prep": "Fasting insulin: 8-12h fast. Transport on ice. Process within 1h."}}, {"match": ["acth"], "data": {"tube": "L", "color": "#8B5CF6", "label": "Lavender (EDTA) on ICE", "vol": "3 mL", "sample": "Plasma", "timing": "8-9 AM on ice", "fast": false, "prep": "CRITICAL: Collect in chilled EDTA tube. Transport on ice. Process within 30 min. Collect 8-9 AM."}}, {"match": ["renin", "aldosterone"], "data": {"tube": "L", "color": "#8B5CF6", "label": "Lavender (EDTA)", "vol": "3 mL", "sample": "Plasma", "timing": "Note posture", "fast": false, "prep": "Note patient posture (upright/supine) and duration on form. Collect after specified posture maintained."}}, {"match": ["vitamin d", "vit d", "25 hydroxy"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Any time", "fast": false, "prep": "Protect from light after collection."}}, {"match": ["vitamin b12", "b12", "folate"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Any time", "fast": false, "prep": "No B12 supplements 24h prior. Protect from light."}}, {"match": ["beta hcg", "hcg"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Any time", "fast": false, "prep": "Note LMP on request. Serum more sensitive than urine."}}, {"match": ["growth hormone", "gh"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL per sample", "sample": "Serum", "timing": "Note time of each sample", "fast": false, "prep": "Note exact time of each sample. Patient should be at rest. Avoid stress."}}]}, "SEROLOGY": {"default": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Any time", "fast": false, "prep": "Allow to clot 30 min before centrifuge."}, "patterns": [{"match": ["widal"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "After 5-7 days of fever", "fast": false, "prep": "Best collected after 5-7 days of fever. Note fever duration on form."}}, {"match": ["dengue"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "NS1: first 5 days. IgM: after day 5", "fast": false, "prep": "NS1 antigen: collect in first 5 days of fever. IgM/IgG: after day 5."}}, {"match": ["hbsag", "hepatitis b", "hbv", "hcv", "hiv", "vdrl", "syphilis"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Any time", "fast": false, "prep": "Handle as biohazard. Double bag. Label clearly."}}, {"match": ["torch"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "5 mL", "sample": "Serum", "timing": "Any time", "fast": false, "prep": "Note gestational age if pregnant. Larger volume needed for full panel."}}, {"match": ["mantoux"], "data": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "0.1 mL PPD intradermal", "sample": "Intradermal injection", "timing": "Read at 48-72h", "fast": false, "prep": "Intradermal injection of 0.1 mL PPD on forearm. Read result at 48-72 hours. Mark site."}}]}, "CLINICAL PATHOLOGY": {"default": {"tube": "U", "color": "#D97706", "label": "Urine Container", "vol": "10 mL", "sample": "Urine", "timing": "First morning preferred", "fast": false, "prep": "Midstream clean-catch. First morning specimen preferred."}, "patterns": [{"match": ["stool", "faecal", "fecal"], "data": {"tube": "S", "color": "#92400E", "label": "Stool Container", "vol": "5 g", "sample": "Stool", "timing": "Fresh specimen", "fast": false, "prep": "Fresh specimen within 1 hour. Do not contaminate with urine or water."}}, {"match": ["semen"], "data": {"tube": "NA", "color": "#6B7280", "label": "Sterile wide-mouth container", "vol": "Complete ejaculate", "sample": "Semen", "timing": "2-5 days abstinence", "fast": false, "prep": "2-5 days sexual abstinence. Collect by masturbation. Keep at body temperature. Deliver within 30 min."}}, {"match": ["upt", "pregnancy"], "data": {"tube": "U", "color": "#D97706", "label": "Urine Container", "vol": "10 mL", "sample": "Urine", "timing": "First morning", "fast": false, "prep": "First morning urine. Most concentrated. HCG highest in morning."}}]}, "MICROBIOLOGY": {"default": {"tube": "Sw", "color": "#059669", "label": "Culture Swab / Container", "vol": "As appropriate", "sample": "Varies", "timing": "Before antibiotics", "fast": false, "prep": "Collect BEFORE starting antibiotics if possible."}, "patterns": [{"match": ["blood culture"], "data": {"tube": "Sw", "color": "#059669", "label": "Blood Culture Bottles (Aerobic + Anaerobic)", "vol": "8-10 mL per bottle", "sample": "Blood", "timing": "During fever spike", "fast": false, "prep": "CRITICAL: Strict asepsis. Disinfect skin 2 min. Collect during fever spike or rigors. Inoculate aerobic bottle first."}}, {"match": ["urine culture", "urine c/s"], "data": {"tube": "U", "color": "#D97706", "label": "Sterile Urine Container", "vol": "10 mL midstream", "sample": "Urine", "timing": "First morning, midstream", "fast": false, "prep": "Clean genitalia. Discard first stream. Collect midstream in sterile container. First morning specimen best."}}, {"match": ["sputum"], "data": {"tube": "Sp", "color": "#6B7280", "label": "Sterile Sputum Container", "vol": "3-5 mL", "sample": "Sputum", "timing": "Early morning", "fast": false, "prep": "Early morning. Deep cough \u2014 not saliva. Rinse mouth with water first. 3 consecutive morning samples for AFB."}}, {"match": ["afb", "tuberculosis", "tb pcr", "genexpert", "quantiferon"], "data": {"tube": "L", "color": "#8B5CF6", "label": "Special TB tube / Sterile container", "vol": "Varies", "sample": "Varies by site", "timing": "Early morning", "fast": false, "prep": "Early morning specimen. For QFT: collect in 3 specific tubes (nil, antigen, mitogen). Process within 16h."}}, {"match": ["pus", "wound"], "data": {"tube": "Sw", "color": "#059669", "label": "Sterile Swab / Container", "vol": "Swab or aspirate", "sample": "Pus / Wound", "timing": "Before antibiotics", "fast": false, "prep": "Aspirate preferred over swab. Clean wound surface first. Collect from deepest part."}}]}, "CYTOLOGY": {"default": {"tube": "T", "color": "#7C3AED", "label": "Fixative / CytoLyt", "vol": "As appropriate", "sample": "Cells/Fluid", "timing": "Any time", "fast": false, "prep": "Fix immediately after collection."}, "patterns": [{"match": ["lbc", "liquid based", "pap"], "data": {"tube": "T", "color": "#7C3AED", "label": "LBC Vial (CytoLyt/PreservCyt)", "vol": "Cervical sample in vial", "sample": "Cervical cells", "timing": "Mid-cycle (day 14 preferred)", "fast": false, "prep": "No intercourse/douching 48h prior. Not during menstruation. Broom device in vial \u2014 swirl 10 times."}}, {"match": ["fnac", "fine needle"], "data": {"tube": "T", "color": "#7C3AED", "label": "Slides + Fixative", "vol": "Aspirate", "sample": "Tissue aspirate", "timing": "Any time", "fast": false, "prep": "Prepare smear immediately. Air-dry one slide, fix other in 95% alcohol. Label both."}}, {"match": ["fluid"], "data": {"tube": "T", "color": "#7C3AED", "label": "Sterile Container + EDTA", "vol": "50+ mL", "sample": "Body fluid", "timing": "Fresh \u2014 process within 1h", "fast": false, "prep": "Send entire specimen. Process within 1 hour. Also send EDTA aliquot for cell count."}}]}, "HISTOPATHOLOGY": {"default": {"tube": "T", "color": "#7C3AED", "label": "10% Formalin Container", "vol": "Adequate formalin (10x tissue vol)", "sample": "Tissue", "timing": "Fix immediately", "fast": false, "prep": "Place in 10% formalin immediately. Volume of formalin must be 10x tissue volume. Label container, not lid."}}, "GENETICS": {"default": {"tube": "L", "color": "#8B5CF6", "label": "Lavender (EDTA)", "vol": "5 mL", "sample": "Whole Blood", "timing": "Any time", "fast": false, "prep": "Do not freeze. Transport at room temperature. Karyotype: 10 mL preferred."}, "patterns": [{"match": ["cvs", "amnio", "amniocent"], "data": {"tube": "T", "color": "#7C3AED", "label": "Sterile container", "vol": "15-20 mL amniotic fluid / CVS tissue", "sample": "Amniotic fluid / CVS", "timing": "As per gestational age", "fast": false, "prep": "Procedure sample \u2014 send immediately at room temperature. Label with GA and procedure date."}}, {"match": ["nipt"], "data": {"tube": "NA", "color": "#6B7280", "label": "Streck tube (Cell-free DNA)", "vol": "10 mL", "sample": "Maternal blood", "timing": "After 10 weeks GA", "fast": false, "prep": "Streck (cell-free DNA preservation) tube mandatory. Note GA on form. Do not refrigerate or freeze."}}]}, "ULTRASONOGRAPHY": {"default": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "As scheduled", "fast": false, "prep": "No blood sample required."}, "patterns": [{"match": ["abdomen", "kub", "whole abdomen", "upper abdomen", "lower abdomen"], "data": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "4-6h fasting", "fast": true, "prep": "4-6 hours fasting for abdominal USG. Full bladder needed for pelvic/lower abdomen scan."}}, {"match": ["pelvis", "tvs", "gynae", "lower abdomen", "pvru", "follicular", "endometrial"], "data": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "Full bladder for TAS", "fast": false, "prep": "Full bladder for transabdominal. Empty bladder for TVS. Note cycle day for follicular study."}}, {"match": ["nt", "nuchal", "obstetric", "obs", "fetal", "anomaly", "level 2", "doppler obs", "biophysical"], "data": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "As per gestational age", "fast": false, "prep": "Note exact gestational age. NT scan: 11-13+6 weeks only. Bring previous scan reports."}}, {"match": ["thyroid"], "data": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "Any time", "fast": false, "prep": "No preparation needed. Remove neck jewellery."}}]}, "X-RAY DIGITAL": {"default": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "Any time", "fast": false, "prep": "Remove metal objects, jewellery. Inform if pregnant."}}, "X-RAY ROUTINE": {"default": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "Any time", "fast": false, "prep": "Remove metal objects. Inform radiographer if pregnant."}, "patterns": [{"match": ["barium", "hsg", "ivp", "mcu", "rgu"], "data": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "As per booking", "fast": true, "prep": "Specific preparation required. Confirm with department at time of booking."}}]}, "CARDIOLOGY": {"default": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "Any time", "fast": false, "prep": "Wear comfortable clothing. Remove chest jewellery."}, "patterns": [{"match": ["tmt", "stress"], "data": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "Morning preferred", "fast": true, "prep": "Light meal 3h before. No heavy exercise 12h prior. Wear comfortable shoes. Continue regular medications unless told otherwise."}}, {"match": ["holter"], "data": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "Full 24-48h recording", "fast": false, "prep": "No bath/shower during recording. Note activities and symptoms in diary. Avoid magnets and metal detectors."}}, {"match": ["troponin", "hs troponin"], "data": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "At presentation + 3h + 6h", "fast": false, "prep": "Serial samples at 0, 3, and 6 hours. Mark exact time on each tube. URGENT."}}]}, "SPIROMETRY": {"default": {"tube": "NA", "color": "#6B7280", "label": "Not applicable", "vol": "N/A", "sample": "N/A", "timing": "Any time", "fast": false, "prep": "No bronchodilator 4-6h prior (unless testing response). No smoking 4h prior. Loose clothing."}}, "OPD PACKAGE": {"default": {"tube": "R", "color": "#DC2626", "label": "Multiple tubes as per package", "vol": "Varies", "sample": "Serum + other", "timing": "Fasting preferred", "fast": true, "prep": "8-12h fasting for most packages. Water allowed. Bring previous reports."}}, "MISC": {"default": {"tube": "R", "color": "#DC2626", "label": "Red / SST", "vol": "3 mL", "sample": "Serum", "timing": "Any time", "fast": false, "prep": "Check specific requirements with lab."}}};
+var PA_ERRORS = {"hemolysis": {"tests": ["potassium", "k+", "ldh", "ck", "ast", "sgot", "iron", "magnesium", "phosphorus"], "msg": "Hemolysis-sensitive test. Avoid prolonged tourniquet, difficult venipuncture, vigorous mixing."}, "timing": {"tests": ["cortisol", "acth", "growth hormone", "renin", "aldosterone", "prolactin"], "msg": "Time-sensitive test. Record exact collection time on tube."}, "fasting": {"tests": ["bsf", "fasting", "lipid", "cholesterol", "triglyceride", "hdl", "ldl", "insulin fasting", "c peptide fasting", "homa"], "msg": "Fasting required (8-12h). Confirm patient has fasted."}, "ice": {"tests": ["ammonia", "lactate", "acth", "insulin", "parathyroid", "pth", "renin"], "msg": "Requires cold chain. Transport on ice immediately."}, "protect_light": {"tests": ["vitamin d", "bilirubin", "vitamin b12", "beta carotene", "porphyrin"], "msg": "Protect from light. Wrap in foil after collection."}, "order": {"tests": ["blood culture", "culture"], "msg": "Collect before starting antibiotics if possible."}};
+var PA_PREP = {"fasting_blood": "OnePLUS Lab - Patient Instructions\n\nYour tests require FASTING:\n- Fast for 8-12 hours\n- Water is allowed\n- Take regular medications with water unless advised otherwise\n- Come between 7-10 AM\n\nOnePLUS Ultrasound Lab, Pitampura\n011-4248 0101", "urine_routine": "OnePLUS Lab - Patient Instructions\n\nFor URINE test:\n- Collect first morning urine\n- Clean the area before collecting\n- Collect midstream (let first stream go)\n- Bring in clean container\n\nOnePLUS Ultrasound Lab, Pitampura\n011-4248 0101", "urine_24h": "OnePLUS Lab - Patient Instructions\n\n24-HOUR URINE COLLECTION:\n1. Day 1 morning: Discard first urine\n2. Collect ALL urine for 24 hours in the large container provided\n3. Keep container in refrigerator\n4. Day 2 morning: Add last urine, bring to lab\n5. Note start and end time\n\nOnePLUS Ultrasound Lab, Pitampura\n011-4248 0101", "semen": "OnePLUS Lab - Patient Instructions\n\nFor SEMEN ANALYSIS:\n- Maintain 2-5 days sexual abstinence\n- Collect by masturbation in sterile container\n- Do NOT use condom or lubricant\n- Keep at body temperature\n- Deliver to lab within 30 minutes\n\nOnePLUS Ultrasound Lab, Pitampura\n011-4248 0101", "usg_abdomen": "OnePLUS Lab - Patient Instructions\n\nFor ABDOMINAL ULTRASOUND:\n- Fast for 4-6 hours (no food/drinks)\n- Water is allowed\n- Wear loose, comfortable clothing\n\nFor PELVIC/LOWER ABDOMEN USG:\n- Drink 4-6 glasses of water 1 hour before\n- Do NOT urinate before the scan\n- Full bladder is needed\n\nOnePLUS Ultrasound Lab, Pitampura\n011-4248 0101", "hormone": "OnePLUS Lab - Patient Instructions\n\nFor HORMONE tests:\n- Note: For female hormones, mention Day of menstrual cycle\n- No special fasting required unless specified\n- Come to lab in the morning\n\nOnePLUS Ultrasound Lab, Pitampura\n011-4248 0101", "culture": "OnePLUS Lab - Patient Instructions\n\nFor CULTURE tests:\n- Collect BEFORE starting antibiotics if possible\n- For URINE culture: clean area, discard first stream, collect midstream\n- Bring to lab immediately\n- Keep at room temperature (not refrigerated)\n\nOnePLUS Ultrasound Lab, Pitampura\n011-4248 0101", "echo_tmt": "OnePLUS Lab - Patient Instructions\n\nFor TMT/STRESS TEST:\n- Light meal 3 hours before test\n- No heavy exercise 12 hours prior\n- Wear comfortable clothes and shoes\n- Continue regular heart medications unless told otherwise\n- Bring previous ECG/reports\n\nOnePLUS Ultrasound Lab, Pitampura\n011-4248 0101", "pft": "OnePLUS Lab - Patient Instructions\n\nFor SPIROMETRY/PFT:\n- No bronchodilator inhaler 4-6 hours before\n- No smoking 4 hours before\n- Wear loose, comfortable clothing\n- Eat light meal (avoid heavy meal)\n\nOnePLUS Ultrasound Lab, Pitampura\n011-4248 0101", "lbc_pap": "OnePLUS Lab - Patient Instructions\n\nFor PAP SMEAR / LBC:\n- Do NOT collect during menstruation\n- No intercourse 48 hours before\n- No douching or vaginal medication 48 hours before\n- Mid-cycle (Day 14) is ideal\n\nOnePLUS Ultrasound Lab, Pitampura\n011-4248 0101"};
+var selRejReason = '';
+var paSearchHits = [];
+
+function showPATab(tab) {
+  ['requirements','rejection','patientprep','rejlog'].forEach(function(t){
+    document.getElementById('pa-'+t).style.display = t===tab?'block':'none';
+  });
+  ['req','rej','prep','log'].forEach(function(t,i){
+    var id = 'pa-tab-'+['req','rej','prep','log'][i];
+    var el = document.getElementById(id);
+    if (el) {
+      el.style.borderColor = '';
+      el.style.background = '';
+    }
+  });
+  var tabMap = {requirements:'req',rejection:'rej',patientprep:'prep',rejlog:'log'};
+  var activeEl = document.getElementById('pa-tab-'+tabMap[tab]);
+  if (activeEl) {
+    activeEl.style.borderColor = 'var(--accent)';
+    activeEl.style.background = 'var(--accent-light)';
+  }
+  if (tab === 'patientprep') renderPrepList();
+  if (tab === 'rejlog') loadRejectionHistory();
+}
+
+function getPA(test) {
+  var dept = test.dept ? test.dept.toUpperCase() : '';
+  var name = (test.name || '').toLowerCase();
+  var deptData = PA_DATA[dept] || PA_DATA['MISC'];
+  if (!deptData) return null;
+  var result = Object.assign({}, deptData.default);
+  if (deptData.patterns) {
+    for (var i = 0; i < deptData.patterns.length; i++) {
+      var p = deptData.patterns[i];
+      for (var j = 0; j < p.match.length; j++) {
+        if (name.indexOf(p.match[j].toLowerCase()) >= 0) {
+          result = Object.assign({}, p.data);
+          break;
+        }
+      }
+      if (result !== deptData.default) break;
+    }
+  }
+  return result;
+}
+
+function getErrors(test) {
+  var name = (test.name || '').toLowerCase();
+  var flags = [];
+  Object.keys(PA_ERRORS).forEach(function(key) {
+    var e = PA_ERRORS[key];
+    for (var i = 0; i < e.tests.length; i++) {
+      if (name.indexOf(e.tests[i].toLowerCase()) >= 0) {
+        flags.push(e.msg);
+        break;
+      }
+    }
+  });
+  return flags;
+}
+
+function searchPA(q) {
+  var el = document.getElementById('pa-results');
+  if (!q || q.length < 2) { el.innerHTML = '<div class="empty" style="padding:20px">Search a test to see sample requirements</div>'; return; }
+  var lq = q.toLowerCase();
+  paSearchHits = CATALOGUE.filter(function(t){
+    return t.name.toLowerCase().indexOf(lq) >= 0 || (t.short && t.short.toLowerCase().indexOf(lq) >= 0);
+  }).slice(0, 8);
+  if (!paSearchHits.length) { el.innerHTML = '<div class="empty">No tests found</div>'; return; }
+  el.innerHTML = paSearchHits.map(function(t, i) {
+    var pa = getPA(t);
+    var errors = getErrors(t);
+    if (!pa) return '';
+    var tubeColor = pa.color || '#6B7280';
+    var errorHtml = errors.length ? '<div style="background:#FEF3C7;border:0.5px solid #F59E0B;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;color:#92400E"><b>⚠ Flag:</b> ' + errors.join(' | ') + '</div>' : '';
+    var fastHtml = pa.fast ? '<span style="background:#FEE2E2;color:#991B1B;font-size:11px;font-family:var(--mono);padding:2px 8px;border-radius:10px;margin-left:6px">FASTING</span>' : '';
+    return '<div class="card" style="margin-bottom:10px">'
+      + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+      + '<div style="width:14px;height:14px;border-radius:50%;background:' + tubeColor + ';flex-shrink:0;border:1px solid rgba(0,0,0,0.2)"></div>'
+      + '<div><div style="font-size:13px;font-weight:500">' + esc(t.name) + fastHtml + '</div><div style="font-size:11px;color:var(--text3);font-family:var(--mono)">' + esc(t.dept) + '</div></div>'
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+      + '<div><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">Tube</div><div style="font-size:13px;font-weight:500;margin-top:2px">' + esc(pa.label) + '</div></div>'
+      + '<div><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">Volume</div><div style="font-size:13px;font-weight:500;margin-top:2px">' + esc(pa.vol) + '</div></div>'
+      + '<div><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">Sample</div><div style="font-size:13px;font-weight:500;margin-top:2px">' + esc(pa.sample) + '</div></div>'
+      + '<div><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">Timing</div><div style="font-size:13px;font-weight:500;margin-top:2px">' + esc(pa.timing) + '</div></div>'
+      + '</div>'
+      + '<div style="background:var(--surface2);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--text2)"><b>Prep:</b> ' + esc(pa.prep) + '</div>'
+      + (flagBadges ? '<div style="margin-top:8px">'+flagBadges+'</div>' : '')
+      + errorHtml
+      + '</div>';
+  }).join('');
+}
+
+function renderPrepList() {
+  var prepLabels = {
+    fasting_blood: 'Fasting blood tests',
+    urine_routine: 'Urine routine',
+    urine_24h: '24-hour urine collection',
+    semen: 'Semen analysis',
+    usg_abdomen: 'USG abdomen / pelvis',
+    hormone: 'Hormone tests',
+    culture: 'Culture tests',
+    echo_tmt: 'TMT / Stress test',
+    pft: 'Spirometry / PFT',
+    lbc_pap: 'Pap smear / LBC'
+  };
+  var icons = {
+    fasting_blood:'&#127370;', urine_routine:'&#128690;', urine_24h:'&#128690;',
+    semen:'&#129514;', usg_abdomen:'&#128266;', hormone:'&#128300;',
+    culture:'&#129514;', echo_tmt:'&#128147;', pft:'&#129168;', lbc_pap:'&#128300;'
+  };
+  var el = document.getElementById('prep-list');
+  var html = '';
+  Object.keys(prepLabels).forEach(function(key) {
+    html += '<div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div style="font-size:13px;font-weight:500">' + (icons[key]||'') + ' ' + esc(prepLabels[key]) + '</div>';
+    html += '<button style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer" id="prep-btn-' + key + '">WhatsApp</button>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
+  Object.keys(prepLabels).forEach(function(key) {
+    var btn = document.getElementById('prep-btn-' + key);
+    if (btn) btn.addEventListener('click', function(){ sendPrepWA(key); });
+  });
+}
+
+function sendPrepWA(key) {
+  var msg = PA_PREP[key];
+  if (!msg) return;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// Sample rejection
+function setRejReason(reason) {
+  selRejReason = reason;
+  var ids = ['hemolysis','clotted','insufficient','wrong-tube','unlabelled','delayed','lipemic','other'];
+  var vals = ['Hemolyzed sample','Clotted sample','Insufficient volume','Wrong tube used','Unlabelled sample','Delayed transport','Lipemic sample','Other'];
+  ids.forEach(function(id, i) {
+    var el = document.getElementById('rr-'+id);
+    if (el) el.className = 'tog' + (vals[i]===reason?' on':'');
+  });
+}
+
+function submitRejection() {
+  var patient = document.getElementById('rej-patient').value.trim();
+  var test = document.getElementById('rej-test').value.trim();
+  var notes = document.getElementById('rej-notes').value.trim();
+  var ref = document.getElementById('rej-ref').value.trim();
+  if (!patient) { toast('Enter patient name','warn'); return; }
+  if (!selRejReason) { toast('Select rejection reason','warn'); return; }
+  db.collection('rejections').add({
+    patientName: patient,
+    test: test,
+    reason: selRejReason,
+    notes: notes,
+    refBy: ref,
+    date: todayStr(),
+    recordedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    recordedBy: curUser.uid,
+    recordedByName: (curProfile&&curProfile.name)||curUser.email
+  }).then(function() {
+    toast('Rejection recorded','ok');
+    document.getElementById('rej-patient').value='';
+    document.getElementById('rej-test').value='';
+    document.getElementById('rej-notes').value='';
+    document.getElementById('rej-ref').value='';
+    selRejReason='';
+    setRejReason('');
+  }).catch(function(e){ toast('Error: '+e.message,'err'); });
+}
+
+function loadRejectionHistory() {
+  var el = document.getElementById('rejection-history');
+  el.innerHTML='<div class="empty">Loading...</div>';
+  db.collection('rejections').where('date','==',todayStr()).get().then(function(snap){
+    if (snap.empty) { el.innerHTML='<div class="empty">No rejections recorded today</div>'; return; }
+    var rows=[];
+    snap.forEach(function(d){ rows.push(Object.assign({id:d.id},d.data())); });
+    el.innerHTML = rows.map(function(r){
+      return '<div class="card" style="margin-bottom:10px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px">'
+        + '<div style="font-size:13px;font-weight:500">'+esc(r.patientName)+'</div>'
+        + '<span style="background:var(--red-light);color:var(--red);font-size:11px;font-family:var(--mono);padding:2px 8px;border-radius:10px">REJECTED</span>'
+        + '</div>'
+        + '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">'+esc(r.test||'-')+'</div>'
+        + '<div style="font-size:12px;font-weight:500;color:var(--red)">Reason: '+esc(r.reason)+'</div>'
+        + (r.notes?'<div style="font-size:12px;color:var(--text3);margin-top:4px">'+esc(r.notes)+'</div>':'')
+        + '<div style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:6px">By '+esc(r.recordedByName||'-')+'</div>'
+        + '</div>';
+    }).join('');
+  }).catch(function(e){ el.innerHTML='<div class="empty">Error: '+e.message+'</div>'; });
+}
+
+// Add PA flag check in order step 2 — warn about pre-analytical issues
+function checkPAFlags(tests) {
+  var flags = [];
+  tests.forEach(function(t) {
+    var pa = getPA(t);
+    var errs = getErrors(t);
+    if (pa && pa.fast) flags.push(t.name + ': Fasting required');
+    errs.forEach(function(e) { if (flags.indexOf(e)<0) flags.push(e); });
+  });
+  return flags;
+}
+
+// ── HELPERS ──
+function todayStr() {
+  var d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function toast(msg,type) {
+  var el=document.getElementById('toast');
+  el.textContent=msg;
+  el.className='show'+(type?' '+type:'');
+  setTimeout(function(){ el.className=''; },2500);
+}
+</script>
+</body>
+</html>

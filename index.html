@@ -1507,6 +1507,53 @@ function renderSampleSummary() {
   strip.style.display = 'block';
 }
 
+// ── REPEAT PATIENT DETECTION ──
+var repeatPatientData = null;
+
+function checkRepeatPatient() {
+  var phone = document.getElementById('pt-phone').value.trim();
+  var banner = document.getElementById('repeat-patient-banner');
+  repeatPatientData = null;
+  banner.style.display = 'none';
+  // Need at least 6 digits to avoid false positives
+  if (!phone || phone.length < 6) return;
+  // Query without orderBy to avoid composite index requirement
+  db.collection('orders').where('phone', '==', phone).limit(10).get()
+    .then(function(snap) {
+      if (snap.empty) { return; }
+      // Sort client-side by createdAt descending to get most recent
+      var docs = [];
+      snap.forEach(function(d) { docs.push(Object.assign({id: d.id}, d.data())); });
+      docs.sort(function(a, b) {
+        return (b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0)
+             - (a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0);
+      });
+      var d = docs[0];
+      // Don't show if it's today's order (user is re-registering same patient same day)
+      repeatPatientData = d;
+      document.getElementById('repeat-patient-info').textContent =
+        (d.patientName || '') + ' · ' + (d.age || '-') + 'yr ' + (d.sex || '') +
+        ' · Ref: ' + (d.refBy || '-') + ' · Last visit: ' + (d.date || '');
+      banner.style.display = 'block';
+    })
+    .catch(function(e) {
+      // Silently fail — repeat detection is non-critical
+      console.log('Repeat patient check failed:', e.message);
+    });
+}
+
+function fillRepeatPatient() {
+  if (!repeatPatientData) return;
+  var d = repeatPatientData;
+  document.getElementById('pt-name').value = d.patientName || '';
+  document.getElementById('pt-age').value = d.age || '';
+  document.getElementById('pt-sex').value = d.sex || '';
+  document.getElementById('pt-ref').value = d.refBy || '';
+  document.getElementById('repeat-patient-banner').style.display = 'none';
+  toast('Details filled from last visit – ' + (d.date || ''), 'ok');
+}
+
+
 // ── URGENT FLAG ──
 var isUrgent = false;
 function toggleUrgent() {
@@ -2147,6 +2194,16 @@ function downloadTRFpdf() {
   var pw = 210, ph = 297, ml = 15, mr = 15, mt = 15;
   var cw = pw - ml - mr;
   var y = mt;
+
+  // Urgent banner
+  if (o.urgent) {
+    doc.setFillColor(239, 68, 68);
+    doc.roundedRect(ml, y, cw, 10, 2, 2, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text('URGENT - PRIORITY PROCESSING', pw/2, y+7, {align:'center'});
+    y += 14;
+  }
 
   // Header
   doc.setFillColor(26, 74, 58);
@@ -2865,7 +2922,7 @@ function openTRF() {
   if (!lastOrder) { toast('No order to print','warn'); return; }
   var o = lastOrder;
   var id = (o.id||'').slice(-6).toUpperCase();
-  document.getElementById('trf-order-id').textContent = 'Order #' + id;
+  document.getElementById('trf-order-id').textContent = o.patientName + (o.urgent ? ' — URGENT' : '');
   var rows = (o.tests||[]).map(function(t, i) {
     return '<tr><td style="padding:7px 8px;border-bottom:1px solid #eee;font-size:13px">' + (i+1) + '. ' + esc(t.name) + '</td>'
       + '<td style="padding:7px 8px;border-bottom:1px solid #eee;font-size:11px;color:#666">' + esc(t.dept) + '</td>'
@@ -2873,6 +2930,7 @@ function openTRF() {
   }).join('');
 
   document.getElementById('trf-body').innerHTML = ''
+    + (o.urgent ? '<div style="background:#EF4444;border-radius:10px;padding:10px 14px;color:#fff;text-align:center;font-weight:700;font-size:13px;letter-spacing:0.05em;margin-bottom:12px">URGENT — PRIORITY PROCESSING</div>' : '')
     + '<div style="background:#1A4A3A;border-radius:12px;padding:14px 16px;color:#fff;margin-bottom:16px">'
     + '<div style="font-family:serif;font-size:20px;font-weight:300;margin-bottom:2px">OnePLUS Ultrasound Lab</div>'
     + '<div style="font-size:11px;opacity:0.7">47, Harsh Vihar, Pitampura, Delhi-34 · 011-4248 0101</div>'
@@ -2885,7 +2943,7 @@ function openTRF() {
     + '<div><div style="font-size:10px;color:#999">Mobile</div><div style="font-size:14px">' + esc(o.phone||'-') + '</div></div>'
     + '<div><div style="font-size:10px;color:#999">Ref by</div><div style="font-size:14px">' + esc(o.refBy||'-') + '</div></div>'
     + '<div><div style="font-size:10px;color:#999">Date</div><div style="font-size:14px">' + esc(o.date||'-') + '</div></div>'
-    + '<div><div style="font-size:10px;color:#999">Order ID</div><div style="font-size:14px;font-family:monospace">#' + id + '</div></div>'
+    + ''
     + '<div><div style="font-size:10px;color:#999">Source</div><div style="font-size:14px">' + esc(o.source||'Walk-in') + '</div></div>'
     + (o.address ? '<div style="grid-column:span 2"><div style="font-size:10px;color:#999">Address</div><div style="font-size:13px">' + esc(o.address) + '</div></div>' : '')
     + (o.gps ? '<div style="grid-column:span 2"><div style="font-size:10px;color:#999">GPS</div><div style="font-size:11px;font-family:monospace;color:#1D4ED8">' + o.gps.lat + ', ' + o.gps.lng + ' (±' + o.gps.accuracy + 'm)</div></div>' : '')

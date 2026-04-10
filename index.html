@@ -159,7 +159,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 </style>
 </head>
 <body>
-<div id="app">
+<div id="app" onclick="hideSuggest(event)">
 
 <!-- LOADING -->
 <div class="loading-overlay" id="loading">
@@ -277,11 +277,11 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
     <div id="step2" style="display:none">
       <button onclick="showStep(1)" style="font-size:12px;color:var(--text2);font-family:var(--mono);margin-bottom:12px;padding:4px 0;background:none;border:none;cursor:pointer">&#8592; Back to Patient Info</button>
-      <div style="position:relative;margin-bottom:4px">
+      <div style="position:relative;margin-bottom:8px">
         <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text3);pointer-events:none">&#128269;</span>
         <input style="width:100%;padding:9px 11px 9px 36px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px" type="text" id="test-q" placeholder="Search tests..." oninput="searchTests(this.value)" autocomplete="off">
       </div>
-      <div id="test-suggest" class="suggest-list" style="display:none;margin-bottom:8px"></div>
+      <div id="test-suggest" style="display:none;position:fixed;left:0;right:0;background:var(--surface);border:0.5px solid var(--border-strong);border-radius:var(--radius-lg);max-height:260px;overflow-y:auto;z-index:999;box-shadow:0 8px 24px rgba(0,0,0,0.18);margin:0 18px"></div>
       <div id="sel-tests" class="chip-list"></div>
       <div id="est-strip" class="est-strip" style="display:none">
         <div><div style="font-size:12px;color:rgba(255,255,255,0.6);font-family:var(--mono)">Estimated Total</div></div>
@@ -752,11 +752,15 @@ function searchTests(q) {
     return t.name.toLowerCase().indexOf(lq) >= 0 || (t.short && t.short.toLowerCase().indexOf(lq) >= 0) || t.dept.toLowerCase().indexOf(lq) >= 0;
   }).slice(0, 10);
   if (!orderHits.length) { el.style.display = 'none'; return; }
+  // Position fixed dropdown just below the input
+  var input = document.getElementById('test-q');
+  var rect = input.getBoundingClientRect();
+  el.style.top = (rect.bottom + 4) + 'px';
   el.style.display = 'block';
   var html = '';
   for (var i = 0; i < orderHits.length; i++) {
     var t = orderHits[i];
-    html += '<div class="suggest-item" onclick="addOrderHit(' + i + ')">';
+    html += '<div style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-bottom:0.5px solid var(--border)" onclick="addOrderHit(' + i + ')">';
     html += '<div><div style="font-size:13px;font-weight:500">' + esc(t.name) + '</div>';
     html += '<div style="font-size:11px;color:var(--text3)">' + esc(t.dept) + '</div></div>';
     html += '<div style="font-size:13px;color:var(--text2)">Rs.' + (t.rate || 0) + '</div></div>';
@@ -766,6 +770,13 @@ function searchTests(q) {
 function addOrderHit(i) { addTest(orderHits[i]); }
 
 
+function hideSuggest(e) {
+  var el = document.getElementById('test-suggest');
+  var inp = document.getElementById('test-q');
+  if (el && inp && !el.contains(e.target) && e.target !== inp) {
+    el.style.display = 'none';
+  }
+}
 function addTest(t) {
   if (selTests.find(function(x){ return x.name===t.name; })) { toast('Already added','warn'); return; }
   selTests.push(t);

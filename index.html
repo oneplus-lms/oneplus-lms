@@ -1101,7 +1101,7 @@ function miniOrderCard(id, o) {
       <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${o.tests?.map(t=>t.name).join(', ') || ''}</div>
     </div>
     <div style="text-align:right">
-      <div style="font-size:13px;color:var(--accent);font-family:var(--serif)">₹${(o.paidAmount||0).toLocaleString('en-IN')}</div>
+      <div style="font-size:13px;color:var(--accent);font-family:var(--serif)">Rs.${(o.paidAmount||0).toLocaleString('en-IN')}</div>
       <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">${payModeBadge(o.payMode)}</div>
     </div>`;
   return div;
@@ -1124,7 +1124,7 @@ function searchTests(q) {
   sugEl.innerHTML = hits.map(t => `
     <div class="suggest-item" onclick="addTest(${JSON.stringify(t).replace(/"/g,"'")})">
       <div><div class="sug-name">${t.name}</div><div class="sug-dept">${t.dept}</div></div>
-      <div class="sug-rate">₹${t.rate}</div>
+      <div class="sug-rate">Rs.${t.rate}</div>
     </div>`).join('');
 }
 
@@ -1147,7 +1147,7 @@ function renderSelectedTests() {
   el.innerHTML = selectedTests.map((t,i) => `
     <div class="chip">
       <div class="chip-info"><div class="chip-name">${t.name}</div><div class="chip-meta">${t.dept}</div></div>
-      <div class="chip-right"><div class="chip-amt">₹${t.rate}</div>
+      <div class="chip-right"><div class="chip-amt">Rs.${t.rate}</div>
       <button class="chip-del" onclick="removeTest(${i})">✕</button></div>
     </div>`).join('') || '<div style="color:var(--text3);font-size:13px;text-align:center;padding:12px">No tests selected</div>';
 
@@ -1322,12 +1322,12 @@ function renderOrdersList(orders) {
     <div class="order-card">
       <div class="order-id">${o.id.slice(-6).toUpperCase()} · ${o.date}</div>
       <div class="order-patient">${o.patientName}</div>
-      <div class="order-meta">${o.age ? o.age+'yr ' : ''}${o.sex || ''} · Ref: ${o.refBy || '—'}</div>
+      <div class="order-meta">${o.age ? o.age+'yr ' : ''}${o.sex || ''} · Ref: ${o.refBy || '--'}</div>
       <div style="font-size:11px;color:var(--text3);margin-top:4px">${o.tests?.map(t=>t.name).join(', ') || ''}</div>
       <div class="order-footer">
         <span class="badge ${o.status==='paid'?'badge-green':'badge-gold'}">${o.status?.toUpperCase()||'PAID'}</span>
         <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">${payModeBadge(o.payMode)}</span>
-        <div class="order-amt">₹${(o.paidAmount||0).toLocaleString('en-IN')}</div>
+        <div class="order-amt">Rs.${(o.paidAmount||0).toLocaleString('en-IN')}</div>
       </div>
     </div>`).join('');
 }
@@ -1364,9 +1364,9 @@ async function loadHandoverScreen() {
         <div class="ho-card-header"><span class="ho-card-id">${d.id.slice(-6).toUpperCase()}</span><span class="ho-card-time">${h.time||''}</span></div>
         <div class="ho-card-body">
           <div><div class="ho-card-k">To</div><div class="ho-card-v">${h.handoverTo}</div></div>
-          <div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">₹${(h.amount||0).toLocaleString('en-IN')}</div></div>
-          <div><div class="ho-card-k">By</div><div class="ho-card-v">${h.recordedByName||'—'}</div></div>
-          <div><div class="ho-card-k">Notes</div><div class="ho-card-v">${h.notes||'—'}</div></div>
+          <div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.${(h.amount||0).toLocaleString('en-IN')}</div></div>
+          <div><div class="ho-card-k">By</div><div class="ho-card-v">${h.recordedByName||'--'}</div></div>
+          <div><div class="ho-card-k">Notes</div><div class="ho-card-v">${h.notes||'--'}</div></div>
         </div>`;
       hoEl.appendChild(div);
     });
@@ -1425,7 +1425,7 @@ async function loadEODReport() {
     document.getElementById('eod-total').textContent = fmt(total);
 
     const waText =
-`*OnePLUS Ultrasound Lab® — EOD Report*
+`*OnePLUS Ultrasound Lab® -- EOD Report*
 📅 ${d.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}
 
 📋 Total Orders: *${snap.size}*
@@ -1493,7 +1493,7 @@ function renderTRF(o) {
   const tests = (o.tests || []).map((t,i) =>
     `<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:13px">${i+1}. ${t.name}</td>
      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;color:#64748b">${t.dept}</td>
-     <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right;font-weight:500">₹${(t.rate||0).toLocaleString('en-IN')}</td></tr>`
+     <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right;font-weight:500">Rs.${(t.rate||0).toLocaleString('en-IN')}</td></tr>`
   ).join('');
 
   document.getElementById('trf-body').innerHTML = `
@@ -1504,10 +1504,10 @@ function renderTRF(o) {
     <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px">
       <div style="font-size:11px;font-family:var(--mono);color:var(--text3);margin-bottom:8px;text-transform:uppercase">Patient Details</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><div style="font-size:10px;color:var(--text3)">Name</div><div style="font-size:14px;font-weight:500">${o.patientName||'—'}</div></div>
-        <div><div style="font-size:10px;color:var(--text3)">Age/Sex</div><div style="font-size:14px;font-weight:500">${o.age||'—'} ${o.sex||''}</div></div>
-        <div><div style="font-size:10px;color:var(--text3)">Mobile</div><div style="font-size:14px">${o.phone||'—'}</div></div>
-        <div><div style="font-size:10px;color:var(--text3)">Ref by</div><div style="font-size:14px">${o.refBy||'—'}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Name</div><div style="font-size:14px;font-weight:500">${o.patientName||'--'}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Age/Sex</div><div style="font-size:14px;font-weight:500">${o.age||'--'} ${o.sex||''}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Mobile</div><div style="font-size:14px">${o.phone||'--'}</div></div>
+        <div><div style="font-size:10px;color:var(--text3)">Ref by</div><div style="font-size:14px">${o.refBy||'--'}</div></div>
         <div><div style="font-size:10px;color:var(--text3)">Date</div><div style="font-size:14px">${date}</div></div>
         <div><div style="font-size:10px;color:var(--text3)">Order ID</div><div style="font-size:14px;font-family:var(--mono)">#${id}</div></div>
       </div>
@@ -1528,12 +1528,12 @@ function renderTRF(o) {
         <div style="font-size:11px;color:rgba(255,255,255,0.6);font-family:var(--mono)">Total · ${payModeBadge(o.payMode)}</div>
         ${o.discount>0 ? `<div style="font-size:11px;color:rgba(255,255,255,0.5)">Discount: ₹${o.discount}</div>` : ''}
       </div>
-      <div style="font-family:var(--serif);font-size:24px;color:#fff;font-weight:500">₹${(o.paidAmount||0).toLocaleString('en-IN')}</div>
+      <div style="font-family:var(--serif);font-size:24px;color:#fff;font-weight:500">Rs.${(o.paidAmount||0).toLocaleString('en-IN')}</div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:16px">
       <div style="flex:1;background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:10px;text-align:center">
         <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">Collected by</div>
-        <div style="font-size:12px;margin-top:2px">${o.createdByName||'—'}</div>
+        <div style="font-size:12px;margin-top:2px">${o.createdByName||'--'}</div>
       </div>
       <div style="flex:1;background:var(--surface);border:0.5px solid var(--border);border-radius:8px;padding:10px;text-align:center">
         <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">Status</div>
@@ -1550,24 +1550,18 @@ function printTRF() {
 
 function shareTRFWhatsApp() {
   if (!lastSavedOrder) return;
-  const o = lastSavedOrder;
-  const id = (o.id||'').slice(-6).toUpperCase();
-  const tests = (o.tests||[]).map(t => `  • ${t.name} — ₹${(t.rate||0).toLocaleString('en-IN')}`).join('
-');
-  const msg = `*OnePLUS Ultrasound Lab® — TRF*
-47, Harsh Vihar, Pitampura, Delhi-34
-Order #${id} · ${o.date}
-
-*Patient:* ${o.patientName}
-*Age/Sex:* ${o.age||'—'} ${o.sex||''}
-*Ref by:* ${o.refBy||'—'}
-
-*Tests:*
-${tests}
-
-*Total Paid:* ₹${(o.paidAmount||0).toLocaleString('en-IN')} (${o.payMode})
-
-_OnePLUS Lab Management System_`;
+  var o = lastSavedOrder;
+  var id = (o.id||'').slice(-6).toUpperCase();
+  var testLines = (o.tests||[]).map(function(t){ return '  - ' + t.name + ': Rs.' + (t.rate||0).toLocaleString('en-IN'); }).join('\n');
+  var msg = '*OnePLUS Ultrasound Lab - TRF*\n'
+    + '47, Harsh Vihar, Pitampura, Delhi-34\n'
+    + 'Order #' + id + ' | ' + o.date + '\n\n'
+    + '*Patient:* ' + o.patientName + '\n'
+    + '*Age/Sex:* ' + (o.age||'-') + ' ' + (o.sex||'') + '\n'
+    + '*Ref by:* ' + (o.refBy||'-') + '\n\n'
+    + '*Tests:*\n' + testLines + '\n\n'
+    + '*Total Paid:* Rs.' + (o.paidAmount||0).toLocaleString('en-IN') + ' (' + o.payMode + ')\n'
+    + '_OnePLUS Lab Management System_';
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
 
@@ -1633,7 +1627,7 @@ async function loadTempRoles() {
       div.innerHTML = `
         <div>
           <div style="font-size:13px;font-weight:500">${r.staffName}</div>
-          <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${r.tempRole.toUpperCase()} · ${r.reason||'—'}</div>
+          <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${r.tempRole.toUpperCase()} · ${r.reason||'--'}</div>
         </div>
         <button class="btn-sm btn btn-danger" onclick="revokeTempRole('${d.id}')">Revoke</button>`;
       el.appendChild(div);
@@ -1662,8 +1656,8 @@ async function loadAdminStaff() {
       div.innerHTML = `
         <div class="avatar av-green">${initials}</div>
         <div class="staff-info">
-          <div class="staff-name">${s.name||'—'}</div>
-          <div class="staff-roles">${s.role?.toUpperCase()||'—'} · ${s.email||''}</div>
+          <div class="staff-name">${s.name||'--'}</div>
+          <div class="staff-roles">${s.role?.toUpperCase()||'--'} · ${s.email||''}</div>
         </div>`;
       el.appendChild(div);
     });

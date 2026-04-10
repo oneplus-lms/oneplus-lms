@@ -277,7 +277,8 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   <!-- ══ LOADING ══ -->
   <div class="loading-overlay" id="loading">
     <div class="loading-spinner"></div>
-    <div class="loading-text">connecting…</div>
+    <div class="loading-text" id="loading-text">connecting…</div>
+    <button id="loading-retry" onclick="location.reload()" style="display:none;margin-top:16px;padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:var(--mono);cursor:pointer">Tap to retry</button>
   </div>
 
   <!-- ══ AUTH (Email + Password) ══ -->
@@ -747,11 +748,10 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.firestore();
 
-// Enable offline persistence
-db.enablePersistence().catch(e => {
-  if (e.code === 'failed-precondition') console.warn('Multiple tabs open, persistence in one tab only');
-  else if (e.code === 'unimplemented') console.warn('Browser does not support persistence');
-});
+// Offline persistence — non-blocking
+try {
+  db.enablePersistence({synchronizeTabs: false}).catch(() => {});
+} catch(e) {}
 
 // ══════════════════════════════════════════════════
 //  APP STATE
@@ -786,7 +786,16 @@ function goBack() {
 // ══════════════════════════════════════════════════
 //  AUTH STATE OBSERVER
 // ══════════════════════════════════════════════════
+// Show retry button if loading takes too long
+const loadingTimeout = setTimeout(() => {
+  const lt = document.getElementById('loading-text');
+  const lr = document.getElementById('loading-retry');
+  if (lt) lt.textContent = 'Taking too long…';
+  if (lr) lr.style.display = 'block';
+}, 8000);
+
 auth.onAuthStateChanged(async user => {
+  clearTimeout(loadingTimeout);
   document.getElementById('loading').style.display = 'none';
   if (!user) {
     screenStack = ['s-auth'];
@@ -794,24 +803,26 @@ auth.onAuthStateChanged(async user => {
     return;
   }
   currentUser = user;
-  // Load staff profile from Firestore
+  // Load staff profile — with timeout fallback
   try {
-    const snap = await db.collection('staff').doc(user.uid).get();
+    const profilePromise = db.collection('staff').doc(user.uid).get();
+    const timeoutPromise = new Promise((_,reject) => setTimeout(() => reject(new Error('timeout')), 6000));
+    const snap = await Promise.race([profilePromise, timeoutPromise]);
     if (snap.exists) {
       currentProfile = snap.data();
-      // Show PIN screen for fast daily auth
       setupPinScreen();
       screenStack = ['s-pin'];
       goTo('s-pin', false);
     } else {
-      // Profile doesn't exist yet — go to dashboard directly (first-time setup)
       currentProfile = { name: user.email, role: 'admin', pin: '' };
       loadDashboard();
       screenStack = ['s-dash'];
       goTo('s-dash', false);
     }
   } catch(e) {
-    console.error(e);
+    console.error('Profile load error:', e);
+    // Fallback — go to dashboard with basic profile
+    currentProfile = { name: user.email, role: 'admin', pin: '' };
     loadDashboard();
     screenStack = ['s-dash'];
     goTo('s-dash', false);

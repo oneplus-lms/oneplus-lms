@@ -626,6 +626,95 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   <div class="scroll-body" id="trf-body"></div>
 </div>
 
+
+<!-- ADMIN SCREEN -->
+<div id="s-admin" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="goBack()">&#8592;</button>
+    <div style="flex:1"><div class="topbar-title">Admin</div><div class="topbar-sub">Staff management</div></div>
+    <button onclick="showAddStaff()" style="font-size:11px;font-family:var(--mono);color:#fff;padding:6px 12px;border:none;border-radius:6px;background:var(--accent);cursor:pointer">+ Add Staff</button>
+  </div>
+  <div class="scroll-body">
+
+    <!-- Staff List -->
+    <div class="card-title" style="margin-bottom:8px">All Staff</div>
+    <div id="admin-staff-list"><div class="empty">Loading...</div></div>
+
+    <!-- Temp Role -->
+    <div style="height:16px"></div>
+    <div class="card">
+      <div class="card-title">Temp Role Override</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Grant a staff member a second role for this shift. Resets at midnight.</div>
+      <div class="field">
+        <label>Staff Email</label>
+        <input type="email" id="temp-email" placeholder="staff@lab.com">
+      </div>
+      <div class="field">
+        <label>Temp Role</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <button type="button" class="tog" id="tr-reception" onclick="selectTempRole('reception')">Reception</button>
+          <button type="button" class="tog" id="tr-lab" onclick="selectTempRole('lab')">Lab Tech</button>
+          <button type="button" class="tog" id="tr-admin" onclick="selectTempRole('admin')">Admin</button>
+          <button type="button" class="tog" id="tr-pathologist" onclick="selectTempRole('pathologist')">Pathologist</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Reason</label>
+        <input type="text" id="temp-reason" placeholder="e.g. Cover for absent staff">
+      </div>
+      <button class="btn btn-primary" onclick="grantTempRole()">Grant Temp Role</button>
+    </div>
+
+    <div style="height:8px"></div>
+    <div class="card-title" style="margin-bottom:8px">Active Temp Roles Today</div>
+    <div id="temp-roles-list"><div class="empty">No temp roles active</div></div>
+  </div>
+</div>
+
+<!-- ADD/EDIT STAFF MODAL -->
+<div class="modal-bg" id="staff-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="staff-modal-title">Add Staff</div>
+    <div style="height:12px"></div>
+    <div class="field">
+      <label>Full Name</label>
+      <input type="text" id="sm-name" placeholder="Dr. Name">
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="sm-email" placeholder="staff@lab.com">
+      <div style="font-size:11px;color:var(--text3);margin-top:3px" id="sm-email-note"></div>
+    </div>
+    <div class="field" id="sm-pass-field">
+      <label>Password (min 6 chars)</label>
+      <input type="password" id="sm-pass" placeholder="Set login password">
+    </div>
+    <div class="field">
+      <label>Role</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" id="sm-role-grid">
+        <button type="button" class="tog" id="smr-reception" onclick="setStaffRole('reception')">Reception</button>
+        <button type="button" class="tog" id="smr-lab" onclick="setStaffRole('lab')">Lab Tech</button>
+        <button type="button" class="tog" id="smr-admin" onclick="setStaffRole('admin')">Admin</button>
+        <button type="button" class="tog" id="smr-pathologist" onclick="setStaffRole('pathologist')">Pathologist</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>PIN (4 digits)</label>
+      <input type="password" id="sm-pin" placeholder="Daily login PIN" maxlength="4" inputmode="numeric">
+    </div>
+    <div id="sm-err" style="font-size:12px;color:var(--red);margin-bottom:10px;min-height:16px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="closeStaffModal()">Cancel</button>
+      <button class="btn btn-primary" id="sm-save-btn" onclick="saveStaff()">Save</button>
+    </div>
+    <div style="height:8px"></div>
+    <div id="sm-deactivate-row" style="display:none">
+      <button class="btn btn-danger" onclick="deactivateStaff()">Deactivate Account</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast"></div>
 </div>
@@ -858,6 +947,9 @@ function unlock() {
   loadDash();
   stack=['s-dash'];
   goTo('s-dash', false);
+  var role = curProfile && curProfile.role || '';
+  var btn = document.getElementById('admin-btn');
+  if (btn) btn.style.display = (role==='admin'||role==='pathologist') ? 'block' : 'none';
 }
 
 // ── DASHBOARD ──
@@ -1517,6 +1609,215 @@ function toggleMed(m) {
 function step1bNext() {
   curOrder.history = Object.assign({}, curHistory);
   selTests=[]; renderTests(); showStep(2);
+}
+
+// ── ADMIN / STAFF MANAGEMENT ──
+var editingStaffId = null;
+var smRole = 'reception';
+var selTempRole = '';
+
+async function loadAdminScreen() {
+  await loadAdminStaff();
+  await loadTempRoles();
+}
+
+async function loadAdminStaff() {
+  var el = document.getElementById('admin-staff-list');
+  el.innerHTML = '<div class="empty">Loading...</div>';
+  try {
+    var snap = await db.collection('staff').orderBy('name').get();
+    if (snap.empty) { el.innerHTML = '<div class="empty">No staff registered</div>'; return; }
+    var html = '';
+    snap.forEach(function(d) {
+      var s = d.data();
+      var initials = (s.name||'?').split(' ').map(function(w){ return w[0]; }).join('').slice(0,2).toUpperCase();
+      var roleColor = {admin:'var(--accent)',pathologist:'var(--blue)',lab:'var(--gold)',reception:'var(--text2)'}[s.role] || 'var(--text2)';
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--border)">'
+        + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0">' + initials + '</div>'
+        + '<div style="flex:1;min-width:0">'
+        + '<div style="font-size:13px;font-weight:500">' + esc(s.name||'-') + (s.active===false?'<span style="font-size:10px;color:var(--red);margin-left:6px">INACTIVE</span>':'') + '</div>'
+        + '<div style="font-size:11px;font-family:var(--mono);color:' + roleColor + '">' + (s.role||'').toUpperCase() + '</div>'
+        + '<div style="font-size:11px;color:var(--text3)">' + esc(s.email||'') + '</div>'
+        + '</div>'
+        + '<button data-id="' + d.id + '" onclick="editStaff(this.dataset.id)" style="font-size:12px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:8px;background:none;cursor:pointer;color:var(--text2)">Edit</button>'
+        + '</div>';
+    });
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="empty">Error: ' + e.message + '</div>'; }
+}
+
+function showAddStaff() {
+  editingStaffId = null;
+  smRole = 'reception';
+  document.getElementById('staff-modal-title').textContent = 'Add Staff';
+  document.getElementById('sm-name').value = '';
+  document.getElementById('sm-email').value = '';
+  document.getElementById('sm-pass').value = '';
+  document.getElementById('sm-pin').value = '';
+  document.getElementById('sm-err').textContent = '';
+  document.getElementById('sm-pass-field').style.display = 'block';
+  document.getElementById('sm-email-note').textContent = 'A Firebase account will be created';
+  document.getElementById('sm-deactivate-row').style.display = 'none';
+  document.getElementById('sm-save-btn').textContent = 'Create Account';
+  ['reception','lab','admin','pathologist'].forEach(function(r){
+    document.getElementById('smr-'+r).className = 'tog';
+  });
+  document.getElementById('staff-modal').classList.add('open');
+}
+
+async function editStaff(id) {
+  editingStaffId = id;
+  try {
+    var snap = await db.collection('staff').doc(id).get();
+    var s = snap.data();
+    smRole = s.role || 'reception';
+    document.getElementById('staff-modal-title').textContent = 'Edit Staff';
+    document.getElementById('sm-name').value = s.name || '';
+    document.getElementById('sm-email').value = s.email || '';
+    document.getElementById('sm-pass').value = '';
+    document.getElementById('sm-pin').value = s.pin || '';
+    document.getElementById('sm-err').textContent = '';
+    document.getElementById('sm-pass-field').style.display = 'block';
+    document.getElementById('sm-email-note').textContent = 'Leave password blank to keep existing';
+    document.getElementById('sm-deactivate-row').style.display = s.active===false ? 'none' : 'block';
+    document.getElementById('sm-save-btn').textContent = 'Save Changes';
+    ['reception','lab','admin','pathologist'].forEach(function(r){
+      document.getElementById('smr-'+r).className = 'tog' + (r===smRole?' on':'');
+    });
+    document.getElementById('staff-modal').classList.add('open');
+  } catch(e) { toast('Error loading staff: ' + e.message, 'err'); }
+}
+
+function closeStaffModal() {
+  document.getElementById('staff-modal').classList.remove('open');
+  editingStaffId = null;
+}
+
+function setStaffRole(r) {
+  smRole = r;
+  ['reception','lab','admin','pathologist'].forEach(function(x){
+    document.getElementById('smr-'+x).className = 'tog' + (x===r?' on':'');
+  });
+}
+
+async function saveStaff() {
+  var name = document.getElementById('sm-name').value.trim();
+  var email = document.getElementById('sm-email').value.trim();
+  var pass = document.getElementById('sm-pass').value;
+  var pin = document.getElementById('sm-pin').value;
+  var err = document.getElementById('sm-err');
+  var btn = document.getElementById('sm-save-btn');
+
+  if (!name) { err.textContent = 'Name is required'; return; }
+  if (!email) { err.textContent = 'Email is required'; return; }
+  if (pin && !/^[0-9]{4}$/.test(pin)) { err.textContent = 'PIN must be exactly 4 digits'; return; }
+
+  btn.disabled = true; btn.textContent = 'Saving...';
+  err.textContent = '';
+
+  try {
+    if (!editingStaffId) {
+      // NEW STAFF — create Firebase Auth account
+      if (!pass || pass.length < 6) { err.textContent = 'Password must be at least 6 characters'; btn.disabled=false; btn.textContent='Create Account'; return; }
+      if (!pin) { err.textContent = 'PIN is required for new staff'; btn.disabled=false; btn.textContent='Create Account'; return; }
+      var cred = await auth.createUserWithEmailAndPassword(email, pass);
+      await db.collection('staff').doc(cred.user.uid).set({
+        name: name, email: email, role: smRole, pin: pin,
+        uid: cred.user.uid, active: true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        createdBy: curUser.uid
+      });
+      toast('Staff account created', 'ok');
+    } else {
+      // EDIT EXISTING — update Firestore only
+      var update = { name: name, email: email, role: smRole };
+      if (pin) update.pin = pin;
+      await db.collection('staff').doc(editingStaffId).update(update);
+      toast('Staff updated', 'ok');
+    }
+    closeStaffModal();
+    loadAdminStaff();
+  } catch(e) {
+    var msgs = {
+      'auth/email-already-in-use': 'Email already registered',
+      'auth/weak-password': 'Password too short',
+      'auth/invalid-email': 'Invalid email'
+    };
+    err.textContent = msgs[e.code] || e.message;
+    btn.disabled = false;
+    btn.textContent = editingStaffId ? 'Save Changes' : 'Create Account';
+  }
+}
+
+async function deactivateStaff() {
+  if (!editingStaffId) return;
+  if (!confirm('Deactivate this staff account? They will not be able to log in.')) return;
+  try {
+    await db.collection('staff').doc(editingStaffId).update({ active: false });
+    toast('Staff deactivated', 'ok');
+    closeStaffModal();
+    loadAdminStaff();
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+// Temp role functions
+function selectTempRole(role) {
+  selTempRole = role;
+  ['reception','lab','admin','pathologist'].forEach(function(r){
+    document.getElementById('tr-'+r).className = 'tog' + (r===role?' on':'');
+  });
+}
+
+async function grantTempRole() {
+  var email = document.getElementById('temp-email').value.trim();
+  var reason = document.getElementById('temp-reason').value.trim();
+  if (!email) { toast('Enter staff email','warn'); return; }
+  if (!selTempRole) { toast('Select a role','warn'); return; }
+  try {
+    var snap = await db.collection('staff').where('email','==',email).get();
+    if (snap.empty) { toast('Staff not found','err'); return; }
+    var staffDoc = snap.docs[0];
+    await db.collection('temp_roles').add({
+      staffId: staffDoc.id, staffName: staffDoc.data().name, staffEmail: email,
+      tempRole: selTempRole, reason: reason, date: todayStr(),
+      grantedBy: curUser.uid, grantedByName: (curProfile&&curProfile.name)||curUser.email,
+      grantedAt: firebase.firestore.FieldValue.serverTimestamp(), active: true
+    });
+    toast('Temp role granted', 'ok');
+    document.getElementById('temp-email').value = '';
+    document.getElementById('temp-reason').value = '';
+    selTempRole = '';
+    ['reception','lab','admin','pathologist'].forEach(function(r){
+      document.getElementById('tr-'+r).className = 'tog';
+    });
+    loadTempRoles();
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+async function loadTempRoles() {
+  var el = document.getElementById('temp-roles-list');
+  try {
+    var snap = await db.collection('temp_roles').where('date','==',todayStr()).where('active','==',true).get();
+    if (snap.empty) { el.innerHTML = '<div class="empty">No temp roles active today</div>'; return; }
+    var html = '';
+    snap.forEach(function(d) {
+      var r = d.data();
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid var(--border)">'
+        + '<div><div style="font-size:13px;font-weight:500">' + esc(r.staffName) + '</div>'
+        + '<div style="font-size:11px;color:var(--text3);font-family:var(--mono)">' + r.tempRole.toUpperCase() + (r.reason?' · '+esc(r.reason):'') + '</div></div>'
+        + '<button data-id="' + d.id + '" onclick="revokeTempRole(this.dataset.id)" style="font-size:12px;padding:5px 10px;border:0.5px solid var(--red);border-radius:6px;color:var(--red);background:none;cursor:pointer">Revoke</button>'
+        + '</div>';
+    });
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="empty">Error loading</div>'; }
+}
+
+async function revokeTempRole(id) {
+  try {
+    await db.collection('temp_roles').doc(id).update({ active: false });
+    toast('Revoked', 'ok');
+    loadTempRoles();
+  } catch(e) { toast('Error','err'); }
 }
 
 // ── HELPERS ──

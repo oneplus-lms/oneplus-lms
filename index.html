@@ -159,13 +159,13 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 
 @media print {
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  #app > *:not(#s-trf) { display: none !important; }
-  #s-trf { position: static !important; transform: none !important; opacity: 1 !important; pointer-events: all !important; background: #fff !important; height: auto !important; overflow: visible !important; }
+  html, body, #app { height: auto !important; overflow: visible !important; }
+  #app > * { display: none !important; }
+  #s-trf { display: flex !important; flex-direction: column !important; position: static !important; transform: none !important; opacity: 1 !important; pointer-events: all !important; background: #fff !important; height: auto !important; overflow: visible !important; page-break-after: avoid !important; }
   #s-trf .topbar { display: none !important; }
-  #s-trf .scroll-body { padding-bottom: 0 !important; overflow: visible !important; height: auto !important; }
+  #s-trf .scroll-body { padding: 0 !important; overflow: visible !important; height: auto !important; max-height: none !important; flex: none !important; }
   #s-trf button { display: none !important; }
-  @page { margin: 10mm; size: A4; }
-  html, body { height: auto !important; overflow: visible !important; }
+  @page { margin: 10mm; size: A4 portrait; }
 }
 </style>
 </head>
@@ -273,7 +273,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div style="flex:1"><div class="topbar-title">New Order</div><div class="topbar-sub" id="order-step-lbl">Step 1 - Patient Info</div></div>
   </div>
   <div class="step-bar">
-    <div class="step-seg curr" id="seg0"></div><div class="step-seg" id="seg1"></div><div class="step-seg" id="seg2"></div>
+    <div class="step-seg curr" id="seg0"></div><div class="step-seg" id="seg1"></div><div class="step-seg" id="seg2"></div><div class="step-seg" id="seg3"></div>
   </div>
   <div class="scroll-body">
     <div id="step1">
@@ -286,7 +286,144 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <div class="field"><label>Referred by</label><input type="text" id="pt-ref" placeholder="Dr. name or self"></div>
       <button class="btn btn-primary" onclick="step1Next()">Next - Select Tests</button>
     </div>
-    <div id="step2" style="display:none">
+    <!-- STEP 1b: CLINICAL HISTORY -->
+    <div id="step1b" style="display:none">
+      <button onclick="showStep(1)" style="font-size:12px;color:var(--text2);font-family:var(--mono);margin-bottom:12px;padding:4px 0;background:none;border:none;cursor:pointer">&#8592; Back to Patient Info</button>
+
+      <!-- Fasting -->
+      <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Fasting Status</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button type="button" class="tog" id="fast-no" onclick="setHist('fasting','No')" style="flex:1">Not Fasting</button>
+          <button type="button" class="tog" id="fast-yes" onclick="setHist('fasting','Yes')" style="flex:1">Fasting</button>
+        </div>
+        <div id="fast-hours-row" style="display:none">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:6px">Fasting duration</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="tog" id="fh-4" onclick="setHist('fastHours','4h')" style="flex:none;padding:6px 14px">4h</button>
+            <button type="button" class="tog" id="fh-6" onclick="setHist('fastHours','6h')" style="flex:none;padding:6px 14px">6h</button>
+            <button type="button" class="tog" id="fh-8" onclick="setHist('fastHours','8h')" style="flex:none;padding:6px 14px">8h</button>
+            <button type="button" class="tog" id="fh-10" onclick="setHist('fastHours','10h')" style="flex:none;padding:6px 14px">10h</button>
+            <button type="button" class="tog" id="fh-12" onclick="setHist('fastHours','12h+')" style="flex:none;padding:6px 14px">12h+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pregnancy (shown for Female) -->
+      <div id="preg-section" style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Pregnancy</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button type="button" class="tog" id="preg-no" onclick="setHist('pregnant','No')" style="flex:1">Not Pregnant</button>
+          <button type="button" class="tog" id="preg-yes" onclick="setHist('pregnant','Yes')" style="flex:1">Pregnant</button>
+          <button type="button" class="tog" id="preg-uk" onclick="setHist('pregnant','Unknown')" style="flex:1">Unknown</button>
+        </div>
+        <div id="preg-details-row" style="display:none;gap:8px">
+          <div class="field" style="margin-bottom:8px">
+            <label>Gestational Age (weeks)</label>
+            <input type="number" id="hist-ga" placeholder="e.g. 12" min="4" max="42" oninput="curHistory.ga=this.value">
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label>LMP Date</label>
+            <input type="date" id="hist-lmp" oninput="curHistory.lmp=this.value">
+          </div>
+        </div>
+        <div id="lmp-only-row" style="display:none">
+          <div class="field" style="margin-bottom:0">
+            <label>LMP Date</label>
+            <input type="date" id="hist-lmp2" oninput="curHistory.lmp=this.value">
+          </div>
+        </div>
+      </div>
+
+      <!-- Known Diagnosis -->
+      <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Known Diagnosis</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" id="diag-grid">
+          <button type="button" class="tog" id="diag-dm" onclick="toggleDiag('Diabetic')">Diabetic</button>
+          <button type="button" class="tog" id="diag-htn" onclick="toggleDiag('Hypertensive')">Hypertensive</button>
+          <button type="button" class="tog" id="diag-ckd" onclick="toggleDiag('CKD')">CKD</button>
+          <button type="button" class="tog" id="diag-hypo" onclick="toggleDiag('Hypothyroid')">Hypothyroid</button>
+          <button type="button" class="tog" id="diag-liver" onclick="toggleDiag('Liver disease')">Liver disease</button>
+          <button type="button" class="tog" id="diag-cardiac" onclick="toggleDiag('Cardiac')">Cardiac</button>
+          <button type="button" class="tog" id="diag-pregnant" onclick="toggleDiag('Pregnant')">Pregnant</button>
+          <button type="button" class="tog" id="diag-cancer" onclick="toggleDiag('Malignancy')">Malignancy</button>
+        </div>
+        <div class="field" style="margin-top:10px;margin-bottom:0">
+          <label>Other diagnosis</label>
+          <input type="text" id="diag-other" placeholder="e.g. Thalassemia trait" oninput="curHistory.diagOther=this.value">
+        </div>
+      </div>
+
+      <!-- Current Medications -->
+      <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Current Medications</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <button type="button" class="tog" id="med-thyroxine" onclick="toggleMed('Thyroxine')">Thyroxine</button>
+          <button type="button" class="tog" id="med-metformin" onclick="toggleMed('Metformin')">Metformin</button>
+          <button type="button" class="tog" id="med-anticoag" onclick="toggleMed('Anticoagulant')">Anticoagulant</button>
+          <button type="button" class="tog" id="med-steroid" onclick="toggleMed('Steroid')">Steroid</button>
+          <button type="button" class="tog" id="med-iron" onclick="toggleMed('Iron supplement')">Iron supplement</button>
+          <button type="button" class="tog" id="med-antihtn" onclick="toggleMed('Antihypertensive')">Antihypertensive</button>
+          <button type="button" class="tog" id="med-statin" onclick="toggleMed('Statin')">Statin</button>
+          <button type="button" class="tog" id="med-insulin" onclick="toggleMed('Insulin')">Insulin</button>
+          <button type="button" class="tog" id="med-ocp" onclick="toggleMed('OCP')">OCP</button>
+          <button type="button" class="tog" id="med-none" onclick="toggleMed('None')">None / NA</button>
+        </div>
+        <div class="field" style="margin-top:10px;margin-bottom:0">
+          <label>Other medications</label>
+          <input type="text" id="med-other" placeholder="e.g. Phenytoin 300mg" oninput="curHistory.medOther=this.value">
+        </div>
+      </div>
+
+      <!-- Symptoms Duration -->
+      <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Symptoms Since</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="tog" id="sym-today" onclick="setHist('symptoms','Today')" style="flex:none;padding:7px 12px">Today</button>
+          <button type="button" class="tog" id="sym-2d" onclick="setHist('symptoms','2-3 days')" style="flex:none;padding:7px 12px">2-3 days</button>
+          <button type="button" class="tog" id="sym-1w" onclick="setHist('symptoms','1 week')" style="flex:none;padding:7px 12px">1 week</button>
+          <button type="button" class="tog" id="sym-2w" onclick="setHist('symptoms','2 weeks')" style="flex:none;padding:7px 12px">2 weeks</button>
+          <button type="button" class="tog" id="sym-1m" onclick="setHist('symptoms','1 month+')" style="flex:none;padding:7px 12px">1 month+</button>
+          <button type="button" class="tog" id="sym-na" onclick="setHist('symptoms','Not applicable')" style="flex:none;padding:7px 12px">NA</button>
+        </div>
+      </div>
+
+      <!-- Previous Tests -->
+      <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Previous Tests</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button type="button" class="tog" id="prev-no" onclick="setHist('prevTests','No')" style="flex:1">First time</button>
+          <button type="button" class="tog" id="prev-yes" onclick="setHist('prevTests','Yes')" style="flex:1">Done before</button>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Last result / value (if known)</label>
+          <input type="text" id="hist-prev-val" placeholder="e.g. HbA1c 8.2% in Jan 2026" oninput="curHistory.prevValue=this.value">
+        </div>
+      </div>
+
+      <!-- Sample Collection Time + Ordering Doctor -->
+      <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Collection Details</div>
+        <div class="field">
+          <label>Sample Collection Time</label>
+          <input type="time" id="hist-time" oninput="curHistory.collectionTime=this.value">
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Ordering Doctor</label>
+          <input type="text" id="hist-doctor" placeholder="Dr. name (if different from referral)" oninput="curHistory.orderingDoctor=this.value">
+        </div>
+      </div>
+
+      <!-- Clinical Notes -->
+      <div class="field">
+        <label>Clinical Notes</label>
+        <input type="text" id="hist-notes" placeholder="Any other relevant clinical information" oninput="curHistory.clinicalNotes=this.value">
+      </div>
+
+      <button class="btn btn-primary" onclick="step1bNext()">Next &#8594; Select Tests</button>
+    </div>
+
+        <div id="step2" style="display:none">
       <button onclick="showStep(1)" style="font-size:12px;color:var(--text2);font-family:var(--mono);margin-bottom:12px;padding:4px 0;background:none;border:none;cursor:pointer">&#8592; Back to Patient Info</button>
       <input style="width:100%;padding:10px 14px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:16px;margin-bottom:4px;display:block" type="text" id="test-q" placeholder="Type test name..." oninput="searchTests(this.value)" autocomplete="off">
       <div id="test-suggest" style="display:none;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);margin-bottom:12px"></div>
@@ -819,13 +956,17 @@ function renderTests() {
 
 // ── ORDER STEPS ──
 function showStep(n) {
+  var s1b = n==='1b';
   document.getElementById('step1').style.display=n===1?'block':'none';
+  document.getElementById('step1b').style.display=s1b?'block':'none';
   document.getElementById('step2').style.display=n===2?'block':'none';
   document.getElementById('step3').style.display=n===3?'block':'none';
-  var labels=['Step 1 - Patient Info','Step 2 - Select Tests','Step 3 - Billing'];
-  document.getElementById('order-step-lbl').textContent=labels[n-1];
-  ['seg0','seg1','seg2'].forEach(function(id,i){
-    document.getElementById(id).className='step-seg'+(i<n-1?' done':i===n-1?' curr':'');
+  var labels={1:'Step 1 - Patient Info','1b':'Step 1b - Clinical History',2:'Step 2 - Select Tests',3:'Step 3 - Billing'};
+  document.getElementById('order-step-lbl').textContent=labels[n]||'';
+  var segMap={1:0,'1b':1,2:2,3:3};
+  var pos=segMap[n]||0;
+  ['seg0','seg1','seg2','seg3'].forEach(function(id,i){
+    document.getElementById(id).className='step-seg'+(i<pos?' done':i===pos?' curr':'');
   });
 }
 function step1Next() {
@@ -837,7 +978,17 @@ function step1Next() {
   curOrder.sex=document.getElementById('pt-sex').value;
   curOrder.phone=document.getElementById('pt-phone').value;
   curOrder.refBy=document.getElementById('pt-ref').value;
-  selTests=[]; renderTests(); showStep(2);
+  curHistory=resetHistory();
+  // Pre-set collection time to now
+  var now=new Date();
+  var hh=String(now.getHours()).padStart(2,'0');
+  var mm=String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('hist-time').value=hh+':'+mm;
+  curHistory.collectionTime=hh+':'+mm;
+  // Show/hide pregnancy section based on sex
+  var sex=curOrder.sex;
+  document.getElementById('preg-section').style.display=(sex==='F'||sex==='O'||sex==='')?'block':'none';
+  showStep('1b');
 }
 function step2Next() {
   if (!selTests.length) { toast('Select at least one test','warn'); return; }
@@ -875,6 +1026,7 @@ function submitOrder() {
     netAmount:Math.max(0,curOrder.totalAmount-disc),
     paidAmount:paid, dueAmount:Math.max(0,curOrder.totalAmount-disc)-paid,
     payMode:payMode, notes:document.getElementById('bill-notes').value,
+    history:curOrder.history||{},
     date:todayStr(), createdAt:firebase.firestore.FieldValue.serverTimestamp(),
     createdBy:curUser.uid, createdByName:(curProfile&&curProfile.name)||curUser.email,
     status:payMode==='credit'?'pending':'paid'
@@ -887,7 +1039,7 @@ function submitOrder() {
   }).catch(function(e){ toast('Save failed - check connection','err'); });
 }
 function newOrder() {
-  curOrder={}; selTests=[]; payMode='cash';
+  curOrder={}; selTests=[]; payMode='cash'; curHistory={}; selDiagnoses=[]; selMeds=[];
   ['pt-name','pt-age','pt-phone','pt-ref','bill-notes'].forEach(function(id){
     document.getElementById(id).value='';
   });
@@ -1232,6 +1384,27 @@ function openTRF() {
     + '<div><div style="font-size:10px;color:#999">Date</div><div style="font-size:14px">' + esc(o.date||'-') + '</div></div>'
     + '<div><div style="font-size:10px;color:#999">Order ID</div><div style="font-size:14px;font-family:monospace">#' + id + '</div></div>'
     + '</div></div>'
+    + '<div style="background:#fff;border:0.5px solid #ddd;border-radius:12px;padding:14px 16px;margin-bottom:12px">'
+    + '<div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Clinical History</div>'
+    + (function(){
+        var h = o.history||{};
+        var lines = [];
+        if (h.fasting) lines.push('Fasting: ' + h.fasting + (h.fastHours?' ('+h.fastHours+')':''));
+        if (h.pregnant) lines.push('Pregnant: ' + h.pregnant + (h.ga?' GA '+h.ga+'w':'') + (h.lmp?' LMP:'+h.lmp:''));
+        if (h.diagnoses&&h.diagnoses.length) lines.push('Diagnosis: ' + h.diagnoses.join(', '));
+        if (h.diagOther) lines.push('Other Dx: ' + h.diagOther);
+        if (h.medications&&h.medications.length) lines.push('Medications: ' + h.medications.join(', '));
+        if (h.medOther) lines.push('Other meds: ' + h.medOther);
+        if (h.symptoms) lines.push('Symptoms since: ' + h.symptoms);
+        if (h.prevTests) lines.push('Previous tests: ' + h.prevTests + (h.prevValue?' ('+h.prevValue+')':''));
+        if (h.collectionTime) lines.push('Collection time: ' + h.collectionTime);
+        if (h.orderingDoctor) lines.push('Ordering doctor: ' + h.orderingDoctor);
+        if (h.clinicalNotes) lines.push('Notes: ' + h.clinicalNotes);
+        if (!lines.length) return '<div style="font-size:12px;color:#999">No history recorded</div>';
+        return lines.map(function(l){ return '<div style="font-size:12px;padding:3px 0;border-bottom:1px solid #f5f5f5;color:#333">' + esc(l) + '</div>'; }).join('');
+      })()
+    + '</div>'
+
     + '<div style="background:#fff;border:0.5px solid #ddd;border-radius:12px;overflow:hidden;margin-bottom:12px">'
     + '<div style="padding:10px 16px;border-bottom:0.5px solid #eee;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.06em">Tests Ordered</div>'
     + '<table style="width:100%;border-collapse:collapse">'
@@ -1271,6 +1444,79 @@ function shareTRFWA() {
     '_OnePLUS Lab Management System_'
   ];
   window.open('https://wa.me/?text=' + encodeURIComponent(lines.join('\n')), '_blank');
+}
+
+// ── CLINICAL HISTORY ──
+var curHistory = {};
+var selDiagnoses = [];
+var selMeds = [];
+
+function resetHistory() {
+  selDiagnoses = [];
+  selMeds = [];
+  curHistory = {fasting:'', fastHours:'', pregnant:'', ga:'', lmp:'', diagnoses:[], medications:[], medOther:'', diagOther:'', symptoms:'', prevTests:'', prevValue:'', collectionTime:'', orderingDoctor:'', clinicalNotes:''};
+  // Reset all toggles
+  document.querySelectorAll('#step1b .tog').forEach(function(b){ b.className='tog'; });
+  ['hist-ga','hist-lmp','hist-lmp2','hist-prev-val','hist-notes','hist-doctor','med-other','diag-other'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('fast-hours-row').style.display='none';
+  document.getElementById('preg-details-row').style.display='none';
+  document.getElementById('lmp-only-row').style.display='none';
+  return curHistory;
+}
+
+function setHist(key, val) {
+  curHistory[key] = val;
+  // Update toggle UI
+  var prefixMap = {fasting:'fast-',fastHours:'fh-',pregnant:'preg-',symptoms:'sym-',prevTests:'prev-'};
+  var idMap = {fasting:{No:'no',Yes:'yes'},fastHours:{'4h':'4','6h':'6','8h':'8','10h':'10','12h+':'12'},pregnant:{No:'no',Yes:'yes',Unknown:'uk'},symptoms:{Today:'today','2-3 days':'2d','1 week':'1w','2 weeks':'2w','1 month+':'1m','Not applicable':'na'},prevTests:{No:'no',Yes:'yes'}};
+  if (idMap[key]) {
+    Object.keys(idMap[key]).forEach(function(v){
+      var el=document.getElementById((prefixMap[key]||'')+idMap[key][v]);
+      if(el) el.className='tog'+(v===val?' on':'');
+    });
+  }
+  // Show/hide sub-rows
+  if (key==='fasting') {
+    document.getElementById('fast-hours-row').style.display=val==='Yes'?'block':'none';
+    if (val==='No') curHistory.fastHours='';
+  }
+  if (key==='pregnant') {
+    document.getElementById('preg-details-row').style.display=val==='Yes'?'block':'none';
+    document.getElementById('lmp-only-row').style.display=val==='No'?'block':'none';
+  }
+}
+
+function toggleDiag(d) {
+  var idx=selDiagnoses.indexOf(d);
+  if(idx>=0) selDiagnoses.splice(idx,1); else selDiagnoses.push(d);
+  curHistory.diagnoses=selDiagnoses.slice();
+  var idMap={'Diabetic':'dm','Hypertensive':'htn','CKD':'ckd','Hypothyroid':'hypo','Liver disease':'liver','Cardiac':'cardiac','Pregnant':'pregnant','Malignancy':'cancer'};
+  Object.keys(idMap).forEach(function(k){
+    var el=document.getElementById('diag-'+idMap[k]);
+    if(el) el.className='tog'+(selDiagnoses.indexOf(k)>=0?' on':'');
+  });
+}
+
+function toggleMed(m) {
+  if (m==='None') { selMeds=[]; document.querySelectorAll('[id^="med-"]').forEach(function(b){ b.className='tog'; }); document.getElementById('med-none').className='tog on'; }
+  else {
+    var idx=selMeds.indexOf('None'); if(idx>=0) selMeds.splice(idx,1);
+    var i=selMeds.indexOf(m);
+    if(i>=0) selMeds.splice(i,1); else selMeds.push(m);
+  }
+  curHistory.medications=selMeds.slice();
+  var idMap={'Thyroxine':'thyroxine','Metformin':'metformin','Anticoagulant':'anticoag','Steroid':'steroid','Iron supplement':'iron','Antihypertensive':'antihtn','Statin':'statin','Insulin':'insulin','OCP':'ocp','None':'none'};
+  Object.keys(idMap).forEach(function(k){
+    var el=document.getElementById('med-'+idMap[k]);
+    if(el) el.className='tog'+(selMeds.indexOf(k)>=0?' on':'');
+  });
+}
+
+function step1bNext() {
+  curOrder.history = Object.assign({}, curHistory);
+  selTests=[]; renderTests(); showStep(2);
 }
 
 // ── HELPERS ──

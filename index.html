@@ -142,6 +142,14 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 .ho-confirm-title{font-size:15px;font-weight:600;margin-bottom:6px}
 .ho-confirm-sub{font-size:13px;color:var(--text2);margin-bottom:18px}
 .ho-confirm-actions{display:flex;gap:8px}
+/* Edit Order Modal */
+.edit-modal-bg{position:fixed;inset:0;background:rgba(20,15,5,0.55);z-index:400;display:flex;align-items:flex-end;justify-content:center}
+.edit-modal{background:var(--surface);border-radius:20px 20px 0 0;padding:20px 20px 40px;width:100%;max-width:430px;max-height:88vh;overflow-y:auto;transform:translateY(100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1)}
+.edit-modal-bg.open .edit-modal{transform:translateY(0)}
+.edit-section-lbl{font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:14px 0 6px}
+.edit-test-chip{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:0.5px solid var(--border);border-radius:var(--radius);padding:7px 10px;margin-bottom:6px;font-size:13px}
+.edit-test-remove{color:var(--red);background:none;border:none;font-size:16px;cursor:pointer;padding:0 0 0 8px;line-height:1}
+.edit-warn-box{background:#FFFBEB;border:1px solid #FCD34D;border-radius:var(--radius);padding:10px 12px;font-size:12px;color:#92400E;margin-bottom:12px}
 /* Audit Trail / Order Detail */
 .audit-timeline{padding:0 0 16px}
 .audit-event{display:flex;gap:12px;margin-bottom:0}
@@ -589,6 +597,60 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   </div>
 </div>
 
+<!-- EDIT ORDER MODAL -->
+<div id="edit-modal-bg" class="edit-modal-bg" style="display:none" onclick="if(event.target===this)closeEditModal()">
+  <div class="edit-modal" id="edit-modal">
+    <div class="modal-handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div class="modal-title">Edit Order</div>
+      <button onclick="closeEditModal()" style="font-size:20px;background:none;border:none;color:var(--text3);cursor:pointer;padding:0">&#10005;</button>
+    </div>
+    <div class="edit-warn-box">&#9888; Edits are logged with your name, timestamp and reason. For NABL audit compliance.</div>
+
+    <div class="edit-section-lbl">Patient Info</div>
+    <div class="field"><label>Patient Name</label><input type="text" id="edit-name" placeholder="Full name"></div>
+    <div class="field"><label>Mobile</label><input type="tel" id="edit-phone" placeholder="9876543210" inputmode="numeric" maxlength="10"></div>
+    <div class="field"><label>Referred by</label><input type="text" id="edit-ref" placeholder="Dr. name or self"></div>
+
+    <div class="edit-section-lbl">Tests</div>
+    <div id="edit-tests-list"></div>
+    <div style="position:relative;margin-bottom:10px">
+      <input type="text" id="edit-test-q" placeholder="Add test..." autocomplete="off"
+        style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px"
+        oninput="editSearchTests(this.value)">
+      <div id="edit-test-suggest" style="display:none;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);margin-top:2px;max-height:180px;overflow-y:auto;position:relative;z-index:10"></div>
+    </div>
+
+    <div class="edit-section-lbl">Payment</div>
+    <div class="pay-mode-grid" style="margin-bottom:10px">
+      <button class="pay-mode-btn" id="epm-cash" onclick="setEditPay('cash')">&#128181; Cash</button>
+      <button class="pay-mode-btn" id="epm-upi" onclick="setEditPay('upi')">&#128241; UPI</button>
+      <button class="pay-mode-btn" id="epm-card" onclick="setEditPay('card')">&#128179; Card</button>
+      <button class="pay-mode-btn on-credit" id="epm-credit" onclick="setEditPay('credit')">&#128218; Credit</button>
+    </div>
+    <div class="field" id="edit-paid-field">
+      <label>Amount Paid (Rs.)</label>
+      <input type="number" id="edit-paid" placeholder="0" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label>Discount (Rs.)</label>
+      <input type="number" id="edit-discount" placeholder="0" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label>Notes / Remarks</label>
+      <input type="text" id="edit-notes" placeholder="Remarks...">
+    </div>
+
+    <div class="edit-section-lbl">Reason for Edit <span style="color:var(--red)">*</span></div>
+    <div class="field">
+      <input type="text" id="edit-reason" placeholder="e.g. Wrong test added, payment mode corrected...">
+      <div class="ferr" id="err-edit-reason">Reason is required</div>
+    </div>
+
+    <button class="btn btn-primary" style="width:100%;margin-top:6px" onclick="submitEditOrder()">Save Changes</button>
+  </div>
+</div>
+
 <!-- ORDER DETAIL / AUDIT TRAIL -->
 <div id="s-order-detail" class="screen">
   <div class="topbar">
@@ -901,8 +963,7 @@ var stack = [];
 var lastOrder = null;
 
 // ── NAVIGATION ──
-function goTo(id, push) {
-  if (push !== false) stack.push(id);
+function showScreen(id) {
   // Clean up HO real-time listener when leaving handover screen
   if (id !== 's-ho' && hoUnsubscribe) { hoUnsubscribe(); hoUnsubscribe=null; }
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
@@ -913,31 +974,39 @@ function goTo(id, push) {
   if (id === 's-eod') loadEOD();
   if (id === 's-admin') loadAdminScreen();
   if (id === 's-order') { curOrder={}; selTests=[]; showStep(1); renderTests(); }
-  // Push a dummy history state so Android back button fires popstate instead of closing the app
-  if (push !== false) history.pushState({screen: id}, '', '');
+}
+function goTo(id, push) {
+  if (push !== false) stack.push(id);
+  showScreen(id);
+  // Always keep one sentinel entry ahead in browser history so
+  // the hardware back button fires popstate instead of closing the app.
+  // replaceState on root screens, pushState when navigating forward.
+  if (push === false) {
+    history.replaceState({appNav: true}, '', '');
+  } else {
+    history.pushState({appNav: true}, '', '');
+  }
 }
 function goBack() {
-  stack.pop();
+  if (stack.length > 1) stack.pop();
   var prev = stack[stack.length-1] || 's-dash';
-  if (prev !== 's-ho' && hoUnsubscribe) { hoUnsubscribe(); hoUnsubscribe=null; }
-  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
-  document.getElementById(prev).classList.add('active');
-  // Load screen data if needed
-  if (prev === 's-orders') loadOrders();
-  if (prev === 's-ho') loadHO();
-  if (prev === 's-eod') loadEOD();
+  showScreen(prev);
+  // After going back, push a fresh sentinel so the NEXT back press
+  // is also caught — without this, back would exit after one goBack().
+  history.pushState({appNav: true}, '', '');
 }
-// Push initial history state so first back press doesn't exit the app
-history.replaceState({screen: 's-dash'}, '', '');
+// Seed initial sentinel state
+history.replaceState({appNav: true}, '', '');
 
 // Intercept Android hardware back button / browser back gesture
 window.addEventListener('popstate', function(e) {
+  // popstate fires when browser consumes our sentinel.
+  // Always re-push a sentinel immediately so we never run out.
+  history.pushState({appNav: true}, '', '');
   if (stack.length > 1) {
     goBack();
-  } else {
-    // At root — push state again to prevent app exit
-    history.pushState({screen: 's-dash'}, '', '');
   }
+  // If at root (stack.length === 1) just swallow the event — app stays open.
 });
 
 // ── AUTH STATE ──
@@ -1544,8 +1613,9 @@ function renderOrderDetail(o) {
     + '</div></div>'
 
     // Action buttons
+    + '<button class="btn" style="width:100%;margin-bottom:10px;border-color:var(--accent);color:var(--accent)" onclick="openEditModal()">&#9998; Edit Order</button>'
     + '<button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="openDetailTRF()">&#128221; View / Print TRF</button>'
-    + '<button class="btn" style="width:100%" onclick="shareDetailWA()">&#128172; Share via WhatsApp</button>';
+    + '<button class="btn" style="width:100%;" onclick="shareDetailWA()">&#128172; Share via WhatsApp</button>';
 }
 
 function buildAuditTrail(o) {
@@ -1621,8 +1691,179 @@ function buildAuditTrail(o) {
     events.push({ title: 'Prescription Photo Attached', type: 'info' });
   }
 
+  // 8. Amendments (edits)
+  if (o.amendments && o.amendments.length) {
+    o.amendments.forEach(function(a) {
+      events.push({
+        title: 'Order Amended',
+        sub: 'By ' + (a.byName||'-') + ' · Reason: ' + (a.reason||'-') + (a.changes&&a.changes.length ? '\n' + a.changes.join(' | ') : ''),
+        at: a.at || '',
+        type: 'warn'
+      });
+    });
+  }
+
   return events;
 }
+
+// ── EDIT ORDER ──
+var editSelTests = [];
+var editPayMode = 'cash';
+
+function openEditModal() {
+  var o = curDetailOrder;
+  if (!o) return;
+  var role = curProfile && curProfile.role || '';
+  if (role === 'lab') { toast('Lab role cannot edit orders', 'warn'); return; }
+
+  // Populate fields
+  document.getElementById('edit-name').value = o.patientName || '';
+  document.getElementById('edit-phone').value = o.phone || '';
+  document.getElementById('edit-ref').value = o.refBy || '';
+  document.getElementById('edit-notes').value = o.notes || '';
+  document.getElementById('edit-discount').value = o.discount || 0;
+  document.getElementById('edit-paid').value = o.paidAmount || 0;
+  document.getElementById('edit-reason').value = '';
+  document.getElementById('err-edit-reason').classList.remove('on');
+  document.getElementById('edit-test-q').value = '';
+  document.getElementById('edit-test-suggest').style.display = 'none';
+
+  // Copy tests
+  editSelTests = (o.tests || []).map(function(t) { return Object.assign({}, t); });
+  renderEditTests();
+
+  // Set pay mode
+  editPayMode = o.payMode || 'cash';
+  setEditPay(editPayMode);
+
+  // Show modal
+  var bg = document.getElementById('edit-modal-bg');
+  bg.style.display = 'flex';
+  setTimeout(function() { bg.classList.add('open'); }, 10);
+}
+
+function closeEditModal() {
+  var bg = document.getElementById('edit-modal-bg');
+  bg.classList.remove('open');
+  setTimeout(function() { bg.style.display = 'none'; }, 280);
+}
+
+function renderEditTests() {
+  var el = document.getElementById('edit-tests-list');
+  if (!editSelTests.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">No tests selected</div>'; return; }
+  el.innerHTML = editSelTests.map(function(t, i) {
+    return '<div class="edit-test-chip">'
+      + '<span>' + esc(t.name) + ' <span style="color:var(--text3);font-size:11px;font-family:var(--mono)">Rs.' + (t.rate||0) + '</span></span>'
+      + '<button class="edit-test-remove" onclick="editRemoveTest(' + i + ')">&#10005;</button>'
+      + '</div>';
+  }).join('');
+}
+
+function editRemoveTest(i) {
+  editSelTests.splice(i, 1);
+  renderEditTests();
+  updateEditTotal();
+}
+
+function editSearchTests(q) {
+  var suggest = document.getElementById('edit-test-suggest');
+  if (!q || q.length < 2) { suggest.style.display = 'none'; return; }
+  var matches = CATALOGUE.filter(function(t) {
+    return t.name.toLowerCase().indexOf(q.toLowerCase()) >= 0;
+  }).slice(0, 8);
+  if (!matches.length) { suggest.style.display = 'none'; return; }
+  suggest.style.display = 'block';
+  suggest.innerHTML = matches.map(function(t) {
+    return '<div style="padding:9px 12px;border-bottom:0.5px solid var(--border);font-size:13px;cursor:pointer" onclick="editAddTest(' + JSON.stringify(t).replace(/"/g,'&quot;') + ')">'
+      + '<span style="font-weight:500">' + esc(t.name) + '</span>'
+      + ' <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">Rs.' + t.rate + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+function editAddTest(t) {
+  var already = editSelTests.some(function(x) { return x.name === t.name; });
+  if (!already) { editSelTests.push(t); renderEditTests(); updateEditTotal(); }
+  document.getElementById('edit-test-q').value = '';
+  document.getElementById('edit-test-suggest').style.display = 'none';
+}
+
+function updateEditTotal() {
+  var total = editSelTests.reduce(function(s, t) { return s + (t.rate || 0); }, 0);
+  var disc = parseFloat(document.getElementById('edit-discount').value || 0);
+  var net = Math.max(0, total - disc);
+  document.getElementById('edit-paid').value = editPayMode === 'credit' ? 0 : net;
+}
+
+function setEditPay(mode) {
+  editPayMode = mode;
+  ['cash','upi','card','credit'].forEach(function(m) {
+    var btn = document.getElementById('epm-' + m);
+    if (btn) btn.style.opacity = m === mode ? '1' : '0.45';
+    if (btn) btn.style.fontWeight = m === mode ? '600' : '400';
+    if (btn) btn.style.borderWidth = m === mode ? '2px' : '1px';
+  });
+  document.getElementById('edit-paid-field').style.display = mode === 'credit' ? 'none' : 'block';
+  if (mode === 'credit') document.getElementById('edit-paid').value = 0;
+}
+
+function submitEditOrder() {
+  var reason = document.getElementById('edit-reason').value.trim();
+  if (!reason) { document.getElementById('err-edit-reason').classList.add('on'); return; }
+  document.getElementById('err-edit-reason').classList.remove('on');
+
+  var o = curDetailOrder;
+  var name = document.getElementById('edit-name').value.trim() || o.patientName;
+  var phone = document.getElementById('edit-phone').value.trim();
+  var ref = document.getElementById('edit-ref').value.trim();
+  var notes = document.getElementById('edit-notes').value.trim();
+  var disc = parseFloat(document.getElementById('edit-discount').value || 0);
+  var paid = editPayMode === 'credit' ? 0 : parseFloat(document.getElementById('edit-paid').value || 0);
+  var total = editSelTests.reduce(function(s, t) { return s + (t.rate || 0); }, 0);
+
+  // Build change summary for audit
+  var changes = [];
+  if (name !== o.patientName) changes.push('Name: ' + o.patientName + ' → ' + name);
+  if (phone !== (o.phone||'')) changes.push('Phone changed');
+  if (ref !== (o.refBy||'')) changes.push('Ref: ' + (o.refBy||'-') + ' → ' + ref);
+  if (editPayMode !== o.payMode) changes.push('Payment: ' + o.payMode + ' → ' + editPayMode);
+  if (paid !== (o.paidAmount||0)) changes.push('Paid: Rs.' + o.paidAmount + ' → Rs.' + paid);
+  if (disc !== (o.discount||0)) changes.push('Discount: Rs.' + (o.discount||0) + ' → Rs.' + disc);
+  var oldTestNames = (o.tests||[]).map(function(t){return t.name;}).sort().join(',');
+  var newTestNames = editSelTests.map(function(t){return t.name;}).sort().join(',');
+  if (oldTestNames !== newTestNames) changes.push('Tests changed');
+  if (!changes.length) { toast('No changes detected', 'warn'); return; }
+
+  var now = new Date();
+  var amendment = {
+    by: curUser.uid,
+    byName: (curProfile && curProfile.name) || curUser.email,
+    at: now.toLocaleDateString('en-IN') + ' ' + now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+    reason: reason,
+    changes: changes
+  };
+
+  var updatedData = {
+    patientName: name, phone: phone, refBy: ref, notes: notes,
+    tests: editSelTests, totalAmount: total, discount: disc,
+    netAmount: Math.max(0, total - disc), paidAmount: paid,
+    dueAmount: Math.max(0, total - disc) - paid,
+    payMode: editPayMode, status: editPayMode === 'credit' ? 'pending' : 'paid',
+    lastEditedBy: amendment.byName, lastEditedAt: amendment.at,
+    amendments: firebase.firestore.FieldValue.arrayUnion(amendment)
+  };
+
+  db.collection('orders').doc(o.id).update(updatedData).then(function() {
+    closeEditModal();
+    toast('Order updated ✓', 'ok');
+    // Refresh detail view
+    Object.assign(curDetailOrder, updatedData);
+    curDetailOrder.amendments = (curDetailOrder.amendments || []).concat([amendment]);
+    renderOrderDetail(curDetailOrder);
+    loadStats();
+  }).catch(function(e) { toast('Save failed: ' + e.message, 'err'); });
+}
+
 
 function openDetailTRF() {
   if (!curDetailOrder) return;

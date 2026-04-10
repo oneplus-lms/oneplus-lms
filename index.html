@@ -566,6 +566,14 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         </div>
       </div>
 
+      <div class="urgent-toggle" id="urgent-toggle" onclick="toggleUrgent()">
+        <div class="urgent-icon">&#128680;</div>
+        <div style="flex:1">
+          <div class="urgent-label" id="urgent-label">Mark as Urgent</div>
+          <div class="urgent-sub" id="urgent-sub">Tap to flag for priority processing</div>
+        </div>
+        <div class="urgent-check" id="urgent-check"></div>
+      </div>
       <button class="btn btn-primary" onclick="submitOrder()">&#10003; Save Order</button>
     </div>
   </div>

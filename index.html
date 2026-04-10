@@ -309,6 +309,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <button class="qa-btn" onclick="goTo('s-ho')"><div class="qa-icon">&#128176;</div><div class="qa-label">Cash Handover</div><div class="qa-sub">EOD settlement</div></button>
       <button class="qa-btn" onclick="goTo('s-eod')"><div class="qa-icon">&#128202;</div><div class="qa-label">EOD Report</div><div class="qa-sub">WhatsApp summary</div></button>
       <button class="qa-btn" onclick="goTo('s-preanalytical')"><div class="qa-icon">&#128300;</div><div class="qa-label">Pre-Analytical</div><div class="qa-sub">Sample guide & rejections</div></button>
+      <button class="qa-btn" id="field-btn" style="display:none" onclick="goTo('s-field')"><div class="qa-icon">&#128664;</div><div class="qa-label">Field Tasks</div><div class="qa-sub">Home collection list</div></button>
       <button class="qa-btn" id="admin-btn" style="display:none" onclick="goTo('s-admin')"><div class="qa-icon">&#9881;&#65039;</div><div class="qa-label">Admin</div><div class="qa-sub">Staff &amp; roles</div></button>
     </div>
     <div class="card"><div class="card-title">Recent Orders</div><div id="dash-recent"><div class="empty">No orders yet today</div></div></div>
@@ -331,7 +332,12 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <div class="field"><label>Age</label><input type="number" id="pt-age" placeholder="35" min="0" max="120"></div>
         <div class="field"><label>Sex</label><select id="pt-sex"><option value="">-</option><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
       </div>
-      <div class="field"><label>Mobile</label><input type="tel" id="pt-phone" placeholder="9876543210" maxlength="10" inputmode="numeric"></div>
+      <div class="field"><label>Mobile</label><input type="tel" id="pt-phone" placeholder="9876543210" maxlength="10" inputmode="numeric" onblur="checkRepeatPatient()"></div>
+      <div id="repeat-patient-banner" style="display:none;background:#F0FDF4;border:1px solid #86EFAC;border-radius:var(--radius);padding:10px 12px;margin-bottom:10px;cursor:pointer" onclick="fillRepeatPatient()">
+        <div style="font-size:11px;font-family:var(--mono);color:#166534;font-weight:600;margin-bottom:3px">&#10003; Returning Patient Found</div>
+        <div id="repeat-patient-info" style="font-size:13px;color:#14532D"></div>
+        <div style="font-size:11px;color:#16A34A;margin-top:3px">Tap to auto-fill details</div>
+      </div>
       <div class="field"><label>Referred by</label><input type="text" id="pt-ref" placeholder="Dr. name or self"></div>
       <div class="field">
         <label>Order Source</label>
@@ -497,6 +503,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <div><div style="font-size:12px;color:rgba(255,255,255,0.6);font-family:var(--mono)">Estimated Total</div></div>
         <div style="font-family:var(--serif);font-size:22px;font-weight:500;color:#fff" id="est-amt">Rs.0</div>
       </div>
+      <div id="sample-summary-strip" style="display:none;margin-bottom:12px"></div>
       <button class="btn btn-primary" id="step2-btn" onclick="step2Next()" disabled>Next - Billing</button>
     </div>
     <div id="step3" style="display:none">
@@ -566,6 +573,15 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         </div>
       </div>
 
+      <div id="discount-approval-banner" style="display:none;background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px">
+        <div style="font-size:11px;font-family:var(--mono);color:#92400E;font-weight:600">&#9888; Discount requires Pathologist/Admin PIN</div>
+        <div id="disc-approval-sub" style="font-size:12px;color:#B45309;margin-top:2px"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input type="password" id="disc-pin-input" placeholder="Enter PIN" maxlength="4" inputmode="numeric" style="flex:1;padding:8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:14px;font-family:var(--mono);letter-spacing:4px">
+          <button onclick="submitDiscountPin()" style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:13px;cursor:pointer">Approve</button>
+        </div>
+        <div id="disc-pin-err" style="font-size:11px;color:#DC2626;margin-top:4px;min-height:14px"></div>
+      </div>
       <div class="urgent-toggle" id="urgent-toggle" onclick="toggleUrgent()">
         <div class="urgent-icon">&#128680;</div>
         <div style="flex:1">
@@ -670,6 +686,48 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   </div>
   <div class="scroll-body" style="padding-top:16px" id="od-body">
     <div class="empty">Loading...</div>
+  </div>
+</div>
+
+<!-- FIELD TASK LIST -->
+<div id="s-field" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="goBack()">&#8592;</button>
+    <div style="flex:1"><div class="topbar-title">Field Tasks</div><div class="topbar-sub" id="field-date"></div></div>
+    <button onclick="loadField()" style="font-size:11px;font-family:var(--mono);color:var(--accent);padding:4px 10px;border:0.5px solid var(--accent);border-radius:6px;background:none;cursor:pointer">&#8635; Refresh</button>
+  </div>
+  <div class="scroll-body" style="padding-top:0">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border);margin-bottom:0;border-bottom:0.5px solid var(--border)">
+      <div style="background:var(--surface);padding:10px 12px;text-align:center">
+        <div style="font-family:var(--serif);font-size:22px;font-weight:500;color:var(--blue)" id="field-total">0</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">Total</div>
+      </div>
+      <div style="background:var(--surface);padding:10px 12px;text-align:center">
+        <div style="font-family:var(--serif);font-size:22px;font-weight:500;color:var(--amber)" id="field-pending">0</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">Pending</div>
+      </div>
+      <div style="background:var(--surface);padding:10px 12px;text-align:center">
+        <div style="font-family:var(--serif);font-size:22px;font-weight:500;color:var(--green)" id="field-done">0</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">Collected</div>
+      </div>
+    </div>
+    <div style="padding:12px 16px">
+      <div id="field-list"><div class="empty">Loading tasks...</div></div>
+    </div>
+  </div>
+</div>
+<!-- Field task delivery modal -->
+<div id="field-modal-bg" class="edit-modal-bg" style="display:none" onclick="if(event.target===this)closeFieldModal()">
+  <div class="edit-modal" id="field-modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="field-modal-title">Mark Sample Collected</div>
+    <div class="modal-sub" id="field-modal-sub"></div>
+    <div class="edit-section-lbl">Collection Notes (optional)</div>
+    <div class="field"><input type="text" id="field-col-notes" placeholder="Tubes collected, issues, remarks..."></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <button class="btn" onclick="closeFieldModal()">Cancel</button>
+      <button class="btn btn-primary" id="field-modal-ok" onclick="">Confirm</button>
+    </div>
   </div>
 </div>
 
@@ -1001,6 +1059,7 @@ var lastOrder = null;
 function showScreen(id) {
   // Clean up HO real-time listener when leaving handover screen
   if (id !== 's-ho' && hoUnsubscribe) { hoUnsubscribe(); hoUnsubscribe=null; }
+  if (id !== 's-field' && fieldUnsubscribe) { fieldUnsubscribe(); fieldUnsubscribe=null; }
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   document.getElementById(id).classList.add('active');
   if (id === 's-orders') loadOrders();
@@ -1008,6 +1067,7 @@ function showScreen(id) {
   if (id === 's-ho') loadHO();
   if (id === 's-eod') loadEOD();
   if (id === 's-admin') loadAdminScreen();
+  if (id === 's-field') loadField();
   if (id === 's-order') { curOrder={}; selTests=[]; showStep(1); renderTests(); }
 }
 function goTo(id, push) {
@@ -1215,6 +1275,8 @@ function unlock() {
   var role = curProfile && curProfile.role || '';
   var btn = document.getElementById('admin-btn');
   if (btn) btn.style.display = (role==='admin'||role==='pathologist') ? 'block' : 'none';
+  var fbtn = document.getElementById('field-btn');
+  if (fbtn) fbtn.style.display = (role==='reception'||role==='lab'||role==='admin'||role==='pathologist') ? 'block' : 'none';
 }
 
 // ── DASHBOARD ──
@@ -1330,7 +1392,9 @@ function toggleHomeCollection() {
   var src = document.getElementById('pt-source').value;
   var hcf = document.getElementById('home-collection-fields');
   hcf.style.display = src==='Home Collection' ? 'block' : 'none';
-  if (src!=='Home Collection') { curGPS=null; document.getElementById('gps-status').textContent='Not captured'; }
+  if (src!=='Home Collection') { curGPS=null; document.getElementById('gps-status').textContent='Not captured';
+  isUrgent=false; discountApproved=false;
+  var utog=document.getElementById('urgent-toggle'); if(utog){utog.classList.remove('on'); document.getElementById('urgent-label').classList.remove('on'); document.getElementById('urgent-label').textContent='Mark as Urgent'; document.getElementById('urgent-sub').classList.remove('on'); document.getElementById('urgent-sub').textContent='Tap to flag for priority processing'; document.getElementById('urgent-check').classList.remove('on'); document.getElementById('urgent-check').textContent='';} }
 }
 var curGPS = null;
 function captureGPS() {
@@ -1376,6 +1440,73 @@ function step1Next() {
   document.getElementById('preg-section').style.display=(sex==='F'||sex==='O'||sex==='')?'block':'none';
   showStep('1b');
 }
+function renderSampleSummary() {
+  var strip = document.getElementById('sample-summary-strip');
+  if (!strip) return;
+  if (!selTests.length) { strip.style.display='none'; return; }
+  var tubeMap = {};
+  selTests.forEach(function(t) {
+    var dept = t.dept || 'BIOCHEMISTRY';
+    var deptData = PA_DATA[dept];
+    if (!deptData) { deptData = PA_DATA['BIOCHEMISTRY']; }
+    var sample = deptData.default;
+    var name = (t.name||'').toLowerCase();
+    if (deptData.patterns) {
+      deptData.patterns.forEach(function(p) {
+        p.match.forEach(function(keyword) {
+          if (name.indexOf(keyword.toLowerCase()) >= 0) { sample = p.data; }
+        });
+      });
+    }
+    var key = sample.label;
+    if (!tubeMap[key]) tubeMap[key] = { sample: sample, tests: [], fast: sample.fast };
+    tubeMap[key].tests.push(t.name);
+  });
+  var tubes = Object.values(tubeMap);
+  var hasFasting = tubes.some(function(t){ return t.fast; });
+  var html = '<div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">'
+    + '<div style="padding:9px 12px;background:var(--surface2);border-bottom:0.5px solid var(--border);font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Sample Requirements</div>'
+    + '<div style="padding:10px 12px">';
+  tubes.forEach(function(t) {
+    html += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">'
+      + '<div style="width:14px;height:14px;border-radius:50%;background:'+t.sample.color+';flex-shrink:0;margin-top:2px"></div>'
+      + '<div style="flex:1">'
+      + '<div style="font-size:13px;font-weight:500">' + esc(t.sample.label) + (t.fast?' <span style="font-size:9px;font-family:var(--mono);background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:10px;font-weight:600">FASTING</span>':'') + '</div>'
+      + '<div style="font-size:11px;color:var(--text3);font-family:var(--mono)">' + esc(t.sample.vol) + ' · ' + esc(t.sample.sample) + '</div>'
+      + '<div style="font-size:11px;color:var(--text2);margin-top:2px">' + t.tests.slice(0,3).map(esc).join(', ') + (t.tests.length>3 ? ' +' + (t.tests.length-3) + ' more' : '') + '</div>'
+      + '</div></div>';
+  });
+  if (hasFasting) {
+    html += '<div style="background:#FEF3C7;border-radius:var(--radius);padding:7px 10px;font-size:11px;color:#92400E;font-weight:500">&#9888; Fasting required for some tests</div>';
+  }
+  html += '</div></div>';
+  strip.innerHTML = html;
+  strip.style.display = 'block';
+}
+
+// ── URGENT FLAG ──
+var isUrgent = false;
+function toggleUrgent() {
+  isUrgent = !isUrgent;
+  var toggle = document.getElementById('urgent-toggle');
+  var label = document.getElementById('urgent-label');
+  var sub = document.getElementById('urgent-sub');
+  var check = document.getElementById('urgent-check');
+  if (!toggle) return;
+  if (isUrgent) {
+    toggle.classList.add('on'); label.classList.add('on');
+    label.textContent = 'URGENT — Priority Processing';
+    sub.classList.add('on'); sub.textContent = 'Lab will be notified immediately';
+    check.classList.add('on'); check.textContent = '✓';
+  } else {
+    toggle.classList.remove('on'); label.classList.remove('on');
+    label.textContent = 'Mark as Urgent';
+    sub.classList.remove('on'); sub.textContent = 'Tap to flag for priority processing';
+    check.classList.remove('on'); check.textContent = '';
+  }
+}
+
+
 function step2Next() {
   if (!selTests.length) { toast('Select at least one test','warn'); return; }
   curOrder.tests=selTests;
@@ -1412,6 +1543,10 @@ function setDiscType(type) {
   applyDiscount();
 }
 
+var discountApproved = false;
+var discountApprovalThresholdAmt = 500;
+var discountApprovalThresholdPct = 20;
+
 function applyDiscount() {
   var raw = parseFloat(document.getElementById('discount').value || 0);
   var total = curOrder.totalAmount || 0;
@@ -1430,6 +1565,21 @@ function applyDiscount() {
   document.getElementById('bill-amt').textContent = 'Rs.' + net.toLocaleString('en-IN');
   document.getElementById('paid-amt').value = net;
   document.getElementById('bill-note').textContent = disc > 0 ? 'Discount: Rs.' + disc.toLocaleString('en-IN') + ' (' + (discType==='pct'?raw+'%':'amount') + ')' : '';
+  // Approval check
+  var needsApproval = (disc > discountApprovalThresholdAmt || (total>0 && disc/total*100 > discountApprovalThresholdPct));
+  var role = curProfile && curProfile.role || '';
+  var isPriv = role==='pathologist' || role==='admin';
+  var dbanner = document.getElementById('discount-approval-banner');
+  if (dbanner) {
+    if (disc > 0 && needsApproval && !isPriv && !discountApproved) {
+      dbanner.style.display = 'block';
+      document.getElementById('disc-approval-sub').textContent = 'Discount Rs.'+disc.toLocaleString('en-IN')+' exceeds threshold. Requires approval.';
+      document.getElementById('disc-pin-err').textContent = '';
+      document.getElementById('disc-pin-input').value = '';
+    } else {
+      dbanner.style.display = 'none';
+    }
+  }
 }
 
 function capturePhoto(type, source) {
@@ -1497,7 +1647,8 @@ function submitOrder() {
     history:curOrder.history||{},
     date:todayStr(), createdAt:firebase.firestore.FieldValue.serverTimestamp(),
     createdBy:curUser.uid, createdByName:(curProfile&&curProfile.name)||curUser.email,
-    status:payMode==='credit'?'pending':'paid'
+    status:payMode==='credit'?'pending':'paid',
+    urgent: isUrgent
   };
   db.collection('orders').add(order).then(function(ref){
     lastOrder={id:ref.id}; Object.assign(lastOrder,order);
@@ -1806,6 +1957,29 @@ function editRemoveTest(i) {
 }
 
 var editSearchHits = [];
+function submitDiscountPin() {
+  var pin = document.getElementById('disc-pin-input').value.trim();
+  var errEl = document.getElementById('disc-pin-err');
+  if (pin.length < 4) { errEl.textContent = 'Enter 4-digit PIN'; return; }
+  // Verify against curProfile (current user must be pathologist/admin, or use stored PIN)
+  db.collection('staff').where('pin','==',pin).where('active','==',true).get().then(function(snap) {
+    var approved = false;
+    snap.forEach(function(d) {
+      var r = d.data().role;
+      if (r==='pathologist'||r==='admin') approved = true;
+    });
+    if (approved) {
+      discountApproved = true;
+      document.getElementById('discount-approval-banner').style.display = 'none';
+      toast('Discount approved ✓', 'ok');
+    } else {
+      errEl.textContent = 'Invalid PIN or insufficient role';
+      document.getElementById('disc-pin-input').value = '';
+    }
+  }).catch(function(){ errEl.textContent = 'Verification failed'; });
+}
+
+
 function editSearchTests(q) {
   var suggest = document.getElementById('edit-test-suggest');
   if (!q || q.length < 2) { suggest.style.display = 'none'; return; }
@@ -2036,6 +2210,156 @@ function shareDetailWA() {
   if (!curDetailOrder) return;
   lastOrder = curDetailOrder;
   shareTRFWA();
+}
+
+
+// ── FIELD TASK LIST ──
+var fieldUnsubscribe = null;
+var fieldPendingAction = null;
+
+function loadField() {
+  var today = todayStr();
+  document.getElementById('field-date').textContent = today;
+  if (fieldUnsubscribe) fieldUnsubscribe();
+  fieldUnsubscribe = db.collection('orders')
+    .where('date', '==', today)
+    .where('source', '==', 'Home Collection')
+    .onSnapshot(function(snap) {
+      var orders = [];
+      snap.forEach(function(d) { orders.push(Object.assign({id: d.id}, d.data())); });
+      orders.sort(function(a,b){ return (a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0)-(b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0); });
+      renderFieldTasks(orders);
+    }, function(){});
+}
+
+function renderFieldTasks(orders) {
+  var total = orders.length;
+  var done = orders.filter(function(o){ return o.fieldStatus === 'collected'; }).length;
+  var pending = total - done;
+  document.getElementById('field-total').textContent = total;
+  document.getElementById('field-pending').textContent = pending;
+  document.getElementById('field-done').textContent = done;
+
+  var el = document.getElementById('field-list');
+  if (!total) { el.innerHTML = '<div class="empty" style="margin-top:24px">No home collection orders today</div>'; return; }
+
+  fieldOrders = orders;
+  el.innerHTML = orders.map(function(o) {
+    var isCollected = o.fieldStatus === 'collected';
+    var isDelivered = o.fieldStatus === 'delivered';
+
+    // Get tube requirements
+    var tubeMap = {};
+    (o.tests||[]).forEach(function(t) {
+      var dept = t.dept || 'BIOCHEMISTRY';
+      var deptData = PA_DATA[dept] || PA_DATA['BIOCHEMISTRY'];
+      var sample = deptData.default;
+      var name = (t.name||'').toLowerCase();
+      if (deptData.patterns) {
+        deptData.patterns.forEach(function(p) {
+          p.match.forEach(function(kw) { if (name.indexOf(kw.toLowerCase()) >= 0) sample = p.data; });
+        });
+      }
+      if (sample.tube !== 'NA') tubeMap[sample.label] = sample;
+    });
+    var tubes = Object.values(tubeMap);
+
+    var statusBadge = isDelivered
+      ? '<span class="badge badge-green">Delivered</span>'
+      : isCollected
+        ? '<span class="badge badge-blue">Collected</span>'
+        : (o.urgent ? '<span class="badge badge-urgent">URGENT</span>' : '<span class="badge badge-gold">Pending</span>');
+
+    var mapLink = o.gps
+      ? '<a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="font-size:11px;color:var(--blue)">&#128205; Open in Maps</a>'
+      : '';
+
+    var tubeChips = tubes.map(function(t) {
+      return '<div class="field-tube-chip" style="background:'+t.color+'22;border-color:'+t.color+'55;color:'+t.color+'">'
+        + '<div style="width:7px;height:7px;border-radius:50%;background:'+t.color+'"></div>'
+        + esc(t.label) + '</div>';
+    }).join('');
+
+    var fidx = fieldOrders.indexOf(o);
+    var actions = '';
+    if (!isCollected && !isDelivered) {
+      actions = '<button class="btn btn-primary" style="flex:1;font-size:12px;padding:8px" onclick="fieldActionIdx(' + fidx + ',\"collect\")">&#10003; Mark Collected</button>';
+    } else if (isCollected) {
+      actions = '<button class="btn" style="flex:1;font-size:12px;padding:8px;color:var(--accent);border-color:var(--accent)" onclick="fieldActionIdx(' + fidx + ',\"deliver\")">&#128230; Mark Delivered</button>';
+    }
+
+    return '<div class="field-task-card'+(isCollected||isDelivered?' done':'')+'">'
+      + '<div class="field-task-header">'
+      + '<span class="field-task-meta">' + esc(o.createdByName||'-') + '</span>'
+      + statusBadge
+      + '</div>'
+      + '<div class="field-task-body">'
+      + '<div class="field-task-patient">'+esc(o.patientName||'-')+'</div>'
+      + '<div class="field-task-meta">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+' · '+esc(o.phone||'-')+'</div>'
+      + (o.address?'<div class="field-task-address">'+esc(o.address)+'</div>':'')
+      + mapLink
+      + '<div class="field-task-tests">'+esc((o.tests||[]).map(function(t){return t.name;}).slice(0,4).join(', '))+(( o.tests||[]).length>4?' +'+((o.tests||[]).length-4)+' more':'')+'</div>'
+      + (tubeChips?'<div class="field-task-tubes">'+tubeChips+'</div>':'')
+      + (o.fieldNotes?'<div style="font-size:11px;color:var(--text2);background:var(--surface2);padding:4px 8px;border-radius:6px;margin-bottom:6px">'+esc(o.fieldNotes)+'</div>':'')
+      + (actions?'<div class="field-task-actions">'+actions+'</div>':'')
+      + '</div></div>';
+  }).join('');
+}
+
+var fieldOrders = [];
+function fieldActionIdx(idx, action) {
+  var o = fieldOrders[idx];
+  if (!o) return;
+  var orderId = o.id; var patientName = o.patientName||"";
+  fieldPendingAction = {action: action, orderId: orderId};
+  var modal = document.getElementById('field-modal-bg');
+  var title = document.getElementById('field-modal-title');
+  var sub = document.getElementById('field-modal-sub');
+  var okBtn = document.getElementById('field-modal-ok');
+  document.getElementById('field-col-notes').value = '';
+  if (action === 'collect') {
+    title.textContent = 'Mark Sample Collected';
+    sub.textContent = 'Confirm sample collected from ' + patientName;
+    okBtn.textContent = 'Mark Collected';
+    okBtn.style.background = 'var(--accent)';
+  } else {
+    title.textContent = 'Mark Report Delivered';
+    sub.textContent = 'Confirm report/sample delivered for ' + patientName;
+    okBtn.textContent = 'Mark Delivered';
+    okBtn.style.background = '#059669';
+  }
+  okBtn.onclick = fieldConfirm;
+  modal.style.display = 'flex';
+  setTimeout(function(){ modal.classList.add('open'); }, 10);
+}
+
+function closeFieldModal() {
+  var bg = document.getElementById('field-modal-bg');
+  bg.classList.remove('open');
+  setTimeout(function(){ bg.style.display='none'; }, 280);
+  fieldPendingAction = null;
+}
+
+function fieldConfirm() {
+  if (!fieldPendingAction) return;
+  var action = fieldPendingAction.action;
+  var orderId = fieldPendingAction.orderId;
+  var notes = document.getElementById('field-col-notes').value.trim();
+  var now = new Date();
+  var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  var byName = (curProfile&&curProfile.name)||curUser.email;
+  var update = {
+    fieldStatus: action === 'collect' ? 'collected' : 'delivered',
+    fieldUpdatedBy: byName,
+    fieldUpdatedAt: timeStr
+  };
+  if (notes) update.fieldNotes = notes;
+  closeFieldModal();
+  db.collection('orders').doc(orderId).update(update)
+    .then(function(){
+      toast(action==='collect' ? 'Sample marked collected ✓' : 'Report marked delivered ✓', 'ok');
+    })
+    .catch(function(){ toast('Update failed — check connection', 'err'); });
 }
 
 

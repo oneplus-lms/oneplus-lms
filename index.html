@@ -122,6 +122,45 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 .ho-card-k{font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase}
 .ho-card-v{font-size:13px;font-weight:500;color:var(--text)}
 .ho-card-v.amount{font-family:var(--serif);font-size:18px;color:var(--accent)}
+/* Chain of Custody */
+.ho-status-badge{display:inline-block;font-size:9px;font-family:var(--mono);font-weight:600;text-transform:uppercase;letter-spacing:0.07em;padding:2px 7px;border-radius:20px}
+.ho-status-badge.pending{background:#FFF3CD;color:#856404}
+.ho-status-badge.accepted{background:#D1FAE5;color:#065F46}
+.ho-status-badge.rejected{background:#FEE2E2;color:#991B1B}
+.ho-pending-section{background:#FFFBEB;border:1px solid #FCD34D;border-radius:var(--radius-lg);margin-bottom:14px;overflow:hidden}
+.ho-pending-header{padding:9px 12px;background:#FEF3C7;border-bottom:0.5px solid #FCD34D;display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#92400E;text-transform:uppercase;letter-spacing:0.05em}
+.ho-pending-item{padding:12px;border-bottom:0.5px solid #FCD34D}
+.ho-pending-item:last-child{border-bottom:none}
+.ho-pending-meta{font-size:12px;color:var(--text2);margin-bottom:4px}
+.ho-pending-amt{font-family:var(--serif);font-size:20px;font-weight:500;color:var(--accent);margin-bottom:8px}
+.ho-pending-from{font-size:11px;font-family:var(--mono);color:var(--text3)}
+.ho-pending-actions{display:flex;gap:8px;margin-top:10px}
+.btn-accept{background:#059669;color:#fff;border:none;border-radius:var(--radius);padding:8px 18px;font-size:13px;font-weight:500;cursor:pointer;flex:1}
+.btn-reject{background:#DC2626;color:#fff;border:none;border-radius:var(--radius);padding:8px 18px;font-size:13px;font-weight:500;cursor:pointer;flex:1}
+.ho-confirm-overlay{position:fixed;inset:0;background:rgba(20,15,5,0.55);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px}
+.ho-confirm-box{background:var(--surface);border-radius:16px;padding:20px;width:100%;max-width:360px}
+.ho-confirm-title{font-size:15px;font-weight:600;margin-bottom:6px}
+.ho-confirm-sub{font-size:13px;color:var(--text2);margin-bottom:18px}
+.ho-confirm-actions{display:flex;gap:8px}
+/* Audit Trail / Order Detail */
+.audit-timeline{padding:0 0 16px}
+.audit-event{display:flex;gap:12px;margin-bottom:0}
+.audit-spine{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:28px}
+.audit-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.audit-dot.done{background:var(--accent)}
+.audit-dot.warn{background:#D97706}
+.audit-dot.err{background:#DC2626}
+.audit-dot.info{background:#6366F1}
+.audit-line{width:2px;background:var(--border);flex:1;min-height:24px;margin:3px 0}
+.audit-body{flex:1;padding-bottom:20px}
+.audit-title{font-size:13px;font-weight:500;color:var(--text)}
+.audit-sub{font-size:11px;color:var(--text2);margin-top:1px;line-height:1.5}
+.audit-time{font-size:10px;font-family:var(--mono);color:var(--text3);margin-top:2px}
+.audit-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-bottom:4px}
+.audit-kv-k{font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase}
+.audit-kv-v{font-size:13px;font-weight:500;color:var(--text);margin-top:1px}
+.audit-test-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12px}
+.audit-test-row:last-child{border-bottom:none}
 /* EOD */
 .wa-preview{background:#E8F5E9;border-radius:var(--radius-lg);padding:14px 16px;font-family:var(--mono);font-size:12px;color:#1B5E20;white-space:pre-wrap;line-height:1.7;margin-bottom:12px;border:0.5px solid #A5D6A7}
 /* MODAL */
@@ -285,7 +324,23 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       </div>
       <div class="field"><label>Mobile</label><input type="tel" id="pt-phone" placeholder="9876543210" maxlength="10" inputmode="numeric"></div>
       <div class="field"><label>Referred by</label><input type="text" id="pt-ref" placeholder="Dr. name or self"></div>
-      <button class="btn btn-primary" onclick="step1Next()">Next - Select Tests</button>
+      <div class="field">
+        <label>Order Source</label>
+        <select id="pt-source" onchange="toggleHomeCollection()">
+          <option value="Walk-in">Walk-in</option>
+          <option value="Home Collection">Home Collection</option>
+          <option value="Doctor Referral">Doctor Referral</option>
+          <option value="Camp">Camp / Outreach</option>
+        </select>
+      </div>
+      <div id="home-collection-fields" style="display:none">
+        <div class="field"><label>Patient Address</label><input type="text" id="pt-address" placeholder="House no., street, locality"></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <button type="button" class="btn" style="flex:1;font-size:13px" onclick="captureGPS()">&#128205; Capture GPS Location</button>
+          <div id="gps-status" style="font-size:11px;font-family:var(--mono);color:var(--text3);flex:1;line-height:1.4">Not captured</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="step1Next()">Next - Clinical History</button>
     </div>
     <!-- STEP 1b: CLINICAL HISTORY -->
     <div id="step1b" style="display:none">
@@ -534,6 +589,18 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   </div>
 </div>
 
+<!-- ORDER DETAIL / AUDIT TRAIL -->
+<div id="s-order-detail" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="goBack()">&#8592;</button>
+    <div style="flex:1"><div class="topbar-title">Order Detail</div><div class="topbar-sub" id="od-subtitle">Audit Trail</div></div>
+    <button onclick="openDetailTRF()" style="font-size:11px;font-family:var(--mono);color:var(--accent);padding:4px 10px;border:0.5px solid var(--accent);border-radius:6px;background:none;cursor:pointer">TRF</button>
+  </div>
+  <div class="scroll-body" style="padding-top:16px" id="od-body">
+    <div class="empty">Loading...</div>
+  </div>
+</div>
+
 <!-- CASH HANDOVER -->
 <div id="s-ho" class="screen">
   <div class="topbar">
@@ -546,15 +613,35 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="ho-summary-cell"><div class="ho-summary-val red" id="ho-credit">Rs.0</div><div class="ho-summary-lbl">Credit</div></div>
   </div>
   <div class="scroll-body" style="padding-top:16px">
-    <div class="card">
-      <div class="card-title">Record Handover</div>
-      <div class="field"><label>Handover To</label><input type="text" id="ho-to" placeholder="Dr. Nitin / Accountant"></div>
-      <div class="field"><label>Cash Amount (Rs.)</label><input type="number" id="ho-amt" placeholder="0" inputmode="numeric"></div>
-      <div class="field"><label>Notes</label><input type="text" id="ho-notes" placeholder="Shift, remarks..."></div>
-      <button class="btn btn-primary" onclick="submitHandover()">Record Handover</button>
+    <!-- Pending handovers to accept -->
+    <div id="ho-pending-section" style="display:none">
+      <div class="ho-pending-section">
+        <div class="ho-pending-header">&#9888; Pending — Awaiting Your Acceptance</div>
+        <div id="ho-pending-list"></div>
+      </div>
     </div>
-    <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Today's Handovers</div>
+    <!-- Record new handover -->
+    <div class="card">
+      <div class="card-title">Initiate Handover</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Recipient must accept before custody transfers.</div>
+      <div class="field"><label>Handover To (Name)</label><input type="text" id="ho-to" placeholder="Dr. Nitin / Accountant / Lab Tech"></div>
+      <div class="field"><label>Cash Amount (Rs.)</label><input type="number" id="ho-amt" placeholder="0" inputmode="numeric"></div>
+      <div class="field"><label>Notes</label><input type="text" id="ho-notes" placeholder="Shift end, remarks..."></div>
+      <button class="btn btn-primary" onclick="submitHandover()">Initiate Handover →</button>
+    </div>
+    <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Today's Handover Log</div>
     <div id="ho-list"><div class="empty">No handovers recorded yet</div></div>
+  </div>
+</div>
+<!-- Chain of custody confirm overlay -->
+<div id="ho-confirm-overlay" class="ho-confirm-overlay" style="display:none">
+  <div class="ho-confirm-box">
+    <div class="ho-confirm-title" id="ho-confirm-title">Confirm Action</div>
+    <div class="ho-confirm-sub" id="ho-confirm-sub"></div>
+    <div class="ho-confirm-actions">
+      <button class="btn" style="flex:1" onclick="hoConfirmCancel()">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" id="ho-confirm-ok" onclick="">Confirm</button>
+    </div>
   </div>
 </div>
 
@@ -816,9 +903,12 @@ var lastOrder = null;
 // ── NAVIGATION ──
 function goTo(id, push) {
   if (push !== false) stack.push(id);
+  // Clean up HO real-time listener when leaving handover screen
+  if (id !== 's-ho' && hoUnsubscribe) { hoUnsubscribe(); hoUnsubscribe=null; }
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   document.getElementById(id).classList.add('active');
   if (id === 's-orders') loadOrders();
+  if (id === 's-order-detail') {} // loaded by openOrderDetail()
   if (id === 's-ho') loadHO();
   if (id === 's-eod') loadEOD();
   if (id === 's-admin') loadAdminScreen();
@@ -1113,6 +1203,32 @@ function showStep(n) {
     document.getElementById(id).className='step-seg'+(i<pos?' done':i===pos?' curr':'');
   });
 }
+function toggleHomeCollection() {
+  var src = document.getElementById('pt-source').value;
+  var hcf = document.getElementById('home-collection-fields');
+  hcf.style.display = src==='Home Collection' ? 'block' : 'none';
+  if (src!=='Home Collection') { curGPS=null; document.getElementById('gps-status').textContent='Not captured'; }
+}
+var curGPS = null;
+function captureGPS() {
+  var statusEl = document.getElementById('gps-status');
+  if (!navigator.geolocation) { statusEl.textContent='GPS not supported on this device'; return; }
+  statusEl.textContent='Locating…';
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      var lat=pos.coords.latitude.toFixed(6);
+      var lng=pos.coords.longitude.toFixed(6);
+      var acc=Math.round(pos.coords.accuracy);
+      curGPS={lat:lat,lng:lng,accuracy:acc,capturedAt:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})};
+      statusEl.innerHTML='<span style="color:#059669">&#10003; '+lat+', '+lng+'<br>±'+acc+'m at '+curGPS.capturedAt+'</span>';
+    },
+    function(err) {
+      var msgs={1:'Permission denied',2:'Position unavailable',3:'Timeout'};
+      statusEl.textContent='Failed: '+(msgs[err.code]||err.message);
+    },
+    {enableHighAccuracy:true,timeout:15000,maximumAge:0}
+  );
+}
 function step1Next() {
   var name=document.getElementById('pt-name').value.trim();
   if (!name) { document.getElementById('err-name').classList.add('on'); return; }
@@ -1122,6 +1238,9 @@ function step1Next() {
   curOrder.sex=document.getElementById('pt-sex').value;
   curOrder.phone=document.getElementById('pt-phone').value;
   curOrder.refBy=document.getElementById('pt-ref').value;
+  curOrder.source=document.getElementById('pt-source').value||'Walk-in';
+  curOrder.address=document.getElementById('pt-address').value.trim()||'';
+  curOrder.gps=curGPS||null;
   curHistory=resetHistory();
   // Pre-set collection time to now
   var now=new Date();
@@ -1247,6 +1366,7 @@ function submitOrder() {
   var order={
     patientName:curOrder.patientName, age:curOrder.age||'', sex:curOrder.sex||'',
     phone:curOrder.phone||'', refBy:curOrder.refBy||'', tests:curOrder.tests,
+    source:curOrder.source||'Walk-in', address:curOrder.address||'', gps:curOrder.gps||null,
     totalAmount:curOrder.totalAmount, discount:disc,
     netAmount:Math.max(0,curOrder.totalAmount-disc),
     paidAmount:paid, dueAmount:Math.max(0,curOrder.totalAmount-disc)-paid,
@@ -1264,11 +1384,14 @@ function submitOrder() {
   }).catch(function(e){ toast('Save failed - check connection','err'); });
 }
 function newOrder() {
-  curOrder={}; selTests=[]; payMode='cash'; curHistory={}; selDiagnoses=[]; selMeds=[]; rxPhotoB64=''; proofPhotoB64=''; discType='amt';
-  ['pt-name','pt-age','pt-phone','pt-ref','bill-notes'].forEach(function(id){
+  curOrder={}; selTests=[]; payMode='cash'; curHistory={}; selDiagnoses=[]; selMeds=[]; rxPhotoB64=''; proofPhotoB64=''; discType='amt'; curGPS=null;
+  ['pt-name','pt-age','pt-phone','pt-ref','pt-address','bill-notes'].forEach(function(id){
     document.getElementById(id).value='';
   });
   document.getElementById('pt-sex').value='';
+  document.getElementById('pt-source').value='Walk-in';
+  document.getElementById('home-collection-fields').style.display='none';
+  document.getElementById('gps-status').textContent='Not captured';
   document.getElementById('test-q').value='';
   renderTests(); showStep(1); goTo('s-order');
 }
@@ -1294,45 +1417,360 @@ function renderOrders(orders) {
   var el=document.getElementById('orders-list');
   if (!orders.length) { el.innerHTML='<div class="empty">No orders found</div>'; return; }
   el.innerHTML=orders.map(function(o){
-    return '<div class="order-card"><div style="font-size:11px;font-family:var(--mono);color:var(--text3)">#'+o.id.slice(-6).toUpperCase()+' - '+o.date+'</div><div style="font-size:15px;font-weight:500;margin:2px 0">'+esc(o.patientName)+'</div><div style="font-size:12px;color:var(--text2)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+' - Ref: '+esc(o.refBy||'-')+'</div><div style="font-size:11px;color:var(--text3);margin-top:4px">'+esc((o.tests||[]).map(function(t){return t.name;}).join(', '))+'</div><div class="order-footer"><span class="badge '+(o.status==='paid'?'badge-green':'badge-gold')+'">'+(o.status||'paid').toUpperCase()+'</span><div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div></div></div>';
+    var srcBadge = (o.source&&o.source!=='Walk-in')
+      ? '<span style="font-size:9px;font-family:var(--mono);font-weight:600;text-transform:uppercase;padding:2px 6px;border-radius:20px;background:'+(o.source==='Home Collection'?'#DBEAFE;color:#1D4ED8':'#F3E8FF;color:#7C3AED')+'">'+(o.source==='Home Collection'?'&#127968; Home':'&#127973; '+o.source)+'</span>' : '';
+    return '<div class="order-card" style="cursor:pointer" onclick="openOrderDetail(''+o.id+'')">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
+      +'<div style="font-size:11px;font-family:var(--mono);color:var(--text3)">#'+o.id.slice(-6).toUpperCase()+' · '+o.date+'</div>'
+      +srcBadge
+      +'</div>'
+      +'<div style="font-size:15px;font-weight:500;margin:4px 0 2px">'+esc(o.patientName)+'</div>'
+      +'<div style="font-size:12px;color:var(--text2)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+' · Ref: '+esc(o.refBy||'-')+'</div>'
+      +'<div style="font-size:11px;color:var(--text3);margin-top:4px">'+esc((o.tests||[]).map(function(t){return t.name;}).join(', '))+'</div>'
+      +'<div class="order-footer">'
+      +'<span class="badge '+(o.status==='paid'?'badge-green':'badge-gold')+'">'+(o.status||'paid').toUpperCase()+'</span>'
+      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'
+      +'</div>'
+      +'</div>';
   }).join('');
 }
 
-// ── CASH HANDOVER ──
+// ── ORDER DETAIL & AUDIT TRAIL ──
+var curDetailOrder = null;
+
+function openOrderDetail(orderId) {
+  curDetailOrder = null;
+  document.getElementById('od-body').innerHTML = '<div class="empty">Loading…</div>';
+  document.getElementById('od-subtitle').textContent = '#' + orderId.slice(-6).toUpperCase();
+  goTo('s-order-detail');
+  db.collection('orders').doc(orderId).get().then(function(snap) {
+    if (!snap.exists) { document.getElementById('od-body').innerHTML = '<div class="empty">Order not found</div>'; return; }
+    curDetailOrder = Object.assign({id: snap.id}, snap.data());
+    renderOrderDetail(curDetailOrder);
+  }).catch(function(e) {
+    document.getElementById('od-body').innerHTML = '<div class="empty">Error: ' + e.message + '</div>';
+  });
+}
+
+function renderOrderDetail(o) {
+  var id = o.id.slice(-6).toUpperCase();
+  document.getElementById('od-subtitle').textContent = '#' + id + ' · ' + (o.patientName||'');
+
+  // Build audit trail events
+  var events = buildAuditTrail(o);
+
+  // Tests rows
+  var testRows = (o.tests||[]).map(function(t) {
+    return '<div class="audit-test-row"><span>' + esc(t.name) + '</span><span style="color:var(--text2);font-family:var(--mono)">Rs.' + (t.rate||0).toLocaleString('en-IN') + '</span></div>';
+  }).join('');
+
+  // Source + GPS block
+  var sourceBlock = '';
+  if (o.source && o.source !== 'Walk-in') {
+    sourceBlock = '<div class="card" style="margin-bottom:12px">'
+      + '<div class="card-title">Collection Info</div>'
+      + '<div class="audit-summary-grid">'
+      + '<div><div class="audit-kv-k">Source</div><div class="audit-kv-v">' + esc(o.source) + '</div></div>'
+      + (o.address ? '<div style="grid-column:span 2"><div class="audit-kv-k">Address</div><div class="audit-kv-v">' + esc(o.address) + '</div></div>' : '')
+      + (o.gps ? '<div style="grid-column:span 2"><div class="audit-kv-k">GPS Location</div>'
+        + '<div style="font-size:11px;font-family:var(--mono);color:#1D4ED8;margin-top:2px">' + o.gps.lat + ', ' + o.gps.lng + '</div>'
+        + '<div style="font-size:10px;color:var(--text3)">±' + o.gps.accuracy + 'm · Captured ' + o.gps.capturedAt + '</div>'
+        + '<a href="https://maps.google.com/?q=' + o.gps.lat + ',' + o.gps.lng + '" target="_blank" style="font-size:11px;color:#1D4ED8;display:inline-block;margin-top:4px">Open in Maps ↗</a>'
+        + '</div>' : '')
+      + '</div></div>';
+  }
+
+  document.getElementById('od-body').innerHTML =
+    // Patient summary card
+    '<div class="card" style="margin-bottom:12px">'
+    + '<div class="card-title">Patient</div>'
+    + '<div class="audit-summary-grid">'
+    + '<div><div class="audit-kv-k">Name</div><div class="audit-kv-v">' + esc(o.patientName) + '</div></div>'
+    + '<div><div class="audit-kv-k">Age / Sex</div><div class="audit-kv-v">' + esc((o.age||'-') + ' ' + (o.sex||'')) + '</div></div>'
+    + '<div><div class="audit-kv-k">Mobile</div><div class="audit-kv-v">' + esc(o.phone||'-') + '</div></div>'
+    + '<div><div class="audit-kv-k">Ref by</div><div class="audit-kv-v">' + esc(o.refBy||'-') + '</div></div>'
+    + '</div></div>'
+
+    // Source / GPS block (only for home collection)
+    + sourceBlock
+
+    // Tests card
+    + '<div class="card" style="margin-bottom:12px">'
+    + '<div class="card-title">Tests (' + (o.tests||[]).length + ')</div>'
+    + testRows
+    + '<div style="display:flex;justify-content:space-between;padding-top:10px;font-size:13px;font-weight:500">'
+    + '<span>Total</span><span style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.' + (o.paidAmount||0).toLocaleString('en-IN') + '</span></div>'
+    + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + esc(o.payMode||'cash').toUpperCase()
+    + (o.discount > 0 ? ' · Discount Rs.' + o.discount : '') + '</div>'
+    + '</div>'
+
+    // Audit timeline card
+    + '<div class="card" style="margin-bottom:12px">'
+    + '<div class="card-title" style="margin-bottom:14px">Audit Trail</div>'
+    + '<div class="audit-timeline">'
+    + events.map(function(ev, i) {
+        var isLast = i === events.length - 1;
+        return '<div class="audit-event">'
+          + '<div class="audit-spine">'
+          + '<div class="audit-dot ' + (ev.type||'done') + '"></div>'
+          + (!isLast ? '<div class="audit-line"></div>' : '')
+          + '</div>'
+          + '<div class="audit-body">'
+          + '<div class="audit-title">' + esc(ev.title) + '</div>'
+          + (ev.sub ? '<div class="audit-sub">' + esc(ev.sub) + '</div>' : '')
+          + (ev.at ? '<div class="audit-time">' + esc(ev.at) + '</div>' : '')
+          + '</div>'
+          + '</div>';
+      }).join('')
+    + '</div></div>'
+
+    // Action buttons
+    + '<button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="openDetailTRF()">&#128221; View / Print TRF</button>'
+    + '<button class="btn" style="width:100%" onclick="shareDetailWA()">&#128172; Share via WhatsApp</button>';
+}
+
+function buildAuditTrail(o) {
+  var events = [];
+  var h = o.history || {};
+
+  // 1. Order created
+  var createdTime = '';
+  if (o.createdAt && o.createdAt.toDate) {
+    var d = o.createdAt.toDate();
+    createdTime = d.toLocaleDateString('en-IN') + ' ' + d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  }
+  events.push({
+    title: 'Order Registered',
+    sub: 'By ' + (o.createdByName||'-') + (o.source ? ' · ' + o.source : ''),
+    at: createdTime,
+    type: 'done'
+  });
+
+  // 2. Sample collection time (from clinical history)
+  if (h.collectionTime) {
+    events.push({
+      title: 'Sample Collected',
+      sub: 'Collection time: ' + h.collectionTime
+        + (h.fasting ? ' · Fasting: ' + h.fasting : '')
+        + (o.source==='Home Collection' && o.address ? ' · At patient address' : ''),
+      at: o.date + ' ' + h.collectionTime,
+      type: 'done'
+    });
+  }
+
+  // 3. Ordering doctor
+  if (h.orderingDoctor) {
+    events.push({ title: 'Ordered by Dr. ' + h.orderingDoctor, sub: h.clinicalNotes||'', type: 'info' });
+  }
+
+  // 4. Diagnosis / key history
+  if (h.diagnoses && h.diagnoses.length) {
+    events.push({ title: 'Clinical Context Recorded', sub: 'Diagnosis: ' + h.diagnoses.join(', '), type: 'info' });
+  }
+
+  // 5. Payment event
+  var payLabel = (o.payMode||'cash').toUpperCase();
+  if (o.payMode === 'credit') {
+    events.push({
+      title: 'Bill on Credit',
+      sub: 'Amount due: Rs.' + (o.totalAmount||0).toLocaleString('en-IN'),
+      at: createdTime,
+      type: 'warn'
+    });
+  } else {
+    events.push({
+      title: 'Payment Collected',
+      sub: 'Rs.' + (o.paidAmount||0).toLocaleString('en-IN') + ' via ' + payLabel
+        + (o.discount > 0 ? ' · Discount Rs.' + o.discount : ''),
+      at: createdTime,
+      type: 'done'
+    });
+  }
+
+  // 6. GPS captured (home collection)
+  if (o.gps) {
+    events.push({
+      title: 'GPS Location Captured',
+      sub: o.gps.lat + ', ' + o.gps.lng + ' (±' + o.gps.accuracy + 'm)',
+      at: (o.date||'') + ' ' + (o.gps.capturedAt||''),
+      type: 'info'
+    });
+  }
+
+  // 7. Rx photo
+  if (o.rxPhoto) {
+    events.push({ title: 'Prescription Photo Attached', type: 'info' });
+  }
+
+  return events;
+}
+
+function openDetailTRF() {
+  if (!curDetailOrder) return;
+  lastOrder = curDetailOrder;
+  openTRF();
+}
+
+function shareDetailWA() {
+  if (!curDetailOrder) return;
+  lastOrder = curDetailOrder;
+  shareTRFWA();
+}
+
+
+// ── CASH HANDOVER — Chain of Custody ──
+var hoUnsubscribe = null; // Firestore real-time listener handle
+
 function loadHO() {
-  var today=todayStr();
-  document.getElementById('ho-date').textContent=today;
+  var today = todayStr();
+  document.getElementById('ho-date').textContent = today;
+
+  // Load today's cash totals from orders
   db.collection('orders').where('date','==',today).get().then(function(snap){
-    var cash=0,upi=0,credit=0;
+    var cash=0, upi=0, credit=0;
     snap.forEach(function(d){ var o=d.data(); if(o.payMode==='cash') cash+=(o.paidAmount||0); else if(o.payMode==='upi'||o.payMode==='card') upi+=(o.paidAmount||0); else if(o.payMode==='credit') credit+=(o.totalAmount||0); });
     document.getElementById('ho-cash').textContent='Rs.'+cash.toLocaleString('en-IN');
     document.getElementById('ho-upi').textContent='Rs.'+upi.toLocaleString('en-IN');
     document.getElementById('ho-credit').textContent='Rs.'+credit.toLocaleString('en-IN');
     document.getElementById('ho-amt').value=cash;
   }).catch(function(){});
-  db.collection('handovers').where('date','==',today).get().then(function(snap){
-    var el=document.getElementById('ho-list');
-    if (snap.empty) { el.innerHTML='<div class="empty">No handovers recorded yet</div>'; return; }
-    var rows=[];
-    snap.forEach(function(d){ rows.push(Object.assign({id:d.id},d.data())); });
-    el.innerHTML=rows.map(function(h){
-      return '<div class="ho-handover-card"><div class="ho-card-header"><span style="font-size:10px;font-family:var(--mono);color:var(--text3)">#'+h.id.slice(-6).toUpperCase()+'</span><span style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(h.time||'')+'</span></div><div class="ho-card-body"><div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div><div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div></div><div><div class="ho-card-k">By</div><div class="ho-card-v">'+esc(h.recordedByName||'-')+'</div></div><div><div class="ho-card-k">Notes</div><div class="ho-card-v">'+esc(h.notes||'-')+'</div></div></div></div>';
-    }).join('');
-  }).catch(function(){});
+
+  // Real-time listener for today's handovers (for pending detection)
+  if (hoUnsubscribe) hoUnsubscribe();
+  hoUnsubscribe = db.collection('handovers').where('date','==',today)
+    .onSnapshot(function(snap){
+      var rows = [];
+      snap.forEach(function(d){ rows.push(Object.assign({id:d.id}, d.data())); });
+      rows.sort(function(a,b){ return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0); });
+      renderHOList(rows);
+      renderHOPending(rows);
+    }, function(){ });
 }
+
+function renderHOPending(rows) {
+  var myName = (curProfile&&curProfile.name)||'';
+  var pending = rows.filter(function(h){
+    return h.custodyStatus==='PENDING' && h.handoverTo && myName &&
+           h.handoverTo.toLowerCase().indexOf(myName.split(' ')[0].toLowerCase())>=0;
+  });
+  var sec = document.getElementById('ho-pending-section');
+  var list = document.getElementById('ho-pending-list');
+  if (!pending.length) { sec.style.display='none'; return; }
+  sec.style.display='block';
+  list.innerHTML = pending.map(function(h){
+    return '<div class="ho-pending-item">'+
+      '<div class="ho-pending-meta">From <strong>'+esc(h.recordedByName||'-')+'</strong> · '+esc(h.time||'')+'</div>'+
+      '<div class="ho-pending-amt">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div>'+
+      '<div class="ho-pending-from">'+(h.notes?esc(h.notes):'No notes')+'</div>'+
+      '<div class="ho-pending-actions">'+
+        '<button class="btn-accept" onclick="hoConfirm(\'accept\',\''+h.id+'\',\''+esc(h.recordedByName||'')+'\','+(h.amount||0)+')">✓ Accept Custody</button>'+
+        '<button class="btn-reject" onclick="hoConfirm(\'reject\',\''+h.id+'\',\''+esc(h.recordedByName||'')+'\','+(h.amount||0)+')">✗ Reject</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function renderHOList(rows) {
+  var el = document.getElementById('ho-list');
+  if (!rows.length) { el.innerHTML='<div class="empty">No handovers recorded yet</div>'; return; }
+  el.innerHTML = rows.map(function(h){
+    var status = h.custodyStatus || 'ACCEPTED'; // legacy records default to accepted
+    var badgeClass = status==='PENDING'?'pending':status==='REJECTED'?'rejected':'accepted';
+    var badgeLabel = status==='PENDING'?'Awaiting Acceptance':status==='REJECTED'?'Rejected':'Accepted';
+    var acceptedLine = '';
+    if (status==='ACCEPTED' && h.acceptedAt) acceptedLine='<div><div class="ho-card-k">Accepted At</div><div class="ho-card-v">'+esc(h.acceptedAt)+'</div></div>';
+    if (status==='REJECTED' && h.rejectedAt) acceptedLine='<div><div class="ho-card-k">Rejected At</div><div class="ho-card-v">'+esc(h.rejectedAt)+'</div></div>';
+    return '<div class="ho-handover-card">'+
+      '<div class="ho-card-header">'+
+        '<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">#'+h.id.slice(-6).toUpperCase()+'</span>'+
+        '<span class="ho-status-badge '+badgeClass+'">'+badgeLabel+'</span>'+
+        '<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(h.time||'')+'</span>'+
+      '</div>'+
+      '<div class="ho-card-body">'+
+        '<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>'+
+        '<div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div></div>'+
+        '<div><div class="ho-card-k">By</div><div class="ho-card-v">'+esc(h.recordedByName||'-')+'</div></div>'+
+        '<div><div class="ho-card-k">Notes</div><div class="ho-card-v">'+esc(h.notes||'-')+'</div></div>'+
+        acceptedLine+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
 function submitHandover() {
-  var to=document.getElementById('ho-to').value.trim();
-  var amt=parseFloat(document.getElementById('ho-amt').value||0);
-  var notes=document.getElementById('ho-notes').value;
-  if (!to) { toast('Enter handover recipient','warn'); return; }
-  var now=new Date();
+  var to = document.getElementById('ho-to').value.trim();
+  var amt = parseFloat(document.getElementById('ho-amt').value||0);
+  var notes = document.getElementById('ho-notes').value.trim();
+  if (!to) { toast('Enter recipient name','warn'); return; }
+  if (!amt || amt<=0) { toast('Enter a valid amount','warn'); return; }
+  var now = new Date();
   db.collection('handovers').add({
-    handoverTo:to, amount:amt, notes:notes, date:todayStr(),
-    time:now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-    createdAt:firebase.firestore.FieldValue.serverTimestamp(),
-    recordedBy:curUser.uid, recordedByName:(curProfile&&curProfile.name)||curUser.email
-  }).then(function(){ toast('Handover recorded','ok'); document.getElementById('ho-to').value=''; document.getElementById('ho-notes').value=''; loadHO(); loadStats(); })
-  .catch(function(){ toast('Failed - check connection','err'); });
+    handoverTo: to, amount: amt, notes: notes, date: todayStr(),
+    time: now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    recordedBy: curUser.uid, recordedByName: (curProfile&&curProfile.name)||curUser.email,
+    custodyStatus: 'PENDING'  // Chain of custody — starts as PENDING
+  }).then(function(){
+    toast('Handover initiated — awaiting acceptance','ok');
+    document.getElementById('ho-to').value='';
+    document.getElementById('ho-notes').value='';
+    loadStats();
+  }).catch(function(){ toast('Failed — check connection','err'); });
+}
+
+// Two-step confirmation overlay
+var hoPendingAction = null;
+function hoConfirm(action, hvid, fromName, amount) {
+  hoPendingAction = {action:action, hvid:hvid};
+  var overlay = document.getElementById('ho-confirm-overlay');
+  var title = document.getElementById('ho-confirm-title');
+  var sub = document.getElementById('ho-confirm-sub');
+  var okBtn = document.getElementById('ho-confirm-ok');
+  if (action==='accept') {
+    title.textContent = 'Accept Cash Custody?';
+    sub.textContent = 'Rs.'+amount.toLocaleString('en-IN')+' from '+fromName+' will transfer to your custody. You are responsible for this amount.';
+    okBtn.textContent = '✓ Yes, Accept';
+    okBtn.style.background='#059669';
+  } else {
+    title.textContent = 'Reject Handover?';
+    sub.textContent = 'Rs.'+amount.toLocaleString('en-IN')+' from '+fromName+' will be returned. Cash stays with sender.';
+    okBtn.textContent = '✗ Yes, Reject';
+    okBtn.style.background='#DC2626';
+  }
+  okBtn.onclick = hoConfirmExecute;
+  overlay.style.display='flex';
+}
+function hoConfirmCancel() {
+  document.getElementById('ho-confirm-overlay').style.display='none';
+  hoPendingAction = null;
+}
+function hoConfirmExecute() {
+  if (!hoPendingAction) return;
+  var action = hoPendingAction.action;
+  var hvid = hoPendingAction.hvid;
+  hoConfirmCancel();
+  var now = new Date();
+  var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  var acceptedByName = (curProfile&&curProfile.name)||curUser.email;
+  if (action==='accept') {
+    db.collection('handovers').doc(hvid).update({
+      custodyStatus: 'ACCEPTED',
+      acceptedBy: curUser.uid,
+      acceptedByName: acceptedByName,
+      acceptedAt: timeStr,
+      acceptedTimestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(function(){ toast('Cash accepted — now in your custody ✓','ok'); loadStats(); })
+    .catch(function(){ toast('Failed — check connection','err'); });
+  } else {
+    db.collection('handovers').doc(hvid).update({
+      custodyStatus: 'REJECTED',
+      rejectedBy: curUser.uid,
+      rejectedByName: acceptedByName,
+      rejectedAt: timeStr,
+      rejectedTimestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(function(){ toast('Handover rejected — cash returned to sender','warn'); })
+    .catch(function(){ toast('Failed — check connection','err'); });
+  }
 }
 
 // ── EOD ──
@@ -1608,6 +2046,9 @@ function openTRF() {
     + '<div><div style="font-size:10px;color:#999">Ref by</div><div style="font-size:14px">' + esc(o.refBy||'-') + '</div></div>'
     + '<div><div style="font-size:10px;color:#999">Date</div><div style="font-size:14px">' + esc(o.date||'-') + '</div></div>'
     + '<div><div style="font-size:10px;color:#999">Order ID</div><div style="font-size:14px;font-family:monospace">#' + id + '</div></div>'
+    + '<div><div style="font-size:10px;color:#999">Source</div><div style="font-size:14px">' + esc(o.source||'Walk-in') + '</div></div>'
+    + (o.address ? '<div style="grid-column:span 2"><div style="font-size:10px;color:#999">Address</div><div style="font-size:13px">' + esc(o.address) + '</div></div>' : '')
+    + (o.gps ? '<div style="grid-column:span 2"><div style="font-size:10px;color:#999">GPS</div><div style="font-size:11px;font-family:monospace;color:#1D4ED8">' + o.gps.lat + ', ' + o.gps.lng + ' (±' + o.gps.accuracy + 'm)</div></div>' : '')
     + '</div></div>'
     + '<div style="background:#fff;border:0.5px solid #ddd;border-radius:12px;padding:14px 16px;margin-bottom:12px">'
     + '<div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Clinical History</div>'
@@ -1661,6 +2102,7 @@ function shareTRFWA() {
     'Patient: ' + (o.patientName||''),
     'Age/Sex: ' + (o.age||'-') + ' ' + (o.sex||''),
     'Ref by: ' + (o.refBy||'-'),
+    'Source: ' + (o.source||'Walk-in') + (o.address?' | '+o.address:'') + (o.gps?' [GPS: '+o.gps.lat+','+o.gps.lng+']':''),
     '',
     'Tests:',
     testLines,

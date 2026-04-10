@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OnePLUS Lab — Live Dashboard</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #F4F1EC; --surface: #FEFCF9; --surface2: #F0EDE7;
+    --border: rgba(0,0,0,0.08); --border-strong: rgba(0,0,0,0.14);
+    --accent: #1A4A3A; --accent2: #C0392B;
+    --text: #1A1612; --text2: #5C5448; --text3: #9C917E;
+    --green: #059669; --amber: #D97706; --red: #DC2626; --blue: #1D4ED8;
+    --mono: 'DM Mono', monospace; --serif: 'Fraunces', serif;
+    --radius: 8px; --radius-lg: 12px;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── LOGIN ── */
+  #login-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .login-box { background: var(--accent); border-radius: 16px; padding: 32px; width: 360px; color: #fff; }
+  .login-box h1 { font-family: var(--serif); font-size: 22px; font-weight: 300; margin-bottom: 4px; }
+  .login-box p { font-size: 12px; opacity: 0.65; margin-bottom: 24px; }
+  .login-box input { width:100%; padding:10px 12px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.1); color:#fff; font-size:14px; margin-bottom:10px; }
+  .login-box input::placeholder { opacity: 0.5; }
+  .login-btn { width:100%; padding:11px; background:#fff; color:var(--accent); border:none; border-radius:var(--radius); font-weight:600; font-size:14px; cursor:pointer; }
+  .login-err { font-size:12px; color:#FCA5A5; margin-top:8px; min-height:16px; }
+
+  /* ── MAIN LAYOUT ── */
+  #main-screen { display:none; flex-direction:column; min-height:100vh; }
+  .topbar { background:var(--accent); color:#fff; padding:0 28px; height:56px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .topbar-brand { font-family:var(--serif); font-size:18px; font-weight:300; }
+  .topbar-meta { font-size:12px; opacity:0.7; font-family:var(--mono); }
+  .topbar-right { display:flex; align-items:center; gap:16px; }
+  .live-dot { width:8px; height:8px; border-radius:50%; background:#4ADE80; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+  .signout-btn { font-size:12px; font-family:var(--mono); color:rgba(255,255,255,0.6); background:none; border:1px solid rgba(255,255,255,0.2); border-radius:6px; padding:4px 10px; cursor:pointer; }
+
+  .content { flex:1; padding:24px 28px; }
+
+  /* ── STATS ROW ── */
+  .stats-row { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:24px; }
+  .stat-card { background:var(--surface); border:0.5px solid var(--border); border-radius:var(--radius-lg); padding:16px 18px; }
+  .stat-label { font-size:11px; font-family:var(--mono); color:var(--text3); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+  .stat-value { font-family:var(--serif); font-size:28px; font-weight:500; color:var(--accent); }
+  .stat-sub { font-size:11px; color:var(--text3); margin-top:3px; }
+
+  /* ── GRID ── */
+  .main-grid { display:grid; grid-template-columns: 1fr 380px; gap:18px; }
+  .left-col { display:flex; flex-direction:column; gap:18px; }
+  .right-col { display:flex; flex-direction:column; gap:18px; }
+
+  /* ── CARDS ── */
+  .card { background:var(--surface); border:0.5px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+  .card-header { padding:13px 18px; border-bottom:0.5px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .card-title { font-size:13px; font-weight:600; color:var(--text); }
+  .card-count { font-size:11px; font-family:var(--mono); color:var(--text3); background:var(--surface2); padding:2px 8px; border-radius:20px; }
+  .card-body { padding:0; }
+
+  /* ── ORDER TABLE ── */
+  .order-table { width:100%; border-collapse:collapse; }
+  .order-table th { padding:8px 14px; font-size:10px; font-family:var(--mono); color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; text-align:left; border-bottom:0.5px solid var(--border); background:var(--surface2); }
+  .order-table td { padding:10px 14px; font-size:13px; border-bottom:0.5px solid var(--border); vertical-align:middle; }
+  .order-table tr:last-child td { border-bottom:none; }
+  .order-table tr:hover td { background:var(--surface2); }
+  .empty-row { padding:24px; text-align:center; color:var(--text3); font-size:13px; }
+
+  /* ── BADGES ── */
+  .badge { display:inline-block; font-size:9px; font-family:var(--mono); font-weight:600; text-transform:uppercase; letter-spacing:0.05em; padding:2px 7px; border-radius:20px; }
+  .badge-green { background:#D1FAE5; color:#065F46; }
+  .badge-gold { background:#FEF3C7; color:#92400E; }
+  .badge-blue { background:#DBEAFE; color:#1D4ED8; }
+  .badge-pending { background:#FCD34D33; color:#92400E; border:1px solid #FCD34D; }
+  .badge-accepted { background:#D1FAE5; color:#065F46; }
+  .badge-rejected { background:#FEE2E2; color:#991B1B; }
+
+  /* ── HANDOVER LIST ── */
+  .ho-item { padding:12px 16px; border-bottom:0.5px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .ho-item:last-child { border-bottom:none; }
+  .ho-from-to { font-size:13px; font-weight:500; }
+  .ho-meta { font-size:11px; color:var(--text3); margin-top:2px; font-family:var(--mono); }
+
+  /* ── DEPT BREAKDOWN ── */
+  .dept-row { display:flex; align-items:center; justify-content:space-between; padding:9px 16px; border-bottom:0.5px solid var(--border); }
+  .dept-row:last-child { border-bottom:none; }
+  .dept-bar-bg { flex:1; height:6px; background:var(--surface2); border-radius:3px; margin:0 12px; overflow:hidden; }
+  .dept-bar { height:100%; background:var(--accent); border-radius:3px; transition:width 0.4s; }
+
+  /* ── REVENUE STRIP ── */
+  .rev-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); }
+  .rev-cell { background:var(--surface); padding:12px 14px; }
+  .rev-label { font-size:10px; font-family:var(--mono); color:var(--text3); text-transform:uppercase; margin-bottom:4px; }
+  .rev-value { font-family:var(--serif); font-size:18px; font-weight:500; }
+
+  /* ── ACTIVITY FEED ── */
+  .activity-item { padding:10px 16px; border-bottom:0.5px solid var(--border); display:flex; gap:10px; align-items:flex-start; }
+  .activity-item:last-child { border-bottom:none; }
+  .activity-dot { width:8px; height:8px; border-radius:50%; margin-top:4px; flex-shrink:0; }
+  .activity-text { font-size:12px; color:var(--text); line-height:1.5; }
+  .activity-time { font-size:10px; font-family:var(--mono); color:var(--text3); }
+
+  .refresh-time { font-size:11px; font-family:var(--mono); color:var(--text3); }
+  .no-data { padding:20px; text-align:center; color:var(--text3); font-size:13px; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono&family=Fraunces:wght@300;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>OnePLUS Lab</h1>
+    <p>Desktop Monitoring Dashboard</p>
+    <input type="email" id="d-email" placeholder="Email address" autocomplete="email">
+    <input type="password" id="d-pass" placeholder="Password" autocomplete="current-password">
+    <button class="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="login-err" id="d-err"></div>
+  </div>
+</div>
+
+<!-- MAIN DASHBOARD -->
+<div id="main-screen">
+  <div class="topbar">
+    <div>
+      <div class="topbar-brand">OnePLUS Ultrasound Lab</div>
+      <div class="topbar-meta">47 Harsh Vihar, Pitampura, Delhi · Live Dashboard</div>
+    </div>
+    <div class="topbar-right">
+      <div class="live-dot" title="Live — auto-updates"></div>
+      <span id="dash-date" class="topbar-meta"></span>
+      <button class="signout-btn" onclick="doSignOut()">Sign out</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- Stats Row -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Orders Today</div>
+        <div class="stat-value" id="s-orders">—</div>
+        <div class="stat-sub" id="s-orders-sub">Loading...</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Revenue Today</div>
+        <div class="stat-value" id="s-revenue">—</div>
+        <div class="stat-sub" id="s-rev-sub">Cash + UPI + Card</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Pending Bills</div>
+        <div class="stat-value" id="s-pending" style="color:var(--amber)">—</div>
+        <div class="stat-sub" id="s-pending-sub">Credit orders</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Home Collections</div>
+        <div class="stat-value" id="s-home" style="color:var(--blue)">—</div>
+        <div class="stat-sub">Today</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Cash in Hand</div>
+        <div class="stat-value" id="s-cash">—</div>
+        <div class="stat-sub" id="s-cash-sub">After handovers</div>
+      </div>
+    </div>
+
+    <!-- Revenue Breakdown -->
+    <div class="card" style="margin-bottom:18px">
+      <div class="rev-strip" id="rev-strip">
+        <div class="rev-cell"><div class="rev-label">Cash</div><div class="rev-value" id="rev-cash">—</div></div>
+        <div class="rev-cell"><div class="rev-label">UPI</div><div class="rev-value" id="rev-upi">—</div></div>
+        <div class="rev-cell"><div class="rev-label">Card</div><div class="rev-value" id="rev-card">—</div></div>
+        <div class="rev-cell"><div class="rev-label">Credit (Due)</div><div class="rev-value" id="rev-credit" style="color:var(--amber)">—</div></div>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <!-- LEFT: Orders table -->
+      <div class="left-col">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Today's Orders</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="text" id="search-q" placeholder="Search patient..." oninput="filterTable(this.value)"
+                style="padding:5px 10px;border:0.5px solid var(--border-strong);border-radius:6px;font-size:12px;background:var(--surface2);width:180px">
+              <span class="refresh-time" id="last-refresh">—</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <table class="order-table">
+              <thead>
+                <tr>
+                  <th>Patient</th>
+                  <th>Tests</th>
+                  <th>Source</th>
+                  <th>Amount</th>
+                  <th>Mode</th>
+                  <th>By</th>
+                  <th>Status</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="orders-tbody">
+                <tr><td colspan="8" class="empty-row">Loading orders...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Handovers -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Cash Handovers Today</div>
+            <span class="card-count" id="ho-count">0</span>
+          </div>
+          <div class="card-body" id="ho-list">
+            <div class="no-data">No handovers yet</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Department breakdown + activity -->
+      <div class="right-col">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Department Breakdown</div>
+          </div>
+          <div class="card-body" id="dept-list">
+            <div class="no-data">Loading...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Activity Feed</div>
+            <span class="card-count" id="feed-count">0</span>
+          </div>
+          <div class="card-body" id="activity-feed" style="max-height:380px;overflow-y:auto">
+            <div class="no-data">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var FB_CONFIG = {
+  apiKey: "AIzaSyChTDf2CdK4fBomsYlFlL5Uvsb-eUFaNkE",
+  authDomain: "oneplus-lms.firebaseapp.com",
+  projectId: "oneplus-lms",
+  storageBucket: "oneplus-lms.firebasestorage.app",
+  messagingSenderId: "869836991266",
+  appId: "1:869836991266:web:a754fb93663b2a65c4137b"
+};
+firebase.initializeApp(FB_CONFIG);
+var auth = firebase.auth();
+var db = firebase.firestore();
+
+var allOrders = [], allHandovers = [];
+var unsubOrders = null, unsubHandovers = null;
+
+// ── AUTH ──
+function doLogin() {
+  var email = document.getElementById('d-email').value.trim();
+  var pass = document.getElementById('d-pass').value;
+  var err = document.getElementById('d-err');
+  if (!email || !pass) { err.textContent = 'Enter email and password'; return; }
+  err.textContent = '';
+  auth.signInWithEmailAndPassword(email, pass)
+    .catch(function(e) { err.textContent = e.message; });
+}
+function doSignOut() {
+  if (unsubOrders) unsubOrders();
+  if (unsubHandovers) unsubHandovers();
+  auth.signOut();
+}
+document.getElementById('d-pass').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+
+auth.onAuthStateChanged(function(user) {
+  if (user) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-screen').style.display = 'flex';
+    startDashboard();
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('main-screen').style.display = 'none';
+  }
+});
+
+// ── DASHBOARD ──
+function todayStr() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function fmt(n) { return 'Rs.' + (n||0).toLocaleString('en-IN'); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function startDashboard() {
+  var today = todayStr();
+  var d = new Date();
+  document.getElementById('dash-date').textContent =
+    d.toLocaleDateString('en-IN', {weekday:'short', day:'2-digit', month:'short', year:'numeric'});
+
+  // Real-time orders listener
+  unsubOrders = db.collection('orders').where('date','==',today)
+    .onSnapshot(function(snap) {
+      allOrders = [];
+      snap.forEach(function(d) { allOrders.push(Object.assign({id:d.id}, d.data())); });
+      allOrders.sort(function(a,b) {
+        return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0) -
+               (a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0);
+      });
+      renderAll();
+      document.getElementById('last-refresh').textContent =
+        'Updated ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    });
+
+  // Real-time handovers listener
+  unsubHandovers = db.collection('handovers').where('date','==',today)
+    .onSnapshot(function(snap) {
+      allHandovers = [];
+      snap.forEach(function(d) { allHandovers.push(Object.assign({id:d.id}, d.data())); });
+      renderHandovers();
+      updateCashStat();
+    });
+}
+
+function renderAll() {
+  renderStats();
+  renderTable(allOrders);
+  renderDepts();
+  renderActivity();
+}
+
+function renderStats() {
+  var orders = allOrders;
+  var cash=0, upi=0, card=0, credit=0, pending=0, home=0;
+  orders.forEach(function(o) {
+    var paid = o.paidAmount||0;
+    if (o.payMode==='cash') cash+=paid;
+    else if (o.payMode==='upi') upi+=paid;
+    else if (o.payMode==='card') card+=paid;
+    if (o.payMode==='credit') { credit+=(o.totalAmount||0); pending++; }
+    if (o.source==='Home Collection') home++;
+  });
+  var revenue = cash+upi+card;
+
+  document.getElementById('s-orders').textContent = orders.length;
+  document.getElementById('s-orders-sub').textContent = orders.length + ' order' + (orders.length!==1?'s':'') + ' today';
+  document.getElementById('s-revenue').textContent = fmt(revenue);
+  document.getElementById('s-rev-sub').textContent = 'Cash+UPI+Card';
+  document.getElementById('s-pending').textContent = pending;
+  document.getElementById('s-pending-sub').textContent = fmt(credit) + ' due';
+  document.getElementById('s-home').textContent = home;
+  document.getElementById('rev-cash').textContent = fmt(cash);
+  document.getElementById('rev-upi').textContent = fmt(upi);
+  document.getElementById('rev-card').textContent = fmt(card);
+  document.getElementById('rev-credit').textContent = fmt(credit);
+}
+
+function updateCashStat() {
+  var orders = allOrders;
+  var cashTotal = orders.reduce(function(s,o) { return s+(o.payMode==='cash'?o.paidAmount||0:0); }, 0);
+  var handedOver = allHandovers.filter(function(h){ return h.custodyStatus==='ACCEPTED'; })
+    .reduce(function(s,h){ return s+(h.amount||0); }, 0);
+  var inHand = cashTotal - handedOver;
+  document.getElementById('s-cash').textContent = fmt(Math.max(0,inHand));
+  document.getElementById('s-cash-sub').textContent = 'Total: '+fmt(cashTotal)+' | HO: '+fmt(handedOver);
+}
+
+var filteredOrders = null;
+function filterTable(q) {
+  if (!q) { filteredOrders = null; renderTable(allOrders); return; }
+  filteredOrders = allOrders.filter(function(o) {
+    return o.patientName && o.patientName.toLowerCase().indexOf(q.toLowerCase()) >= 0;
+  });
+  renderTable(filteredOrders);
+}
+
+function renderTable(orders) {
+  var tbody = document.getElementById('orders-tbody');
+  if (!orders.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-row">No orders today</td></tr>';
+    return;
+  }
+  tbody.innerHTML = orders.map(function(o) {
+    var time = '';
+    if (o.createdAt && o.createdAt.toDate) {
+      time = o.createdAt.toDate().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    }
+    var tests = (o.tests||[]).slice(0,3).map(function(t){return t.name;}).join(', ');
+    if ((o.tests||[]).length > 3) tests += ' +' + ((o.tests.length-3)) + ' more';
+    var srcBadge = o.source && o.source!=='Walk-in'
+      ? '<span class="badge badge-blue">'+esc(o.source==='Home Collection'?'Home':o.source)+'</span>'
+      : '<span style="font-size:11px;color:var(--text3)">Walk-in</span>';
+    var statusBadge = o.status==='paid'
+      ? '<span class="badge badge-green">Paid</span>'
+      : '<span class="badge badge-gold">Credit</span>';
+    return '<tr>'
+      + '<td><div style="font-weight:500;font-size:13px">'+esc(o.patientName)+'</div>'
+      + '<div style="font-size:11px;color:var(--text3)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+'</div></td>'
+      + '<td style="font-size:11px;color:var(--text2);max-width:180px">'+esc(tests)+'</td>'
+      + '<td>'+srcBadge+(o.gps?' <span title="GPS captured" style="color:var(--blue)">&#128205;</span>':'')+'</td>'
+      + '<td style="font-family:var(--mono);font-weight:500">'+fmt(o.paidAmount)+'</td>'
+      + '<td style="font-size:11px;font-family:var(--mono);text-transform:uppercase">'+esc(o.payMode||'')+'</td>'
+      + '<td style="font-size:11px;color:var(--text2)">'+esc(o.createdByName||'-')+'</td>'
+      + '<td>'+statusBadge+'</td>'
+      + '<td style="font-size:11px;font-family:var(--mono);color:var(--text3)">'+time+'</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function renderDepts() {
+  var deptMap = {};
+  allOrders.forEach(function(o) {
+    (o.tests||[]).forEach(function(t) {
+      var d = t.dept||'Other';
+      deptMap[d] = (deptMap[d]||0) + 1;
+    });
+  });
+  var depts = Object.keys(deptMap).map(function(d){ return {dept:d, count:deptMap[d]}; });
+  depts.sort(function(a,b){ return b.count - a.count; });
+  var max = depts.length ? depts[0].count : 1;
+  var el = document.getElementById('dept-list');
+  if (!depts.length) { el.innerHTML = '<div class="no-data">No tests today</div>'; return; }
+  el.innerHTML = depts.slice(0,10).map(function(d) {
+    var pct = Math.round((d.count/max)*100);
+    return '<div class="dept-row">'
+      + '<div style="font-size:12px;width:130px;flex-shrink:0">'+esc(d.dept)+'</div>'
+      + '<div class="dept-bar-bg"><div class="dept-bar" style="width:'+pct+'%"></div></div>'
+      + '<div style="font-size:12px;font-family:var(--mono);color:var(--text3);width:24px;text-align:right">'+d.count+'</div>'
+      + '</div>';
+  }).join('');
+}
+
+function renderHandovers() {
+  var el = document.getElementById('ho-list');
+  document.getElementById('ho-count').textContent = allHandovers.length;
+  if (!allHandovers.length) { el.innerHTML = '<div class="no-data">No handovers today</div>'; return; }
+  var sorted = allHandovers.slice().sort(function(a,b){ return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0); });
+  el.innerHTML = sorted.map(function(h) {
+    var status = h.custodyStatus||'ACCEPTED';
+    var badgeClass = status==='PENDING'?'badge-pending':status==='REJECTED'?'badge-rejected':'badge-accepted';
+    var badgeLabel = status==='PENDING'?'Pending':status==='REJECTED'?'Rejected':'Accepted';
+    return '<div class="ho-item">'
+      + '<div>'
+      + '<div class="ho-from-to">'+esc(h.recordedByName||'-')+' → '+esc(h.handoverTo||'-')+'</div>'
+      + '<div class="ho-meta">'+esc(h.time||'')+' · '+esc(h.notes||'No notes')+'</div>'
+      + '</div>'
+      + '<div style="text-align:right">'
+      + '<div style="font-family:var(--mono);font-weight:500;font-size:14px">'+fmt(h.amount)+'</div>'
+      + '<span class="badge '+badgeClass+'">'+badgeLabel+'</span>'
+      + '</div></div>';
+  }).join('');
+}
+
+function renderActivity() {
+  var events = [];
+  allOrders.forEach(function(o) {
+    var time = o.createdAt&&o.createdAt.toDate ? o.createdAt.toDate() : null;
+    events.push({
+      at: time, label: o.patientName + ' registered',
+      sub: fmt(o.paidAmount) + ' · ' + (o.payMode||'').toUpperCase() + ' · ' + esc(o.createdByName||''),
+      color: '#059669'
+    });
+    if (o.amendments && o.amendments.length) {
+      o.amendments.forEach(function(a) {
+        events.push({ at: null, label: o.patientName + ' order amended', sub: 'By '+a.byName+' · '+a.reason, color: '#D97706' });
+      });
+    }
+  });
+  events.sort(function(a,b) {
+    return (b.at?b.at.getTime():0) - (a.at?a.at.getTime():0);
+  });
+  var el = document.getElementById('activity-feed');
+  document.getElementById('feed-count').textContent = events.length;
+  if (!events.length) { el.innerHTML = '<div class="no-data">No activity today</div>'; return; }
+  el.innerHTML = events.slice(0,40).map(function(ev) {
+    var time = ev.at ? ev.at.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '';
+    return '<div class="activity-item">'
+      + '<div class="activity-dot" style="background:'+ev.color+'"></div>'
+      + '<div style="flex:1">'
+      + '<div class="activity-text">'+esc(ev.label)+'</div>'
+      + '<div class="activity-time">'+esc(ev.sub)+(time?' · '+time:'')+'</div>'
+      + '</div></div>';
+  }).join('');
+}
+</script>
+</body>
+</html>

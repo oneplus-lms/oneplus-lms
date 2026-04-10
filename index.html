@@ -215,6 +215,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   @page { margin: 10mm; size: A4 portrait; }
 }
 </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div id="app" onclick="hideSuggest(event)">
@@ -657,6 +658,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <button class="back-btn" onclick="goBack()">&#8592;</button>
     <div style="flex:1"><div class="topbar-title">Order Detail</div><div class="topbar-sub" id="od-subtitle">Audit Trail</div></div>
     <button onclick="openDetailTRF()" style="font-size:11px;font-family:var(--mono);color:var(--accent);padding:4px 10px;border:0.5px solid var(--accent);border-radius:6px;background:none;cursor:pointer">TRF</button>
+    <button onclick="downloadTRFpdf()" style="font-size:11px;font-family:var(--mono);color:#fff;padding:4px 10px;border:none;border-radius:6px;background:var(--accent);cursor:pointer;margin-left:4px">PDF</button>
   </div>
   <div class="scroll-body" style="padding-top:16px" id="od-body">
     <div class="empty">Loading...</div>
@@ -686,7 +688,12 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="card">
       <div class="card-title">Initiate Handover</div>
       <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Recipient must accept before custody transfers.</div>
-      <div class="field"><label>Handover To (Name)</label><input type="text" id="ho-to" placeholder="Dr. Nitin / Accountant / Lab Tech"></div>
+      <div class="field">
+        <label>Handover To</label>
+        <select id="ho-to">
+          <option value="">Select staff member...</option>
+        </select>
+      </div>
       <div class="field"><label>Cash Amount (Rs.)</label><input type="number" id="ho-amt" placeholder="0" inputmode="numeric"></div>
       <div class="field"><label>Notes</label><input type="text" id="ho-notes" placeholder="Shift end, remarks..."></div>
       <button class="btn btn-primary" onclick="submitHandover()">Initiate Handover →</button>
@@ -695,14 +702,34 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div id="ho-list"><div class="empty">No handovers recorded yet</div></div>
   </div>
 </div>
-<!-- Chain of custody confirm overlay -->
+<!-- Chain of custody PIN auth overlay -->
 <div id="ho-confirm-overlay" class="ho-confirm-overlay" style="display:none">
   <div class="ho-confirm-box">
     <div class="ho-confirm-title" id="ho-confirm-title">Confirm Action</div>
     <div class="ho-confirm-sub" id="ho-confirm-sub"></div>
-    <div class="ho-confirm-actions">
-      <button class="btn" style="flex:1" onclick="hoConfirmCancel()">Cancel</button>
-      <button class="btn btn-primary" style="flex:1" id="ho-confirm-ok" onclick="">Confirm</button>
+    <div style="margin:14px 0 8px">
+      <div style="font-size:11px;font-family:var(--mono);color:var(--text3);margin-bottom:6px;text-transform:uppercase">Enter your PIN to authenticate</div>
+      <div style="display:flex;gap:6px;justify-content:center;margin-bottom:10px" id="ho-pin-dots">
+        <div style="width:11px;height:11px;border-radius:50%;border:1.5px solid #9CA3AF" id="hpd0"></div>
+        <div style="width:11px;height:11px;border-radius:50%;border:1.5px solid #9CA3AF" id="hpd1"></div>
+        <div style="width:11px;height:11px;border-radius:50%;border:1.5px solid #9CA3AF" id="hpd2"></div>
+        <div style="width:11px;height:11px;border-radius:50%;border:1.5px solid #9CA3AF" id="hpd3"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="ho-pin-pad">
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinKey('1')">1</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinKey('2')">2</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinKey('3')">3</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinKey('4')">4</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinKey('5')">5</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinKey('6')">6</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinKey('7')">7</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinKey('8')">8</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinKey('9')">9</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoConfirmCancel()">✕</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinKey('0')">0</button>
+        <button class="pin-key" style="background:var(--surface2);border:0.5px solid var(--border);color:var(--text);font-size:18px;font-family:var(--mono);height:46px;border-radius:8px;cursor:pointer" onclick="hoPinBack()">⌫</button>
+      </div>
+      <div id="ho-pin-err" style="font-size:11px;color:#DC2626;text-align:center;margin-top:6px;min-height:16px"></div>
     </div>
   </div>
 </div>
@@ -1466,7 +1493,7 @@ function submitOrder() {
   };
   db.collection('orders').add(order).then(function(ref){
     lastOrder={id:ref.id}; Object.assign(lastOrder,order);
-    document.getElementById('done-id').textContent='Order #'+ref.id.slice(-6).toUpperCase()+' - Synced';
+    document.getElementById('done-id').textContent=order.patientName+' — Saved ✓';
     goTo('s-done');
     loadStats();
   }).catch(function(e){ toast('Save failed - check connection','err'); });
@@ -1515,6 +1542,10 @@ function renderOrders(orders) {
       +'<div style="font-size:15px;font-weight:500;margin:4px 0 2px">'+esc(o.patientName)+'</div>'
       +'<div style="font-size:12px;color:var(--text2)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+' · Ref: '+esc(o.refBy||'-')+'</div>'
       +'<div style="font-size:11px;color:var(--text3);margin-top:4px">'+esc((o.tests||[]).map(function(t){return t.name;}).join(', '))+'</div>'
+      +'<div style="font-size:11px;color:var(--text3);margin-top:5px;display:flex;align-items:center;gap:8px">'
+      +'<span>&#128100; '+esc(o.createdByName||'-')+'</span>'
+      +(o.gps?'<span style="color:#1D4ED8">&#128205; GPS</span>':'')
+      +'</div>'
       +'<div class="order-footer">'
       +'<span class="badge '+(o.status==='paid'?'badge-green':'badge-gold')+'">'+(o.status||'paid').toUpperCase()+'</span>'
       +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'
@@ -1615,6 +1646,7 @@ function renderOrderDetail(o) {
     // Action buttons
     + '<button class="btn" style="width:100%;margin-bottom:10px;border-color:var(--accent);color:var(--accent)" onclick="openEditModal()">&#9998; Edit Order</button>'
     + '<button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="openDetailTRF()">&#128221; View / Print TRF</button>'
+    + '<button class="btn" style="width:100%;margin-bottom:10px" onclick="downloadTRFpdf()">&#128196; Download PDF</button>'
     + '<button class="btn" style="width:100%;" onclick="shareDetailWA()">&#128172; Share via WhatsApp</button>';
 }
 
@@ -1868,6 +1900,124 @@ function submitEditOrder() {
 }
 
 
+function downloadTRFpdf() {
+  var o = curDetailOrder || lastOrder;
+  if (!o) { toast('No order loaded','warn'); return; }
+  if (typeof window.jspdf === 'undefined') { toast('PDF library loading, try again','warn'); return; }
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({unit:'mm', format:'a4'});
+  var pw = 210, ph = 297, ml = 15, mr = 15, mt = 15;
+  var cw = pw - ml - mr;
+  var y = mt;
+
+  // Header
+  doc.setFillColor(26, 74, 58);
+  doc.roundedRect(ml, y, cw, 22, 3, 3, 'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold'); doc.setFontSize(14);
+  doc.text('OnePLUS Ultrasound Lab', ml+6, y+8);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.text('47, Harsh Vihar, Pitampura, Delhi-34  |  011-4248 0101  |  dr.nitinagarwal@gmail.com', ml+6, y+15);
+  doc.text('Test Request Form (TRF)', pw-mr-6, y+8, {align:'right'});
+  doc.text('Date: '+(o.date||''), pw-mr-6, y+14, {align:'right'});
+  y += 28;
+
+  // Patient details box
+  doc.setDrawColor(220,220,220); doc.setTextColor(50,50,50);
+  doc.roundedRect(ml, y, cw, 32, 2, 2, 'S');
+  doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  doc.setTextColor(150,150,150);
+  doc.text('PATIENT DETAILS', ml+4, y+5);
+  doc.setTextColor(30,30,30); doc.setFontSize(10);
+  doc.setFont('helvetica','bold');
+  doc.text(o.patientName||'-', ml+4, y+13);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text('Age/Sex: '+(o.age||'-')+' '+(o.sex||''), ml+4, y+20);
+  doc.text('Mobile: '+(o.phone||'-'), ml+4, y+26);
+  doc.text('Ref by: '+(o.refBy||'-'), ml+cw/2, y+20);
+  doc.text('Source: '+(o.source||'Walk-in'), ml+cw/2, y+26);
+  if (o.address) { doc.setFontSize(8); doc.text('Address: '+o.address, ml+4, y+31); }
+  y += 38;
+
+  // GPS if present
+  if (o.gps) {
+    doc.setFontSize(8); doc.setTextColor(29,78,216);
+    doc.text('GPS: '+o.gps.lat+', '+o.gps.lng+' (±'+o.gps.accuracy+'m)', ml, y);
+    doc.setTextColor(30,30,30);
+    y += 6;
+  }
+
+  // Tests table
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(150,150,150);
+  doc.text('TESTS ORDERED', ml, y+4);
+  y += 8;
+  doc.setFillColor(245,245,245);
+  doc.rect(ml, y, cw, 7, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(80,80,80);
+  doc.text('#', ml+2, y+5);
+  doc.text('Test Name', ml+10, y+5);
+  doc.text('Dept', ml+cw*0.62, y+5);
+  doc.text('Rate (Rs.)', pw-mr-2, y+5, {align:'right'});
+  y += 9;
+  var tests = o.tests||[];
+  var total = 0;
+  tests.forEach(function(t,i) {
+    if (y > ph-40) { doc.addPage(); y = mt; }
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(30,30,30);
+    doc.text(String(i+1), ml+2, y+4);
+    var name = t.name||''; if(name.length>40) name=name.substring(0,38)+'..';
+    doc.text(name, ml+10, y+4);
+    var dept = (t.dept||'').substring(0,14);
+    doc.text(dept, ml+cw*0.62, y+4);
+    doc.text(String(t.rate||0), pw-mr-2, y+4, {align:'right'});
+    doc.setDrawColor(235,235,235);
+    doc.line(ml, y+7, pw-mr, y+7);
+    total += (t.rate||0);
+    y += 9;
+  });
+  y += 4;
+
+  // Billing summary
+  doc.setFillColor(26,74,58);
+  doc.roundedRect(ml, y, cw, 16, 2, 2, 'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text('Payment: '+(o.payMode||'').toUpperCase()+(o.discount>0?' | Discount: Rs.'+o.discount:''), ml+4, y+7);
+  doc.setFont('helvetica','bold'); doc.setFontSize(13);
+  doc.text('Rs. '+(o.paidAmount||0).toLocaleString('en-IN'), pw-mr-4, y+10, {align:'right'});
+  y += 22;
+
+  // Clinical history
+  var h = o.history||{};
+  var hLines = [];
+  if(h.fasting) hLines.push('Fasting: '+h.fasting+(h.fastHours?' ('+h.fastHours+')':''));
+  if(h.diagnoses&&h.diagnoses.length) hLines.push('Dx: '+h.diagnoses.join(', '));
+  if(h.medications&&h.medications.length) hLines.push('Meds: '+h.medications.join(', '));
+  if(h.collectionTime) hLines.push('Collection time: '+h.collectionTime);
+  if(h.orderingDoctor) hLines.push('Ordering Dr: '+h.orderingDoctor);
+  if(h.clinicalNotes) hLines.push('Notes: '+h.clinicalNotes);
+  if(hLines.length) {
+    doc.setTextColor(80,80,80); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+    doc.text('CLINICAL HISTORY', ml, y);
+    y += 5;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    hLines.forEach(function(l) { doc.setTextColor(30,30,30); doc.text(l, ml, y); y+=5; });
+    y += 4;
+  }
+
+  // Footer
+  doc.setDrawColor(220,220,220); doc.line(ml, y, pw-mr, y); y += 5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(150,150,150);
+  doc.text('Collected by: '+(o.createdByName||'-'), ml, y);
+  doc.text('Status: '+(o.status||'paid').toUpperCase(), pw-mr, y, {align:'right'});
+  y += 5;
+  if(o.lastEditedBy) doc.text('Last edited by: '+o.lastEditedBy+' at '+o.lastEditedAt, ml, y);
+
+  var filename = 'TRF_'+(o.patientName||'patient').replace(/\s+/g,'_')+'_'+(o.date||'').replace(/\//g,'-')+'.pdf';
+  doc.save(filename);
+  toast('PDF downloaded','ok');
+}
+
+
 function openDetailTRF() {
   if (!curDetailOrder) return;
   lastOrder = curDetailOrder;
@@ -1887,6 +2037,24 @@ var hoUnsubscribe = null; // Firestore real-time listener handle
 function loadHO() {
   var today = todayStr();
   document.getElementById('ho-date').textContent = today;
+
+  // Populate staff dropdown (exclude self)
+  db.collection('staff').where('active','==',true).get().then(function(snap) {
+    var sel = document.getElementById('ho-to');
+    var current = sel.value;
+    sel.innerHTML = '<option value="">Select recipient...</option>';
+    snap.forEach(function(d) {
+      var s = d.data();
+      if (d.id === curUser.uid) return; // exclude self
+      var opt = document.createElement('option');
+      opt.value = s.name;
+      opt.dataset.uid = d.id;
+      opt.dataset.name = s.name;
+      opt.textContent = s.name + ' (' + (s.role||'staff') + ')';
+      sel.appendChild(opt);
+    });
+    if (current) sel.value = current;
+  }).catch(function(){});
 
   // Load today's cash totals from orders
   db.collection('orders').where('date','==',today).get().then(function(snap){
@@ -1961,77 +2129,98 @@ function renderHOList(rows) {
 }
 
 function submitHandover() {
-  var to = document.getElementById('ho-to').value.trim();
+  var sel = document.getElementById('ho-to');
+  var to = sel.value;
+  var toName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].dataset.name || to : to;
   var amt = parseFloat(document.getElementById('ho-amt').value||0);
   var notes = document.getElementById('ho-notes').value.trim();
-  if (!to) { toast('Enter recipient name','warn'); return; }
+  if (!to) { toast('Select a recipient','warn'); return; }
   if (!amt || amt<=0) { toast('Enter a valid amount','warn'); return; }
   var now = new Date();
   db.collection('handovers').add({
-    handoverTo: to, amount: amt, notes: notes, date: todayStr(),
+    handoverTo: toName, amount: amt, notes: notes, date: todayStr(),
     time: now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     recordedBy: curUser.uid, recordedByName: (curProfile&&curProfile.name)||curUser.email,
-    custodyStatus: 'PENDING'  // Chain of custody — starts as PENDING
+    custodyStatus: 'PENDING'
   }).then(function(){
-    toast('Handover initiated — awaiting acceptance','ok');
-    document.getElementById('ho-to').value='';
+    toast('Handover initiated — awaiting acceptance by '+toName,'ok');
+    sel.value='';
     document.getElementById('ho-notes').value='';
     loadStats();
   }).catch(function(){ toast('Failed — check connection','err'); });
 }
 
-// Two-step confirmation overlay
+// PIN-authenticated handover confirmation
 var hoPendingAction = null;
+var hoPinBuf = '';
+
 function hoConfirm(action, hvid, fromName, amount) {
   hoPendingAction = {action:action, hvid:hvid};
-  var overlay = document.getElementById('ho-confirm-overlay');
+  hoPinBuf = '';
+  hoUpdatePinDots();
+  document.getElementById('ho-pin-err').textContent = '';
   var title = document.getElementById('ho-confirm-title');
   var sub = document.getElementById('ho-confirm-sub');
-  var okBtn = document.getElementById('ho-confirm-ok');
   if (action==='accept') {
     title.textContent = 'Accept Cash Custody?';
-    sub.textContent = 'Rs.'+amount.toLocaleString('en-IN')+' from '+fromName+' will transfer to your custody. You are responsible for this amount.';
-    okBtn.textContent = '✓ Yes, Accept';
-    okBtn.style.background='#059669';
+    sub.textContent = 'Rs.'+amount.toLocaleString('en-IN')+' from '+fromName+'. Enter your PIN to authenticate.';
   } else {
     title.textContent = 'Reject Handover?';
-    sub.textContent = 'Rs.'+amount.toLocaleString('en-IN')+' from '+fromName+' will be returned. Cash stays with sender.';
-    okBtn.textContent = '✗ Yes, Reject';
-    okBtn.style.background='#DC2626';
+    sub.textContent = 'Rejecting Rs.'+amount.toLocaleString('en-IN')+' from '+fromName+'. Enter your PIN to confirm.';
   }
-  okBtn.onclick = hoConfirmExecute;
-  overlay.style.display='flex';
+  document.getElementById('ho-confirm-overlay').style.display='flex';
 }
 function hoConfirmCancel() {
   document.getElementById('ho-confirm-overlay').style.display='none';
-  hoPendingAction = null;
+  hoPendingAction = null; hoPinBuf = '';
+}
+function hoPinKey(k) {
+  if (hoPinBuf.length >= 4) return;
+  hoPinBuf += k;
+  hoUpdatePinDots();
+  if (hoPinBuf.length === 4) hoConfirmExecute();
+}
+function hoPinBack() {
+  hoPinBuf = hoPinBuf.slice(0,-1);
+  hoUpdatePinDots();
+  document.getElementById('ho-pin-err').textContent = '';
+}
+function hoUpdatePinDots() {
+  for (var i=0;i<4;i++) {
+    var dot = document.getElementById('hpd'+i);
+    if (dot) {
+      dot.style.background = i < hoPinBuf.length ? 'var(--accent)' : '';
+      dot.style.borderColor = i < hoPinBuf.length ? 'var(--accent)' : '#9CA3AF';
+    }
+  }
 }
 function hoConfirmExecute() {
-  if (!hoPendingAction) return;
+  if (!hoPendingAction || hoPinBuf.length < 4) return;
+  var storedPin = curProfile && curProfile.pin ? curProfile.pin : '';
+  if (storedPin && hoPinBuf !== storedPin) {
+    document.getElementById('ho-pin-err').textContent = 'Incorrect PIN';
+    hoPinBuf = ''; hoUpdatePinDots(); return;
+  }
   var action = hoPendingAction.action;
   var hvid = hoPendingAction.hvid;
   hoConfirmCancel();
   var now = new Date();
   var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-  var acceptedByName = (curProfile&&curProfile.name)||curUser.email;
+  var byName = (curProfile&&curProfile.name)||curUser.email;
   if (action==='accept') {
     db.collection('handovers').doc(hvid).update({
-      custodyStatus: 'ACCEPTED',
-      acceptedBy: curUser.uid,
-      acceptedByName: acceptedByName,
-      acceptedAt: timeStr,
+      custodyStatus: 'ACCEPTED', acceptedBy: curUser.uid,
+      acceptedByName: byName, acceptedAt: timeStr,
       acceptedTimestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(function(){ toast('Cash accepted — now in your custody ✓','ok'); loadStats(); })
+    }).then(function(){ toast('Cash accepted — PIN verified ✓','ok'); loadStats(); })
     .catch(function(){ toast('Failed — check connection','err'); });
   } else {
     db.collection('handovers').doc(hvid).update({
-      custodyStatus: 'REJECTED',
-      rejectedBy: curUser.uid,
-      rejectedByName: acceptedByName,
-      rejectedAt: timeStr,
+      custodyStatus: 'REJECTED', rejectedBy: curUser.uid,
+      rejectedByName: byName, rejectedAt: timeStr,
       rejectedTimestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(function(){ toast('Handover rejected — cash returned to sender','warn'); })
+    }).then(function(){ toast('Handover rejected','warn'); })
     .catch(function(){ toast('Failed — check connection','err'); });
   }
 }

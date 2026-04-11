@@ -1087,6 +1087,9 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <button class="btn btn-danger" id="sm-deactivate-btn" onclick="deactivateStaff()">Deactivate Account</button>
       <button class="btn" id="sm-reactivate-btn" onclick="reactivateStaff()" style="display:none;background:#059669;border-color:#059669;color:#fff">✓ Reactivate Account</button>
     </div>
+    <div id="sm-delete-row" style="display:none;margin-top:8px">
+      <button class="btn btn-danger" onclick="deleteStaff()" style="background:transparent;color:var(--red);border-color:var(--red)">🗑 Delete Account Permanently</button>
+    </div>
     <div style="height:8px"></div>
     <button type="button" id="sm-reset-btn" onclick="sendStaffPasswordReset()" style="display:none;width:100%;padding:10px;background:transparent;color:var(--accent);border:1.5px solid var(--accent);border-radius:var(--radius);font-size:13px;cursor:pointer">
       📧 Send Password Reset Email
@@ -1214,6 +1217,11 @@ auth.onAuthStateChanged(function(user) {
   db.collection('staff').doc(user.uid).get().then(function(snap) {
     if (snap.exists) {
       curProfile = snap.data();
+      // Auto-correct email in Firestore if it doesn't match Firebase Auth
+      if (curProfile.email !== user.email) {
+        db.collection('staff').doc(user.uid).update({ email: user.email });
+        curProfile.email = user.email;
+      }
     } else {
       curProfile = { name: user.email, role: 'admin', pin: '' };
     }
@@ -1355,6 +1363,23 @@ function checkPin() {
   else { document.getElementById('pin-err').textContent='Incorrect PIN'; pinBuf=''; renderDots(); }
 }
 function unlock() {
+  // Check if admin has queued an email change for this user
+  if (curUser && curProfile && curProfile.pendingEmail && curProfile.pendingEmail !== curUser.email) {
+    var newEmail = curProfile.pendingEmail;
+    curUser.updateEmail(newEmail).then(function() {
+      return db.collection('staff').doc(curUser.uid).update({
+        email: newEmail,
+        pendingEmail: firebase.firestore.FieldValue.delete()
+      });
+    }).then(function() {
+      toast('Your login email has been updated to ' + newEmail, 'ok');
+      curProfile.email = newEmail;
+      delete curProfile.pendingEmail;
+    }).catch(function(e) {
+      // updateEmail can fail if session is old — reauthentication needed
+      console.warn('pendingEmail update failed:', e.message);
+    });
+  }
   loadDash();
   stack=['s-dash'];
   goTo('s-dash', false);
@@ -3933,6 +3958,7 @@ function showAddStaff() {
   document.getElementById('sm-deactivate-row').style.display = 'none';
   document.getElementById('sm-deactivate-btn').style.display = 'block';
   document.getElementById('sm-reactivate-btn').style.display = 'none';
+  document.getElementById('sm-delete-row').style.display = 'none';
   var rb = document.getElementById('sm-reset-btn'); if(rb) rb.style.display='none';
   document.getElementById('sm-save-btn').textContent = 'Create Account';
   ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
@@ -3959,6 +3985,7 @@ async function editStaff(id) {
     document.getElementById('sm-deactivate-row').style.display = 'block';
     document.getElementById('sm-deactivate-btn').style.display = s.active===false ? 'none' : 'block';
     document.getElementById('sm-reactivate-btn').style.display = s.active===false ? 'block' : 'none';
+    document.getElementById('sm-delete-row').style.display = s.active===false ? 'block' : 'none';
     document.getElementById('sm-save-btn').textContent = 'Save Changes';
     ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
       document.getElementById('smr-'+r).className = 'tog' + (r===smRole?' on':'');
@@ -4015,33 +4042,33 @@ async function saveStaff() {
       var update = { name: name, email: email, role: smRole, dashboardAccess: smDashAccess };
       if (pin) update.pin = pin;
 
-      // Update Firebase Auth password if provided
+      // Password change
       if (pass && pass.length >= 6) {
-        // We can only update Auth for the currently signed-in user client-side.
-        // For other users, send a password reset email instead.
         if (editingStaffId === curUser.uid) {
-          // Editing own account — can update directly
           await curUser.updatePassword(pass);
+          toast('Password updated ✓', 'ok');
         } else {
-          // Different user — send password reset email
-          var staffSnap = await db.collection('staff').doc(editingStaffId).get();
-          var staffEmail = staffSnap.exists ? staffSnap.data().email : email;
-          await auth.sendPasswordResetEmail(staffEmail);
-          toast('Password reset email sent to ' + staffEmail, 'ok');
-          // Clear password field — actual password not changed here
+          // Can't change another user's password client-side — send reset email
+          var staffSnap2 = await db.collection('staff').doc(editingStaffId).get();
+          var staffEmail2 = staffSnap2.exists ? staffSnap2.data().email : email;
+          await auth.sendPasswordResetEmail(staffEmail2);
+          toast('Password reset email sent to ' + staffEmail2, 'ok');
           document.getElementById('sm-pass').value = '';
         }
       }
 
-      // Warn if email changed — Firebase Auth email can't be updated client-side for other users
+      // Email change
       var oldSnap = await db.collection('staff').doc(editingStaffId).get();
       var oldEmail = oldSnap.exists ? oldSnap.data().email : '';
-      if (email !== oldEmail && editingStaffId !== curUser.uid) {
-        update.email = email;
-        update.emailPendingAuthUpdate = true; // flag for awareness
-        toast('⚠️ Email updated in records. Update login email via Firebase console or ask staff to use old email until changed.', 'warn');
-      } else if (email !== oldEmail && editingStaffId === curUser.uid) {
-        await curUser.updateEmail(email);
+      if (email !== oldEmail) {
+        if (editingStaffId === curUser.uid) {
+          // Own account — update Auth directly
+          await curUser.updateEmail(email);
+        } else {
+          // Other user — queue as pendingEmail, applied on their next login
+          update.pendingEmail = email;
+          toast('Email queued — will update when ' + name + ' next logs in ✓', 'ok');
+        }
       }
 
       await db.collection('staff').doc(editingStaffId).update(update);
@@ -4078,6 +4105,19 @@ async function reactivateStaff() {
   try {
     await db.collection('staff').doc(editingStaffId).update({ active: true });
     toast('Staff reactivated ✓', 'ok');
+    closeStaffModal();
+    loadAdminStaff();
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+async function deleteStaff() {
+  if (!editingStaffId) return;
+  if (editingStaffId === curUser.uid) { toast('Cannot delete your own account', 'err'); return; }
+  var name = document.getElementById('sm-name').value.trim() || 'this staff member';
+  if (!confirm('Permanently delete ' + name + '?\n\nThis removes their staff profile. Their orders and activity history will remain. This cannot be undone.')) return;
+  try {
+    await db.collection('staff').doc(editingStaffId).delete();
+    toast(name + ' deleted ✓', 'ok');
     closeStaffModal();
     loadAdminStaff();
   } catch(e) { toast('Error: ' + e.message, 'err'); }

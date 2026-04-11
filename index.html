@@ -1087,6 +1087,10 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <button class="btn btn-danger" id="sm-deactivate-btn" onclick="deactivateStaff()">Deactivate Account</button>
       <button class="btn" id="sm-reactivate-btn" onclick="reactivateStaff()" style="display:none;background:#059669;border-color:#059669;color:#fff">✓ Reactivate Account</button>
     </div>
+    <div style="height:8px"></div>
+    <button type="button" id="sm-reset-btn" onclick="sendStaffPasswordReset()" style="display:none;width:100%;padding:10px;background:transparent;color:var(--accent);border:1.5px solid var(--accent);border-radius:var(--radius);font-size:13px;cursor:pointer">
+      📧 Send Password Reset Email
+    </button>
   </div>
 </div>
 
@@ -3929,6 +3933,7 @@ function showAddStaff() {
   document.getElementById('sm-deactivate-row').style.display = 'none';
   document.getElementById('sm-deactivate-btn').style.display = 'block';
   document.getElementById('sm-reactivate-btn').style.display = 'none';
+  var rb = document.getElementById('sm-reset-btn'); if(rb) rb.style.display='none';
   document.getElementById('sm-save-btn').textContent = 'Create Account';
   ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
     document.getElementById('smr-'+r).className = 'tog';
@@ -3959,6 +3964,7 @@ async function editStaff(id) {
       document.getElementById('smr-'+r).className = 'tog' + (r===smRole?' on':'');
     });
     setDashAccessUI(s.dashboardAccess || false);
+    var rb = document.getElementById('sm-reset-btn'); if(rb) rb.style.display='block';
     document.getElementById('staff-modal').classList.add('open');
   } catch(e) { toast('Error loading staff: ' + e.message, 'err'); }
 }
@@ -4005,11 +4011,41 @@ async function saveStaff() {
       });
       toast('Staff account created', 'ok');
     } else {
-      // EDIT EXISTING — update Firestore only
+      // EDIT EXISTING
       var update = { name: name, email: email, role: smRole, dashboardAccess: smDashAccess };
       if (pin) update.pin = pin;
+
+      // Update Firebase Auth password if provided
+      if (pass && pass.length >= 6) {
+        // We can only update Auth for the currently signed-in user client-side.
+        // For other users, send a password reset email instead.
+        if (editingStaffId === curUser.uid) {
+          // Editing own account — can update directly
+          await curUser.updatePassword(pass);
+        } else {
+          // Different user — send password reset email
+          var staffSnap = await db.collection('staff').doc(editingStaffId).get();
+          var staffEmail = staffSnap.exists ? staffSnap.data().email : email;
+          await auth.sendPasswordResetEmail(staffEmail);
+          toast('Password reset email sent to ' + staffEmail, 'ok');
+          // Clear password field — actual password not changed here
+          document.getElementById('sm-pass').value = '';
+        }
+      }
+
+      // Warn if email changed — Firebase Auth email can't be updated client-side for other users
+      var oldSnap = await db.collection('staff').doc(editingStaffId).get();
+      var oldEmail = oldSnap.exists ? oldSnap.data().email : '';
+      if (email !== oldEmail && editingStaffId !== curUser.uid) {
+        update.email = email;
+        update.emailPendingAuthUpdate = true; // flag for awareness
+        toast('⚠️ Email updated in records. Update login email via Firebase console or ask staff to use old email until changed.', 'warn');
+      } else if (email !== oldEmail && editingStaffId === curUser.uid) {
+        await curUser.updateEmail(email);
+      }
+
       await db.collection('staff').doc(editingStaffId).update(update);
-      toast('Staff updated', 'ok');
+      toast('Staff updated ✓', 'ok');
     }
     closeStaffModal();
     loadAdminStaff();
@@ -4045,6 +4081,24 @@ async function reactivateStaff() {
     closeStaffModal();
     loadAdminStaff();
   } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+async function sendStaffPasswordReset() {
+  if (!editingStaffId) return;
+  var btn = document.getElementById('sm-reset-btn');
+  try {
+    var snap = await db.collection('staff').doc(editingStaffId).get();
+    var email = snap.exists ? snap.data().email : '';
+    if (!email) { toast('No email found for this staff member', 'err'); return; }
+    btn.disabled = true; btn.textContent = 'Sending...';
+    await auth.sendPasswordResetEmail(email);
+    toast('Password reset email sent to ' + email + ' ✓', 'ok');
+    btn.textContent = '✓ Reset email sent';
+    setTimeout(function(){ btn.textContent = '📧 Send Password Reset Email'; btn.disabled = false; }, 4000);
+  } catch(e) {
+    toast('Failed: ' + e.message, 'err');
+    btn.disabled = false; btn.textContent = '📧 Send Password Reset Email';
+  }
 }
 
 // Temp role functions

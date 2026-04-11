@@ -1471,7 +1471,7 @@ function step1Next() {
   curOrder.patientName=name;
   curOrder.age=document.getElementById('pt-age').value;
   curOrder.sex=document.getElementById('pt-sex').value;
-  curOrder.phone=document.getElementById('pt-phone').value;
+  curOrder.phone=document.getElementById('pt-phone').value.trim();
   curOrder.refBy=document.getElementById('pt-ref').value;
   curOrder.source=document.getElementById('pt-source').value||'Walk-in';
   curOrder.address=document.getElementById('pt-address').value.trim()||'';
@@ -1543,18 +1543,40 @@ function scheduleRepeatCheck() {
 }
 
 function checkRepeatPatient() {
-  var phone = document.getElementById('pt-phone').value.trim();
+  var raw = document.getElementById('pt-phone').value.trim();
   var banner = document.getElementById('repeat-patient-banner');
   repeatPatientData = null;
   banner.style.display = 'none';
-  if (!phone || phone.length < 6) return;
+  if (!raw || raw.length < 6) return;
 
-  // Try exact match first, then try with/without leading zero
-  var queries = [phone];
-  if (phone.startsWith('0')) queries.push(phone.slice(1));
-  else queries.push('0' + phone);
+  // Normalize: strip all non-digits, then strip leading country codes
+  var digits = raw.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  if (digits.length < 6) return;
+
+  // Build all variants to try as exact Firestore queries
+  var variantMap = {};
+  variantMap[digits] = true;
+  variantMap['0' + digits] = true;
+  if (digits.length === 10) {
+    variantMap['+91' + digits] = true;
+    variantMap['91' + digits] = true;
+  }
+  if (raw !== digits) variantMap[raw] = true; // raw as typed, in case stored with spaces etc.
+  var queries = Object.keys(variantMap);
 
   var bestMatch = null;
+
+  function pickBest(docs) {
+    docs.sort(function(a, b) {
+      var ta = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+      var tb = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+      if (tb !== ta) return tb - ta;
+      return (b.date||'').localeCompare(a.date||'');
+    });
+    return docs[0];
+  }
 
   function tryQuery(phones, idx) {
     if (idx >= phones.length) {
@@ -1566,11 +1588,14 @@ function checkRepeatPatient() {
         if (!snap.empty) {
           var docs = [];
           snap.forEach(function(d) { docs.push(Object.assign({id: d.id}, d.data())); });
-          docs.sort(function(a, b) {
-            return (b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0)
-                 - (a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0);
-          });
-          if (!bestMatch) bestMatch = docs[0];
+          var candidate = pickBest(docs);
+          if (!bestMatch) {
+            bestMatch = candidate;
+          } else {
+            var tBest = bestMatch.createdAt && bestMatch.createdAt.toMillis ? bestMatch.createdAt.toMillis() : 0;
+            var tCand = candidate.createdAt && candidate.createdAt.toMillis ? candidate.createdAt.toMillis() : 0;
+            if (tCand > tBest) bestMatch = candidate;
+          }
         }
         tryQuery(phones, idx + 1);
       })

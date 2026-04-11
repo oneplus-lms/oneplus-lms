@@ -1342,7 +1342,9 @@ function loadStats() {
     document.getElementById('st-pend').textContent=pend;
   }).catch(function(){});
   db.collection('handovers').where('date','==',todayStr()).get().then(function(snap){
-    document.getElementById('st-ho').textContent=snap.size;
+    var accepted=0;
+    snap.forEach(function(d){ if((d.data().custodyStatus||'ACCEPTED')==='ACCEPTED') accepted++; });
+    document.getElementById('st-ho').textContent=accepted;
   }).catch(function(){});
 }
 function loadRecent() {
@@ -3048,19 +3050,67 @@ function submitHandover() {
   var notes = document.getElementById('ho-notes').value.trim();
   if (!to) { toast('Select a recipient','warn'); return; }
   if (!amt || amt<=0) { toast('Enter a valid amount','warn'); return; }
-  var now = new Date();
-  db.collection('handovers').add({
-    handoverTo: toName, amount: amt, notes: notes, date: todayStr(),
-    time: now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    recordedBy: curUser.uid, recordedByName: (curProfile&&curProfile.name)||curUser.email,
-    custodyStatus: 'PENDING'
-  }).then(function(){
-    toast('Handover initiated — awaiting acceptance by '+toName,'ok');
-    sel.value='';
-    document.getElementById('ho-notes').value='';
-    loadStats();
-  }).catch(function(){ toast('Failed — check connection','err'); });
+
+  var today = todayStr();
+  var myUid = curUser.uid;
+  var myName = (curProfile&&curProfile.name)||curUser.email;
+
+  // Guard: compute actual cash in hand before allowing transfer
+  // Cash in hand = today's cash orders + collection charges − accepted handovers initiated by me
+  Promise.all([
+    db.collection('orders').where('date','==',today).get(),
+    db.collection('handovers').where('date','==',today).get()
+  ]).then(function(results) {
+    var orderSnap = results[0], hoSnap = results[1];
+
+    // Cash collected today (cash pay mode + collection charges)
+    var cashCollected = 0;
+    orderSnap.forEach(function(d) {
+      var o = d.data();
+      if (o.payMode === 'cash') cashCollected += (o.paidAmount||0);
+      if (o.source === 'Home Collection' || o.source === 'Doctor Referral') cashCollected += (o.collectionCharge||0);
+    });
+
+    // Deduct accepted outgoing handovers already done by me today
+    var alreadyHandedOver = 0;
+    var hasPendingOut = false;
+    hoSnap.forEach(function(d) {
+      var h = d.data();
+      if (h.recordedBy !== myUid) return;
+      if (h.custodyStatus === 'ACCEPTED') alreadyHandedOver += (h.amount||0);
+      if (h.custodyStatus === 'PENDING') hasPendingOut = true;
+    });
+
+    // Guard 1: Block if already has a pending outgoing handover (dual-device / double-tap)
+    if (hasPendingOut) {
+      toast('You already have a pending handover awaiting acceptance. Wait for it to be accepted or rejected first.','warn');
+      return;
+    }
+
+    var cashInHand = cashCollected - alreadyHandedOver;
+
+    // Guard 2: Over-transfer check
+    if (amt > cashInHand + 0.01) { // 0.01 tolerance for float
+      toast('Amount exceeds your cash in hand (Rs.'+Math.max(0,cashInHand).toLocaleString('en-IN')+')','warn');
+      return;
+    }
+
+    // All guards passed — create the handover
+    var now = new Date();
+    db.collection('handovers').add({
+      handoverTo: toName, amount: amt, notes: notes, date: today,
+      time: now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      recordedBy: myUid, recordedByName: myName,
+      custodyStatus: 'PENDING'
+    }).then(function(){
+      toast('Handover initiated — awaiting acceptance by '+toName,'ok');
+      sel.value='';
+      document.getElementById('ho-notes').value='';
+      loadStats();
+    }).catch(function(){ toast('Failed — check connection','err'); });
+
+  }).catch(function(){ toast('Could not verify balance — check connection','err'); });
 }
 
 // PIN-authenticated handover confirmation
@@ -3120,21 +3170,37 @@ function hoConfirmExecute() {
   var now = new Date();
   var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
   var byName = (curProfile&&curProfile.name)||curUser.email;
+  // Transaction guard: read-then-write ensures custodyStatus is still PENDING
+  // This prevents double-accept from two devices or rapid re-taps
+  var ref = db.collection('handovers').doc(hvid);
+  var updateData;
   if (action==='accept') {
-    db.collection('handovers').doc(hvid).update({
+    updateData = {
       custodyStatus: 'ACCEPTED', acceptedBy: curUser.uid,
       acceptedByName: byName, acceptedAt: timeStr,
       acceptedTimestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(function(){ toast('Cash accepted — PIN verified ✓','ok'); loadStats(); })
-    .catch(function(){ toast('Failed — check connection','err'); });
+    };
   } else {
-    db.collection('handovers').doc(hvid).update({
+    updateData = {
       custodyStatus: 'REJECTED', rejectedBy: curUser.uid,
       rejectedByName: byName, rejectedAt: timeStr,
       rejectedTimestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(function(){ toast('Handover rejected','warn'); })
-    .catch(function(){ toast('Failed — check connection','err'); });
+    };
   }
+  db.runTransaction(function(tx) {
+    return tx.get(ref).then(function(doc) {
+      if (!doc.exists) throw new Error('not_found');
+      if (doc.data().custodyStatus !== 'PENDING') throw new Error('already_actioned');
+      tx.update(ref, updateData);
+    });
+  }).then(function(){
+    if (action==='accept') { toast('Cash accepted — PIN verified ✓','ok'); loadStats(); }
+    else toast('Handover rejected','warn');
+  }).catch(function(err){
+    if (err.message === 'already_actioned') toast('Already accepted or rejected by another session','warn');
+    else if (err.message === 'not_found') toast('Handover record not found','err');
+    else toast('Failed — check connection','err');
+  });
 }
 
 // ── EOD ──

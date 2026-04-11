@@ -1083,7 +1083,8 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
     <div style="height:8px"></div>
     <div id="sm-deactivate-row" style="display:none">
-      <button class="btn btn-danger" onclick="deactivateStaff()">Deactivate Account</button>
+      <button class="btn btn-danger" id="sm-deactivate-btn" onclick="deactivateStaff()">Deactivate Account</button>
+      <button class="btn" id="sm-reactivate-btn" onclick="reactivateStaff()" style="display:none;background:#059669;border-color:#059669;color:#fff">✓ Reactivate Account</button>
     </div>
   </div>
 </div>
@@ -3904,6 +3905,8 @@ function showAddStaff() {
   document.getElementById('sm-pass-field').style.display = 'block';
   document.getElementById('sm-email-note').textContent = 'A Firebase account will be created';
   document.getElementById('sm-deactivate-row').style.display = 'none';
+  document.getElementById('sm-deactivate-btn').style.display = 'block';
+  document.getElementById('sm-reactivate-btn').style.display = 'none';
   document.getElementById('sm-save-btn').textContent = 'Create Account';
   ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
     document.getElementById('smr-'+r).className = 'tog';
@@ -3926,7 +3929,9 @@ async function editStaff(id) {
     document.getElementById('sm-err').textContent = '';
     document.getElementById('sm-pass-field').style.display = 'block';
     document.getElementById('sm-email-note').textContent = 'Leave password blank to keep existing';
-    document.getElementById('sm-deactivate-row').style.display = s.active===false ? 'none' : 'block';
+    document.getElementById('sm-deactivate-row').style.display = 'block';
+    document.getElementById('sm-deactivate-btn').style.display = s.active===false ? 'none' : 'block';
+    document.getElementById('sm-reactivate-btn').style.display = s.active===false ? 'block' : 'none';
     document.getElementById('sm-save-btn').textContent = 'Save Changes';
     ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
       document.getElementById('smr-'+r).className = 'tog' + (r===smRole?' on':'');
@@ -4004,6 +4009,17 @@ async function deactivateStaff() {
   try {
     await db.collection('staff').doc(editingStaffId).update({ active: false });
     toast('Staff deactivated', 'ok');
+    closeStaffModal();
+    loadAdminStaff();
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+async function reactivateStaff() {
+  if (!editingStaffId) return;
+  if (!confirm('Reactivate this staff account? They will be able to log in again.')) return;
+  try {
+    await db.collection('staff').doc(editingStaffId).update({ active: true });
+    toast('Staff reactivated ✓', 'ok');
     closeStaffModal();
     loadAdminStaff();
   } catch(e) { toast('Error: ' + e.message, 'err'); }

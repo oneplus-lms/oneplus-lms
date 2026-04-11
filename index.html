@@ -1069,6 +1069,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <div>
           <div style="font-size:13px;font-weight:500">Dashboard Access</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">Allow this person to view the real-time dashboard</div>
+          <div id="dash-toggle-hint" style="font-size:10px;font-family:var(--mono);color:var(--accent);margin-top:3px;display:none">✓ Saved</div>
         </div>
         <button type="button" id="sm-dash-toggle" onclick="toggleDashAccess()"
           style="padding:5px 14px;border-radius:20px;border:1.5px solid var(--border-strong);background:var(--surface);color:var(--text2);font-size:12px;font-family:var(--mono);cursor:pointer">
@@ -3875,12 +3876,33 @@ async function loadAdminStaff() {
 var smDashAccess = false;
 
 function toggleDashAccess() {
+  if (!editingStaffId) return;
   smDashAccess = !smDashAccess;
   var btn = document.getElementById('sm-dash-toggle');
   btn.textContent = smDashAccess ? 'ON' : 'OFF';
   btn.style.background = smDashAccess ? 'var(--accent)' : 'var(--surface)';
   btn.style.color = smDashAccess ? '#fff' : 'var(--text2)';
   btn.style.borderColor = smDashAccess ? 'var(--accent)' : 'var(--border-strong)';
+  btn.disabled = true;
+  // Auto-save immediately
+  db.collection('staff').doc(editingStaffId).update({ dashboardAccess: smDashAccess })
+    .then(function() {
+      toast('Dashboard access ' + (smDashAccess ? 'granted ✓' : 'revoked'), smDashAccess ? 'ok' : 'warn');
+      btn.disabled = false;
+      var hint = document.getElementById('dash-toggle-hint');
+      if (hint) { hint.style.display = 'block'; setTimeout(function(){ hint.style.display='none'; }, 3000); }
+      loadAdminStaff();
+    })
+    .catch(function(e) {
+      toast('Save failed — check connection', 'err');
+      // Revert toggle on failure
+      smDashAccess = !smDashAccess;
+      btn.textContent = smDashAccess ? 'ON' : 'OFF';
+      btn.style.background = smDashAccess ? 'var(--accent)' : 'var(--surface)';
+      btn.style.color = smDashAccess ? '#fff' : 'var(--text2)';
+      btn.style.borderColor = smDashAccess ? 'var(--accent)' : 'var(--border-strong)';
+      btn.disabled = false;
+    });
 }
 
 function setDashAccessUI(val) {

@@ -205,17 +205,35 @@ function doLogin(){
   var e=document.getElementById('em').value.trim(),p=document.getElementById('pw').value;
   var err=document.getElementById('lerr');
   if(!e||!p){err.textContent='Enter email and password';return;}
-  err.textContent='';
+  err.textContent='Signing in…';
   auth.signInWithEmailAndPassword(e,p).catch(function(x){err.textContent=x.message;});
 }
 function doSignOut(){if(uO)uO();if(uH)uH();auth.signOut();}
 document.getElementById('pw').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
 
+var ALLOWED_ROLES = ['admin','pathologist'];
+
 auth.onAuthStateChanged(function(user){
   if(user){
-    document.getElementById('login').style.display='none';
-    document.getElementById('main').style.display='flex';
-    startDash();
+    db.collection('staff').doc(user.uid).get().then(function(snap){
+      var data = snap.exists ? snap.data() : {};
+      var allowed = data.dashboardAccess === true;
+      if(!allowed){
+        auth.signOut();
+        document.getElementById('lerr').textContent =
+          'Access denied. You have not been granted dashboard access. Contact Admin.';
+        document.getElementById('login').style.display='flex';
+        document.getElementById('main').style.display='none';
+        return;
+      }
+      document.getElementById('lerr').textContent='';
+      document.getElementById('login').style.display='none';
+      document.getElementById('main').style.display='flex';
+      startDash();
+    }).catch(function(){
+      auth.signOut();
+      document.getElementById('lerr').textContent='Could not verify account. Check connection and try again.';
+    });
   } else {
     document.getElementById('login').style.display='flex';
     document.getElementById('main').style.display='none';
@@ -251,7 +269,11 @@ function renderStats(){
   var cash=0,upi=0,card=0,credit=0,pend=0,home=0,urg=0,coll=0,amend=0,trans=0;
   allOrders.forEach(function(o){
     var paid=o.paidAmount||0;
-    if(o.payMode==='cash')cash+=paid;
+    if(o.payMode==='split'&&o.splitPayments){
+      cash+=(o.splitPayments.cash||0);
+      upi+=(o.splitPayments.upi||0);
+      card+=(o.splitPayments.card||0);
+    } else if(o.payMode==='cash')cash+=paid;
     else if(o.payMode==='upi')upi+=paid;
     else if(o.payMode==='card')card+=paid;
     if(o.payMode==='credit'){credit+=(o.totalAmount||0);pend++;}
@@ -277,7 +299,12 @@ function renderStats(){
 function set(id,v){var el=document.getElementById(id);if(el)el.textContent=v;}
 
 function updateCash(){
-  var cashTotal=allOrders.reduce(function(s,o){return s+(o.payMode==='cash'?o.paidAmount||0:0)+(o.collectionCharge||0);},0);
+  var cashTotal=allOrders.reduce(function(s,o){
+    var c=0;
+    if(o.payMode==='split'&&o.splitPayments) c=o.splitPayments.cash||0;
+    else if(o.payMode==='cash') c=o.paidAmount||0;
+    return s+c+(o.collectionCharge||0);
+  },0);
   var ho=allHandovers.filter(function(h){return h.custodyStatus==='ACCEPTED';}).reduce(function(s,h){return s+(h.amount||0);},0);
   set('scash',fmt(Math.max(0,cashTotal-ho)));
   set('scashs','Total: '+fmt(cashTotal)+' | HO: '+fmt(ho));
@@ -297,32 +324,68 @@ function filterTable(q){
   renderTable(orders);
 }
 
+function toggleRow(id){
+  var el=document.getElementById('xr-'+id);
+  if(!el)return;
+  var open=el.style.display!=='none'&&el.style.display!=='';
+  el.style.display=open?'none':'table-row';
+  var btn=document.getElementById('xb-'+id);
+  if(btn)btn.textContent=open?'▸':'▾';
+}
+
 function renderTable(orders){
   var tb=document.getElementById('otbody');
   if(!orders.length){tb.innerHTML='<tr><td colspan="10" class="empty">No orders found</td></tr>';return;}
   tb.innerHTML=orders.map(function(o){
+    var rid=o.id;
     var time='';
     if(o.createdAt&&o.createdAt.toDate)time=o.createdAt.toDate().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-    var tests=(o.tests||[]).slice(0,2).map(function(t){return t.name;}).join(', ');
-    if((o.tests||[]).length>2)tests+=' +'+(o.tests.length-2)+' more';
-    var src=o.source&&o.source!=='Walk-in'?'<span class="b bb">'+(o.source==='Home Collection'?'Home':esc(o.source))+'</span>'+(o.gps?' &#128205;':''):'Walk-in';
+    var allTests=o.tests||[];
+    var preview=allTests.slice(0,2).map(function(t){return esc(t.name);}).join(', ');
+    var hasMore=allTests.length>2;
+    var moreBtn=hasMore?' <span id="xb-'+rid+'" onclick="toggleRow(\'' +rid+ '\')" style="cursor:pointer;color:var(--blue);font-size:10px;font-family:var(--mono);user-select:none">▸ +'+(allTests.length-2)+'</span>':'';
+    var testsCell=preview+moreBtn;
+    var fullTests=allTests.map(function(t,i){
+      return '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid var(--border);font-size:11px">'
+        +'<span>'+(i+1)+'. '+esc(t.name)+'</span>'
+        +(t.rate?'<span style="font-family:var(--mono);color:var(--text3)">Rs.'+t.rate+'</span>':'')
+        +'</div>';
+    }).join('');
+    var src=o.source&&o.source!=='Walk-in'?'<span class="b bb">'+(o.source==='Home Collection'?'Home':esc(o.source))+'</span>'+(o.gps?' 📍':''):'Walk-in';
     var ub=o.urgent?'<span class="b br">URG</span> ':'';
     var sb=o.payMode==='credit'?'<span class="b bgo">Credit</span>':'<span class="b bg">Paid</span>';
-    if(o.amendments&&o.amendments.length)sb+=' <span style="font-size:10px;color:var(--amber)" title="Amended">&#9998;</span>';
+    if(o.amendments&&o.amendments.length)sb+=' <span style="font-size:10px;color:var(--amber)" title="Amended">✎</span>';
     var rxp=(o.rxPhotos&&o.rxPhotos.length)?o.rxPhotos.length:(o.rxPhoto?1:0);
     var cc=o.collectionCharge||0;
-    return '<tr>'
+    var mainRow='<tr>'
       +'<td><div style="font-weight:500">'+ub+esc(o.patientName)+'</div><div style="font-size:10px;color:var(--text3)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+'</div></td>'
-      +'<td style="font-size:11px;color:var(--text2);max-width:150px">'+esc(tests)+'</td>'
+      +'<td style="font-size:11px;color:var(--text2);max-width:180px">'+testsCell+'</td>'
       +'<td>'+src+'</td>'
       +'<td style="font-family:var(--mono);font-weight:500">'+fmt(o.paidAmount)+'</td>'
       +'<td style="font-size:11px;font-family:var(--mono)">'+(cc>0?'<span style="color:var(--blue)">+'+cc+'</span>':'&mdash;')+'</td>'
-      +'<td style="font-size:11px;font-family:var(--mono);text-transform:uppercase">'+esc(o.payMode||'')+'</td>'
+      +(function(){
+        var pm=o.payMode||'';
+        if(pm==='split'&&o.splitPayments){
+          var p=[];
+          if(o.splitPayments.cash>0)p.push('C:'+o.splitPayments.cash.toLocaleString('en-IN'));
+          if(o.splitPayments.upi>0)p.push('U:'+o.splitPayments.upi.toLocaleString('en-IN'));
+          if(o.splitPayments.card>0)p.push('Cd:'+o.splitPayments.card.toLocaleString('en-IN'));
+          return '<td style="font-size:10px;font-family:var(--mono)">'+p.join('<br>')+'</td>';
+        }
+        return '<td style="font-size:11px;font-family:var(--mono);text-transform:uppercase">'+esc(pm)+'</td>';
+      })()
       +'<td style="font-size:11px;color:var(--text2)">'+esc(o.createdByName||'-')+'</td>'
       +'<td style="font-size:11px;font-family:var(--mono)">'+(rxp?'<span style="color:var(--blue)">'+rxp+'p</span>':'&mdash;')+'</td>'
       +'<td>'+sb+'</td>'
       +'<td style="font-size:11px;font-family:var(--mono);color:var(--text3)">'+time+'</td>'
       +'</tr>';
+    var expandRow=hasMore
+      ?'<tr id="xr-'+rid+'" style="display:none"><td colspan="10" style="padding:0 12px 10px;background:var(--surface2)">'
+        +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;padding:6px 0 4px">All tests — '+esc(o.patientName)+'</div>'
+        +fullTests
+        +'</td></tr>'
+      :'';
+    return mainRow+expandRow;
   }).join('');
 }
 
@@ -407,7 +470,10 @@ function renderActivity(){
     var rxs=rx?' &middot; '+rx+'p Rx':'';
     var cc=o.collectionCharge>0?' &middot; Coll Rs.'+o.collectionCharge:'';
     evs.push({at:t,label:esc(o.patientName)+' registered',
-      sub:fmt(o.paidAmount)+' &middot; '+(o.payMode||'').toUpperCase()+src+urg+rxs+cc,
+      sub:fmt(o.paidAmount)+' &middot; '+(function(){
+          if(o.payMode==='split'&&o.splitPayments){var p=[];if(o.splitPayments.cash>0)p.push('Cash');if(o.splitPayments.upi>0)p.push('UPI');if(o.splitPayments.card>0)p.push('Card');return p.join('+');}
+          return (o.payMode||'').toUpperCase();
+        })()+src+urg+rxs+cc,
       color:o.urgent?'#EF4444':'#059669'});
     (o.amendments||[]).forEach(function(a){
       evs.push({at:null,label:esc(o.patientName)+' order amended',sub:'By '+esc(a.byName||'-')+' &middot; '+esc(a.reason||''),color:'#D97706'});

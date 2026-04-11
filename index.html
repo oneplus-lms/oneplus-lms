@@ -523,17 +523,43 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       </div>
 
       <div style="font-size:11px;font-family:var(--mono);color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Payment Mode</div>
-      <div class="pay-mode-grid">
-        <button class="pay-mode-btn" id="pm-cash" onclick="setPay('cash')">&#128181; Cash</button>
-        <button class="pay-mode-btn" id="pm-upi" onclick="setPay('upi')">&#128241; UPI</button>
-        <button class="pay-mode-btn" id="pm-card" onclick="setPay('card')">&#128179; Card</button>
-        <button class="pay-mode-btn on-credit" id="pm-credit" onclick="setPay('credit')">&#128218; Credit</button>
+
+      <!-- Split payment row: Cash + UPI + Card amounts -->
+      <div id="split-pay-section">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:11px;font-family:var(--mono);color:var(--text3);display:flex;align-items:center;gap:4px;margin-bottom:4px">&#128181; Cash</label>
+            <input type="number" id="pm-amt-cash" placeholder="0" inputmode="numeric" min="0"
+              style="width:100%;padding:8px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;font-family:var(--mono);box-sizing:border-box"
+              oninput="onSplitInput()">
+          </div>
+          <div>
+            <label style="font-size:11px;font-family:var(--mono);color:var(--text3);display:flex;align-items:center;gap:4px;margin-bottom:4px">&#128241; UPI</label>
+            <input type="number" id="pm-amt-upi" placeholder="0" inputmode="numeric" min="0"
+              style="width:100%;padding:8px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;font-family:var(--mono);box-sizing:border-box"
+              oninput="onSplitInput()">
+          </div>
+          <div>
+            <label style="font-size:11px;font-family:var(--mono);color:var(--text3);display:flex;align-items:center;gap:4px;margin-bottom:4px">&#128179; Card</label>
+            <input type="number" id="pm-amt-card" placeholder="0" inputmode="numeric" min="0"
+              style="width:100%;padding:8px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;font-family:var(--mono);box-sizing:border-box"
+              oninput="onSplitInput()">
+          </div>
+        </div>
+        <!-- Running total feedback -->
+        <div id="split-pay-status" style="font-size:12px;font-family:var(--mono);padding:6px 10px;border-radius:6px;margin-bottom:8px;display:none"></div>
       </div>
 
-      <div class="field" id="paid-field">
-        <label>Amount Paid (Rs.)</label>
-        <input type="number" id="paid-amt" placeholder="0" inputmode="numeric">
+      <!-- Credit: full order on credit, mutually exclusive with split -->
+      <button class="pay-mode-btn on-credit" id="pm-credit" onclick="setPay('credit')"
+        style="width:100%;margin-bottom:8px">&#128218; Credit (collect later)</button>
+      <div id="credit-active-note" style="display:none;font-size:12px;font-family:var(--mono);color:var(--amber,#D97706);padding:6px 10px;border-radius:6px;background:rgba(217,119,6,0.08);margin-bottom:8px">
+        Full amount on credit — payment collected later
+        <button onclick="clearCredit()" style="margin-left:8px;font-size:11px;padding:2px 8px;border:1px solid var(--amber,#D97706);border-radius:4px;background:transparent;color:var(--amber,#D97706);cursor:pointer">✕ Cancel credit</button>
       </div>
+
+      <!-- hidden compat field — still used by submitOrder -->
+      <input type="hidden" id="paid-amt" value="0">
 
       <div class="field">
         <label style="display:flex;justify-content:space-between;align-items:center">
@@ -1037,6 +1063,18 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="field">
       <label>PIN (4 digits)</label>
       <input type="password" id="sm-pin" placeholder="Daily login PIN" maxlength="4" inputmode="numeric">
+    </div>
+    <div class="field" style="background:var(--surface2);border-radius:var(--radius);padding:10px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:13px;font-weight:500">Dashboard Access</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">Allow this person to view the real-time dashboard</div>
+        </div>
+        <button type="button" id="sm-dash-toggle" onclick="toggleDashAccess()"
+          style="padding:5px 14px;border-radius:20px;border:1.5px solid var(--border-strong);background:var(--surface);color:var(--text2);font-size:12px;font-family:var(--mono);cursor:pointer">
+          OFF
+        </button>
+      </div>
     </div>
     <div id="sm-err" style="font-size:12px;color:var(--red);margin-bottom:10px;min-height:16px"></div>
     <div style="display:flex;gap:8px">
@@ -1700,7 +1738,17 @@ function step2Next() {
   updateBillTotal();
   document.getElementById('discount').value='';
   document.getElementById('bill-note').textContent='';
-  setPay('cash'); showStep(3);
+  // Reset split payment state for new order step
+  creditMode = false; splitPay = {cash:0, upi:0, card:0};
+  ['pm-amt-cash','pm-amt-upi','pm-amt-card'].forEach(function(id){
+    var el=document.getElementById(id); if(el){el.disabled=false;el.style.opacity='1';el.value='';}
+  });
+  document.getElementById('split-pay-section').style.opacity='1';
+  document.getElementById('pm-credit').style.display='block';
+  document.getElementById('credit-active-note').style.display='none';
+  document.getElementById('split-pay-status').style.display='none';
+  document.getElementById('bill-note').textContent='';
+  showStep(3);
 }
 
 function updateBillTotal() {
@@ -1713,19 +1761,77 @@ function updateBillTotal() {
   document.getElementById('bill-amt').textContent = 'Rs.' + total.toLocaleString('en-IN')
     + (cc > 0 ? ' (incl. Rs.' + cc + ' collection)' : '');
   document.getElementById('paid-amt').value = total;
+  document.getElementById('paid-amt').dataset.net = total;
+  // Pre-fill cash field with full amount as default
+  if (!creditMode) {
+    document.getElementById('pm-amt-cash').value = total;
+    splitPay = {cash: total, upi: 0, card: 0};
+    document.getElementById('split-pay-status').style.display='none';
+  }
   // Re-apply discount if any
   var discVal = parseFloat(document.getElementById('discount').value||0);
   if (discVal > 0) applyDiscount();
 }
+// splitPay = {cash:0, upi:0, card:0}  — live amounts
+var splitPay = {cash:0, upi:0, card:0};
+var creditMode = false;
+
 function setPay(m) {
-  payMode=m;
-  ['cash','upi','card','credit'].forEach(function(x){
-    document.getElementById('pm-'+x).className='pay-mode-btn'+(x===m?(m==='credit'?' on-credit':' on'):'');
+  // Only 'credit' is handled here now; split inputs handle cash/upi/card
+  if (m === 'credit') {
+    creditMode = true;
+    splitPay = {cash:0, upi:0, card:0};
+    ['pm-amt-cash','pm-amt-upi','pm-amt-card'].forEach(function(id){
+      var el=document.getElementById(id); if(el){el.value='';el.disabled=true;el.style.opacity='0.4';}
+    });
+    document.getElementById('split-pay-section').style.opacity='0.4';
+    document.getElementById('pm-credit').className='pay-mode-btn on-credit';
+    document.getElementById('pm-credit').style.display='none';
+    document.getElementById('credit-active-note').style.display='block';
+    document.getElementById('split-pay-status').style.display='none';
+    document.getElementById('bill-note').textContent='Amount on credit — collect later';
+    document.getElementById('paid-amt').value='0';
+    var ps=document.getElementById('payment-proof-section');
+    if(ps) ps.style.display='none';
+  }
+}
+
+function clearCredit() {
+  creditMode = false;
+  ['pm-amt-cash','pm-amt-upi','pm-amt-card'].forEach(function(id){
+    var el=document.getElementById(id); if(el){el.disabled=false;el.style.opacity='1';}
   });
-  document.getElementById('paid-field').style.display=m==='credit'?'none':'block';
-  document.getElementById('bill-note').textContent=m==='credit'?'Amount on credit - collect later':'';
-  var ps = document.getElementById('payment-proof-section');
-  if (ps) ps.style.display = (m==='upi'||m==='card') ? 'block' : 'none';
+  document.getElementById('split-pay-section').style.opacity='1';
+  document.getElementById('pm-credit').style.display='block';
+  document.getElementById('credit-active-note').style.display='none';
+  document.getElementById('bill-note').textContent='';
+  onSplitInput();
+}
+
+function onSplitInput() {
+  if (creditMode) return;
+  splitPay.cash  = Math.max(0, parseFloat(document.getElementById('pm-amt-cash').value)||0);
+  splitPay.upi   = Math.max(0, parseFloat(document.getElementById('pm-amt-upi').value)||0);
+  splitPay.card  = Math.max(0, parseFloat(document.getElementById('pm-amt-card').value)||0);
+  var total = splitPay.cash + splitPay.upi + splitPay.card;
+  var net = parseFloat(document.getElementById('paid-amt').dataset.net||0) || (curOrder.totalAmount||0);
+  var due = Math.round((net - total)*100)/100;
+  var status = document.getElementById('split-pay-status');
+  status.style.display = 'block';
+  if (Math.abs(due) < 0.5) {
+    status.textContent = '✓ Fully paid — Rs.' + net.toLocaleString('en-IN');
+    status.style.background='rgba(16,185,129,0.1)'; status.style.color='var(--green,#10B981)';
+  } else if (due > 0) {
+    status.textContent = 'Balance due: Rs.' + due.toLocaleString('en-IN');
+    status.style.background='rgba(245,158,11,0.1)'; status.style.color='var(--amber,#D97706)';
+  } else {
+    status.textContent = 'Overpaid by Rs.' + Math.abs(due).toLocaleString('en-IN') + ' — check amounts';
+    status.style.background='rgba(239,68,68,0.1)'; status.style.color='var(--red,#EF4444)';
+  }
+  // Show payment proof if UPI or card > 0
+  var ps=document.getElementById('payment-proof-section');
+  if(ps) ps.style.display=(splitPay.upi>0||splitPay.card>0)?'block':'none';
+  document.getElementById('bill-note').textContent='';
 }
 var discType = 'amt';
 var rxPhotos = []; // array of base64 strings, up to 4 pages
@@ -1765,6 +1871,17 @@ function applyDiscount() {
   document.getElementById('bill-amt').textContent = 'Rs.' + net.toLocaleString('en-IN')
     + (cc > 0 ? ' (incl. Rs.' + cc + ' collection)' : '');
   document.getElementById('paid-amt').value = net;
+  document.getElementById('paid-amt').dataset.net = net;
+  if (!creditMode) {
+    // Reset to full cash by default when net changes; user adjusts if needed
+    document.getElementById('pm-amt-cash').value = net;
+    document.getElementById('pm-amt-upi').value = '';
+    document.getElementById('pm-amt-card').value = '';
+    splitPay = {cash: net, upi: 0, card: 0};
+    document.getElementById('split-pay-status').style.display='none';
+    var ps=document.getElementById('payment-proof-section');
+    if(ps) ps.style.display='none';
+  }
   document.getElementById('bill-note').textContent = disc > 0 ? 'Discount Rs.' + disc.toLocaleString('en-IN') + ' on tests only' + (cc>0?' · Collection charge Rs.'+cc+' not discounted':'') : '';
   // Approval check
   var needsApproval = (disc > discountApprovalThresholdAmt || (total>0 && disc/total*100 > discountApprovalThresholdPct));
@@ -1966,19 +2083,37 @@ function submitOrder() {
     toast('Discount requires approval — enter Pathologist PIN', 'warn');
     return;
   }
-  var paid=payMode==='credit'?0:parseFloat(document.getElementById('paid-amt').value||0);
+  var netAmt = Math.max(0, curOrder.totalAmount - disc);
+  var paid, dueAmt, finalPayMode, splitPayments;
+  if (creditMode) {
+    paid = 0; dueAmt = netAmt; finalPayMode = 'credit'; splitPayments = null;
+  } else {
+    var pCash = Math.max(0, parseFloat(document.getElementById('pm-amt-cash').value)||0);
+    var pUpi  = Math.max(0, parseFloat(document.getElementById('pm-amt-upi').value)||0);
+    var pCard = Math.max(0, parseFloat(document.getElementById('pm-amt-card').value)||0);
+    paid = pCash + pUpi + pCard;
+    dueAmt = Math.max(0, netAmt - paid);
+    // Determine payMode label for backward compat
+    var modes = [];
+    if (pCash > 0) modes.push('cash');
+    if (pUpi > 0) modes.push('upi');
+    if (pCard > 0) modes.push('card');
+    finalPayMode = modes.length === 1 ? modes[0] : (modes.length > 1 ? 'split' : 'cash');
+    splitPayments = (modes.length > 1) ? {cash: pCash, upi: pUpi, card: pCard} : null;
+  }
   var order={
     patientName:curOrder.patientName, age:curOrder.age||'', sex:curOrder.sex||'',
     phone:curOrder.phone||'', refBy:curOrder.refBy||'', tests:curOrder.tests,
     source:curOrder.source||'Walk-in', address:curOrder.address||'', gps:curOrder.gps||null,
     totalAmount:curOrder.totalAmount, testTotal:curOrder.testTotal||curOrder.totalAmount, collectionCharge:curOrder.collectionCharge||0, discount:disc,
-    netAmount:Math.max(0,curOrder.totalAmount-disc),
-    paidAmount:paid, dueAmount:Math.max(0,curOrder.totalAmount-disc)-paid,
-    payMode:payMode, discountType:discType, rxPhotos:rxPhotos.length?rxPhotos:[], rxPhoto:rxPhotos[0]||'', paymentProof:proofPhotoB64||'', notes:document.getElementById('bill-notes').value,
+    netAmount:netAmt,
+    paidAmount:paid, dueAmount:dueAmt,
+    payMode:finalPayMode, splitPayments:splitPayments, discountType:discType,
+    rxPhotos:rxPhotos.length?rxPhotos:[], rxPhoto:rxPhotos[0]||'', paymentProof:proofPhotoB64||'', notes:document.getElementById('bill-notes').value,
     history:curOrder.history||{},
     date:todayStr(), createdAt:firebase.firestore.FieldValue.serverTimestamp(),
     createdBy:curUser.uid, createdByName:(curProfile&&curProfile.name)||curUser.email,
-    status:payMode==='credit'?'pending':'paid',
+    status:creditMode?'pending':'paid',
     urgent: isUrgent
   };
   db.collection('orders').add(order).then(function(ref){
@@ -1989,7 +2124,7 @@ function submitOrder() {
   }).catch(function(e){ toast('Save failed - check connection','err'); });
 }
 function newOrder() {
-  curOrder={}; selTests=[]; payMode='cash'; curHistory={}; selDiagnoses=[]; selMeds=[]; rxPhotos=[]; proofPhotoB64=''; discType='amt'; curGPS=null;
+  curOrder={}; selTests=[]; payMode='cash'; creditMode=false; splitPay={cash:0,upi:0,card:0}; curHistory={}; selDiagnoses=[]; selMeds=[]; rxPhotos=[]; proofPhotoB64=''; discType='amt'; curGPS=null;
   ['pt-name','pt-age','pt-phone','pt-ref','pt-address','bill-notes'].forEach(function(id){
     document.getElementById(id).value='';
   });
@@ -2069,10 +2204,7 @@ function renderOrders(orders) {
       +'<span>&#128100; '+esc(o.createdByName||'-')+'</span>'
       +(o.gps?'<span style="color:#1D4ED8">&#128205; GPS</span>':'')
       +'</div>'
-      +'<div class="order-footer">'
-      +'<span class="badge '+(o.status==='paid'?'badge-green':'badge-gold')+'">'+(o.status||'paid').toUpperCase()+'</span>'
-      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'
-      +'</div>'
+      +'<div class="order-footer">'      +'<span class="badge '+(o.status==='paid'?'badge-green':'badge-gold')+'">'+(o.status||'paid').toUpperCase()+'</span>'      +(function(){          if(o.payMode==='split'&&o.splitPayments){            var p=[];if(o.splitPayments.cash>0)p.push('Cash');if(o.splitPayments.upi>0)p.push('UPI');if(o.splitPayments.card>0)p.push('Card');            return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+p.join('+')+'</span>';          }          if(o.payMode&&o.payMode!=='cash')return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+o.payMode.toUpperCase()+'</span>';          return '';        })()      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'      +'</div>'
       +'</div>';
   }).join('');
 }
@@ -2140,10 +2272,7 @@ function renderOrderDetail(o) {
     + '<div class="card" style="margin-bottom:12px">'
     + '<div class="card-title">Tests (' + (o.tests||[]).length + ')</div>'
     + testRows
-    + '<div style="display:flex;justify-content:space-between;padding-top:10px;font-size:13px;font-weight:500">'
-    + '<span>Total</span><span style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.' + (o.paidAmount||0).toLocaleString('en-IN') + '</span></div>'
-    + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + esc(o.payMode||'cash').toUpperCase()
-    + (o.discount > 0 ? ' · Discount Rs.' + o.discount : '') + '</div>'
+    + '<div style="display:flex;justify-content:space-between;padding-top:10px;font-size:13px;font-weight:500">'    + '<span>Total</span><span style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.' + (o.paidAmount||0).toLocaleString('en-IN') + '</span></div>'    + (function(){        var pmLine = '';        if (o.splitPayments) {          var parts = [];          if (o.splitPayments.cash > 0) parts.push('Cash Rs.'+o.splitPayments.cash.toLocaleString('en-IN'));          if (o.splitPayments.upi > 0)  parts.push('UPI Rs.'+o.splitPayments.upi.toLocaleString('en-IN'));          if (o.splitPayments.card > 0) parts.push('Card Rs.'+o.splitPayments.card.toLocaleString('en-IN'));          pmLine = parts.join(' + ');        } else { pmLine = esc(o.payMode||'cash').toUpperCase(); }        var dueStr = (o.dueAmount > 0) ? ' &nbsp;<span style="color:#EF4444">Due Rs.'+o.dueAmount.toLocaleString('en-IN')+'</span>' : '';        var discStr = (o.discount > 0) ? ' · Discount Rs.'+o.discount : '';        return '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+pmLine+discStr+dueStr+'</div>';      })()
     + '</div>'
 
     // Audit timeline card
@@ -2177,7 +2306,7 @@ function renderOrderDetail(o) {
       })()
     + '<button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="openDetailTRF()">&#128221; View / Print TRF</button>'
     + '<button class="btn" style="width:100%;margin-bottom:10px" onclick="downloadTRFpdf()">&#128196; Download PDF</button>'
-    + '<button class="btn" style="width:100%;" onclick="shareDetailWA()">&#128172; Share via WhatsApp</button>';
+    + (function(){        var num = curDetailOrder && buildPatientWANumber(curDetailOrder.phone);        if (num) return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'          + '<button class="btn" onclick="shareDetailWA()">&#128172; WA Patient</button>'          + '<button class="btn" onclick="shareDetailWAGeneric()">&#128172; Any contact</button>'          + '</div>';        return '<button class="btn" style="width:100%;" onclick="shareDetailWA()">&#128172; Share via WhatsApp</button>';      })();
 }
 
 function buildAuditTrail(o) {
@@ -2220,7 +2349,11 @@ function buildAuditTrail(o) {
   }
 
   // 5. Payment event
-  var payLabel = (o.payMode||'cash').toUpperCase();
+  var payLabel;
+  if (o.splitPayments) {
+    var sp=[]; if(o.splitPayments.cash>0) sp.push('Cash Rs.'+o.splitPayments.cash.toLocaleString('en-IN')); if(o.splitPayments.upi>0) sp.push('UPI Rs.'+o.splitPayments.upi.toLocaleString('en-IN')); if(o.splitPayments.card>0) sp.push('Card Rs.'+o.splitPayments.card.toLocaleString('en-IN'));
+    payLabel = sp.join(' + ');
+  } else { payLabel = (o.payMode||'cash').toUpperCase(); }
   if (o.payMode === 'credit') {
     events.push({
       title: 'Bill on Credit',
@@ -2575,7 +2708,13 @@ function downloadTRFpdf() {
   doc.setFillColor(26,74,58);
   doc.roundedRect(ml, y, cw, 16, 2, 2, 'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','normal'); doc.setFontSize(9);
-  doc.text('Payment: '+(o.payMode||'').toUpperCase()+(o.discount>0?' | Discount: Rs.'+o.discount:''), ml+4, y+7);
+  var pdfPayLabel = '';
+  if (o.splitPayments) {
+    var pp=[]; if(o.splitPayments.cash>0) pp.push('Cash Rs.'+o.splitPayments.cash); if(o.splitPayments.upi>0) pp.push('UPI Rs.'+o.splitPayments.upi); if(o.splitPayments.card>0) pp.push('Card Rs.'+o.splitPayments.card);
+    pdfPayLabel = pp.join(' + ');
+  } else { pdfPayLabel = (o.payMode||'').toUpperCase(); }
+  if (o.discount>0) pdfPayLabel += ' | Discount: Rs.'+o.discount;
+  doc.text('Payment: '+pdfPayLabel, ml+4, y+7);
   doc.setFont('helvetica','bold'); doc.setFontSize(13);
   doc.text('Rs. '+(o.paidAmount||0).toLocaleString('en-IN'), pw-mr-4, y+10, {align:'right'});
   y += 22;
@@ -2637,7 +2776,13 @@ function openDetailTRF() {
 function shareDetailWA() {
   if (!curDetailOrder) return;
   lastOrder = curDetailOrder;
-  shareTRFWA();
+  shareTRFWA(); // shareTRFWA now auto-uses patient number if available
+}
+
+function shareDetailWAGeneric() {
+  if (!curDetailOrder) return;
+  lastOrder = curDetailOrder;
+  shareTRFWAGeneric();
 }
 
 
@@ -3235,7 +3380,9 @@ function loadEOD() {
   document.getElementById('eod-date').textContent=today;
   db.collection('orders').where('date','==',today).get().then(function(snap){
     var cash=0,upi=0,card=0,credit=0,total=0;
-    snap.forEach(function(doc){ var o=doc.data(); var paid=o.paidAmount||0; total+=paid; if(o.payMode==='cash') cash+=paid; else if(o.payMode==='upi') upi+=paid; else if(o.payMode==='card') card+=paid; else if(o.payMode==='credit') credit+=(o.totalAmount||0); });
+    snap.forEach(function(doc){ var o=doc.data(); var paid=o.paidAmount||0; total+=paid;
+      if(o.payMode==='split'&&o.splitPayments){ cash+=(o.splitPayments.cash||0); upi+=(o.splitPayments.upi||0); card+=(o.splitPayments.card||0); }
+      else if(o.payMode==='cash') cash+=paid; else if(o.payMode==='upi') upi+=paid; else if(o.payMode==='card') card+=paid; else if(o.payMode==='credit') credit+=(o.totalAmount||0); });
     var fmt=function(n){ return 'Rs.'+n.toLocaleString('en-IN'); };
     document.getElementById('eod-orders').textContent=snap.size;
     document.getElementById('eod-cash').textContent=fmt(cash);
@@ -3546,34 +3693,74 @@ function openTRF() {
       .map(function(src, i) {
         return '<div style="margin-bottom:8px"><div style="font-size:11px;color:#999;margin-bottom:4px;text-transform:uppercase">Prescription' + (o.rxPhotos && o.rxPhotos.length > 1 ? ' — Page ' + (i+1) : '') + '</div><img src="' + src + '" style="width:100%;border-radius:8px;border:0.5px solid #ddd"></div>';
       }).join('')) + (o.paymentProof ? '<div style="margin-bottom:12px"><div style="font-size:11px;color:#999;margin-bottom:6px;text-transform:uppercase">Payment Proof</div><img src="' + o.paymentProof + '" style="width:100%;border-radius:8px;border:0.5px solid #ddd"></div>' : '') + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">'
-    + '<button onclick="downloadTRFpdf()" style="padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer">&#128196; Download PDF</button>'
-    + '<button onclick="shareTRFWA()" style="padding:12px;background:#25D366;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer">&#128172; WhatsApp</button>'
-    + '</div>';
+    + '<button onclick="downloadTRFpdf()" style="padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer">&#128196; Download PDF</button>'    + (buildPatientWANumber(o.phone) ? '<button onclick="shareTRFWA()" style="padding:12px;background:#25D366;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer">&#128172; WA Patient</button>' : '<button onclick="shareTRFWA()" style="padding:12px;background:#25D366;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer">&#128172; WhatsApp</button>')    + '</div>'    + (buildPatientWANumber(o.phone) ? '<button onclick="shareTRFWAGeneric()" style="width:100%;margin-top:8px;padding:10px;background:transparent;color:#25D366;border:1.5px solid #25D366;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer">&#128172; Share to any contact</button>' : '');
 
   goTo('s-trf');
 }
 
+function buildTRFWAText(o) {
+  var id = (o.id||'').slice(-6).toUpperCase();
+  var testLines = (o.tests||[]).map(function(t){ return '  - ' + t.name + (t.rate ? ' (Rs.' + t.rate + ')' : ''); }).join('\n');
+  // Payment line
+  var payLine;
+  if (o.splitPayments) {
+    var pp = [];
+    if (o.splitPayments.cash > 0) pp.push('Cash Rs.' + o.splitPayments.cash.toLocaleString('en-IN'));
+    if (o.splitPayments.upi > 0)  pp.push('UPI Rs.' + o.splitPayments.upi.toLocaleString('en-IN'));
+    if (o.splitPayments.card > 0) pp.push('Card Rs.' + o.splitPayments.card.toLocaleString('en-IN'));
+    payLine = pp.join(' + ');
+  } else {
+    payLine = (o.payMode||'cash').toUpperCase() + ' Rs.' + (o.paidAmount||0).toLocaleString('en-IN');
+  }
+  if (o.discount > 0) payLine += ' (Disc Rs.' + o.discount + ')';
+  if (o.dueAmount > 0) payLine += ' | DUE Rs.' + o.dueAmount.toLocaleString('en-IN');
+  var lines = [];
+  if (o.urgent) {
+    lines.push('🚨 *URGENT — PRIORITY PROCESSING* 🚨');
+    lines.push('');
+  }
+  lines.push('*OnePLUS Ultrasound & Lab — TRF*');
+  lines.push('Order #' + id + ' | ' + (o.date||''));
+  lines.push('');
+  lines.push('*Patient:* ' + (o.patientName||''));
+  lines.push('*Age/Sex:* ' + (o.age||'-') + ' yr, ' + (o.sex||''));
+  if (o.refBy) lines.push('*Ref by:* ' + o.refBy);
+  lines.push('*Source:* ' + (o.source||'Walk-in'));
+  if (o.address) lines.push('*Address:* ' + o.address);
+  if (o.gps) lines.push('*GPS:* https://maps.google.com/?q=' + o.gps.lat + ',' + o.gps.lng);
+  lines.push('');
+  lines.push('*Tests ordered:*');
+  lines.push(testLines);
+  lines.push('');
+  lines.push('*Payment:* ' + payLine);
+  lines.push('');
+  lines.push('_OnePLUS Ultrasound & Laboratory, Pitampura_');
+  return lines.join('\n');
+}
+
+function buildPatientWANumber(phone) {
+  if (!phone) return null;
+  var digits = phone.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) return digits;
+  if (digits.length === 11 && digits.startsWith('0')) return '91' + digits.slice(1);
+  if (digits.length === 10) return '91' + digits;
+  return null;
+}
+
 function shareTRFWA() {
   if (!lastOrder) return;
-  var o = lastOrder;
-  var id = (o.id||'').slice(-6).toUpperCase();
-  var testLines = (o.tests||[]).map(function(t){ return '- ' + t.name + ': Rs.' + (t.rate||0); }).join('\n');
-  var lines = [
-    'OnePLUS Ultrasound Lab - TRF',
-    'Order #' + id + ' | ' + (o.date||''),
-    '',
-    'Patient: ' + (o.patientName||''),
-    'Age/Sex: ' + (o.age||'-') + ' ' + (o.sex||''),
-    'Ref by: ' + (o.refBy||'-'),
-    'Source: ' + (o.source||'Walk-in') + (o.address?' | '+o.address:'') + (o.gps?' [GPS: '+o.gps.lat+','+o.gps.lng+']':''),
-    '',
-    'Tests:',
-    testLines,
-    '',
-    'Total: Rs.' + (o.paidAmount||0).toLocaleString('en-IN') + ' (' + (o.payMode||'') + ')',
-    '_OnePLUS Lab Management System_'
-  ];
-  window.open('https://wa.me/?text=' + encodeURIComponent(lines.join('\n')), '_blank');
+  var text = buildTRFWAText(lastOrder);
+  var waNum = buildPatientWANumber(lastOrder.phone);
+  if (waNum) {
+    window.open('https://wa.me/' + waNum + '?text=' + encodeURIComponent(text), '_blank');
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  }
+}
+
+function shareTRFWAGeneric() {
+  if (!lastOrder) return;
+  window.open('https://wa.me/?text=' + encodeURIComponent(buildTRFWAText(lastOrder)), '_blank');
 }
 
 // ── CLINICAL HISTORY ──
@@ -3673,7 +3860,7 @@ async function loadAdminStaff() {
       html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--border)">'
         + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0">' + initials + '</div>'
         + '<div style="flex:1;min-width:0">'
-        + '<div style="font-size:13px;font-weight:500">' + esc(s.name||'-') + (s.active===false?'<span style="font-size:10px;color:var(--red);margin-left:6px">INACTIVE</span>':'') + '</div>'
+        + '<div style="font-size:13px;font-weight:500">' + esc(s.name||'-') + (s.active===false?'<span style="font-size:10px;color:var(--red);margin-left:6px">INACTIVE</span>':'') + (s.dashboardAccess?'<span style="font-size:9px;font-family:var(--mono);background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;margin-left:6px">DASH</span>':'') + '</div>'
         + '<div style="font-size:11px;font-family:var(--mono);color:' + roleColor + '">' + (s.role||'').toUpperCase() + '</div>'
         + '<div style="font-size:11px;color:var(--text3)">' + esc(s.email||'') + '</div>'
         + '</div>'
@@ -3682,6 +3869,27 @@ async function loadAdminStaff() {
     });
     el.innerHTML = html;
   } catch(e) { el.innerHTML = '<div class="empty">Error: ' + e.message + '</div>'; }
+}
+
+var smDashAccess = false;
+
+function toggleDashAccess() {
+  smDashAccess = !smDashAccess;
+  var btn = document.getElementById('sm-dash-toggle');
+  btn.textContent = smDashAccess ? 'ON' : 'OFF';
+  btn.style.background = smDashAccess ? 'var(--accent)' : 'var(--surface)';
+  btn.style.color = smDashAccess ? '#fff' : 'var(--text2)';
+  btn.style.borderColor = smDashAccess ? 'var(--accent)' : 'var(--border-strong)';
+}
+
+function setDashAccessUI(val) {
+  smDashAccess = !!val;
+  var btn = document.getElementById('sm-dash-toggle');
+  if (!btn) return;
+  btn.textContent = smDashAccess ? 'ON' : 'OFF';
+  btn.style.background = smDashAccess ? 'var(--accent)' : 'var(--surface)';
+  btn.style.color = smDashAccess ? '#fff' : 'var(--text2)';
+  btn.style.borderColor = smDashAccess ? 'var(--accent)' : 'var(--border-strong)';
 }
 
 function showAddStaff() {
@@ -3700,6 +3908,7 @@ function showAddStaff() {
   ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
     document.getElementById('smr-'+r).className = 'tog';
   });
+  setDashAccessUI(false);
   document.getElementById('staff-modal').classList.add('open');
 }
 
@@ -3722,6 +3931,7 @@ async function editStaff(id) {
     ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
       document.getElementById('smr-'+r).className = 'tog' + (r===smRole?' on':'');
     });
+    setDashAccessUI(s.dashboardAccess || false);
     document.getElementById('staff-modal').classList.add('open');
   } catch(e) { toast('Error loading staff: ' + e.message, 'err'); }
 }
@@ -3762,13 +3972,14 @@ async function saveStaff() {
       await db.collection('staff').doc(cred.user.uid).set({
         name: name, email: email, role: smRole, pin: pin,
         uid: cred.user.uid, active: true,
+        dashboardAccess: smDashAccess,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         createdBy: curUser.uid
       });
       toast('Staff account created', 'ok');
     } else {
       // EDIT EXISTING — update Firestore only
-      var update = { name: name, email: email, role: smRole };
+      var update = { name: name, email: email, role: smRole, dashboardAccess: smDashAccess };
       if (pin) update.pin = pin;
       await db.collection('staff').doc(editingStaffId).update(update);
       toast('Staff updated', 'ok');

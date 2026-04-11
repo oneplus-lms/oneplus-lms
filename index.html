@@ -226,6 +226,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 }
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 <div id="app" onclick="hideSuggest(event)">
@@ -242,10 +243,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   <div class="auth-wrap">
     <div class="auth-logo">OnePLUS</div>
     <div class="auth-sub">Ultrasound Lab - Pitampura</div>
-    <div class="auth-tabs">
-      <div class="auth-tab active" id="tab-login" onclick="switchTab('login')">Sign In</div>
-      <div class="auth-tab" id="tab-reg" onclick="switchTab('reg')">Register</div>
-    </div>
+
     <div id="form-login">
       <div class="auth-field"><label>Email</label><input type="email" id="a-email" placeholder="you@lab.com" autocomplete="email"></div>
       <div class="auth-field"><label>Password</label><input type="password" id="a-pass" placeholder="Password" autocomplete="current-password"></div>
@@ -253,23 +251,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <div class="auth-link" onclick="showReset()">Forgot password?</div>
       <div class="auth-err" id="login-err"></div>
     </div>
-    <div id="form-reg" style="display:none">
-      <div class="auth-field"><label>Full Name</label><input type="text" id="r-name" placeholder="Dr. Name"></div>
-      <div class="auth-field"><label>Email</label><input type="email" id="r-email" placeholder="you@lab.com"></div>
-      <div class="auth-field"><label>Password</label><input type="password" id="r-pass" placeholder="Min 6 chars"></div>
-      <div class="auth-field">
-        <label>Role</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
-          <button type="button" class="tog" id="role-reception" onclick="setRole('reception')" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)">Reception</button>
-          <button type="button" class="tog" id="role-lab" onclick="setRole('lab')" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)">Lab Tech</button>
-          <button type="button" class="tog" id="role-admin" onclick="setRole('admin')" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)">Admin</button>
-          <button type="button" class="tog" id="role-pathologist" onclick="setRole('pathologist')" style="color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)">Pathologist</button>
-        </div>
-      </div>
-      <div class="auth-field"><label>PIN (4 digits)</label><input type="password" id="r-pin" placeholder="4 digit PIN" maxlength="4" inputmode="numeric"></div>
-      <button class="auth-btn" id="reg-btn" onclick="doRegister()">Create Account</button>
-      <div class="auth-err" id="reg-err"></div>
-    </div>
+    
   </div>
 </div>
 
@@ -525,6 +507,21 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <div style="font-size:12px;color:rgba(255,255,255,0.55);font-family:var(--mono);margin-top:2px" id="bill-note"></div>
       </div>
 
+      <div id="collection-charge-strip" style="display:none;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:13px;font-weight:500">&#128664; Home Collection Charge</div>
+            <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">Not discountable · Added to total</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:11px;color:var(--text3)">Rs.</span>
+            <input type="number" id="collection-charge" value="100" min="0" inputmode="numeric"
+              style="width:70px;padding:5px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:14px;font-weight:500;font-family:var(--mono);text-align:right"
+              oninput="updateBillTotal()">
+          </div>
+        </div>
+      </div>
+
       <div style="font-size:11px;font-family:var(--mono);color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Payment Mode</div>
       <div class="pay-mode-grid">
         <button class="pay-mode-btn" id="pm-cash" onclick="setPay('cash')">&#128181; Cash</button>
@@ -558,15 +555,15 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       </div>
 
       <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">
-        <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Prescription (optional)</div>
-        <input type="file" id="rx-input" accept="image/*" style="display:none" onchange="handlePhoto('rx',this)">
-        <div id="rx-preview" style="display:none;margin-bottom:8px">
-          <img id="rx-img" style="width:100%;max-height:160px;object-fit:cover;border-radius:8px;border:0.5px solid var(--border)">
-          <button onclick="clearPhoto('rx')" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;margin-top:4px;padding:0">&#10005; Remove photo</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Prescription (optional)</div>
+          <div id="rx-count-lbl" style="font-size:10px;font-family:var(--mono);color:var(--text3)">0 / 4 pages</div>
         </div>
-        <div style="display:flex;gap:8px">
-          <button onclick="capturePhoto('rx','camera')" style="flex:1;padding:10px;border:1.5px dashed var(--border-strong);border-radius:var(--radius);background:none;color:var(--text2);font-size:13px;cursor:pointer">&#128247; Camera</button>
-          <button onclick="capturePhoto('rx','gallery')" style="flex:1;padding:10px;border:1.5px dashed var(--border-strong);border-radius:var(--radius);background:none;color:var(--text2);font-size:13px;cursor:pointer">&#128448; Gallery</button>
+        <input type="file" id="rx-input" accept="image/*,application/pdf" style="display:none" onchange="handleRxFile(this)">
+        <div id="rx-thumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px" id="rx-add-btns">
+          <button onclick="captureRxPhoto('camera')" style="flex:1;padding:10px;border:1.5px dashed var(--border-strong);border-radius:var(--radius);background:none;color:var(--text2);font-size:13px;cursor:pointer">&#128247; Camera</button>
+          <button onclick="captureRxPhoto('gallery')" style="flex:1;padding:10px;border:1.5px dashed var(--border-strong);border-radius:var(--radius);background:none;color:var(--text2);font-size:13px;cursor:pointer">&#128448; Image / PDF</button>
         </div>
       </div>
 
@@ -735,6 +732,30 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
   </div>
 </div>
+<!-- Field transfer modal -->
+<div id="field-transfer-bg" class="edit-modal-bg" style="display:none" onclick="if(event.target===this)closeTransferModal()">
+  <div class="edit-modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Transfer to Another Phlebotomist</div>
+    <div class="modal-sub" id="transfer-modal-sub"></div>
+    <div class="edit-section-lbl">Transfer To</div>
+    <div class="field">
+      <select id="transfer-to-select" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px">
+        <option value="">Select phlebotomist...</option>
+      </select>
+    </div>
+    <div class="edit-section-lbl">Reason <span style="color:var(--red)">*</span></div>
+    <div class="field">
+      <input type="text" id="transfer-reason" placeholder="e.g. PP sample needed after 2hrs, sending Ravi">
+      <div class="ferr" id="err-transfer-reason">Reason required</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <button class="btn" onclick="closeTransferModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitTransfer()">Transfer</button>
+    </div>
+  </div>
+</div>
+
 <!-- Field task delivery modal -->
 <div id="field-modal-bg" class="edit-modal-bg" style="display:none" onclick="if(event.target===this)closeFieldModal()">
   <div class="edit-modal" id="field-modal">
@@ -968,6 +989,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
           <button type="button" class="tog" id="tr-lab" onclick="selectTempRole('lab')">Lab Tech</button>
           <button type="button" class="tog" id="tr-admin" onclick="selectTempRole('admin')">Admin</button>
           <button type="button" class="tog" id="tr-pathologist" onclick="selectTempRole('pathologist')">Pathologist</button>
+          <button type="button" class="tog" id="tr-phlebotomist" onclick="selectTempRole('phlebotomist')">Phlebotomist</button>
         </div>
       </div>
       <div class="field">
@@ -1009,6 +1031,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <button type="button" class="tog" id="smr-lab" onclick="setStaffRole('lab')">Lab Tech</button>
         <button type="button" class="tog" id="smr-admin" onclick="setStaffRole('admin')">Admin</button>
         <button type="button" class="tog" id="smr-pathologist" onclick="setStaffRole('pathologist')">Pathologist</button>
+        <button type="button" class="tog" id="smr-phlebotomist" onclick="setStaffRole('phlebotomist')">Phlebotomist</button>
       </div>
     </div>
     <div class="field">
@@ -1171,7 +1194,7 @@ function switchTab(t) {
 
 function setRole(r) {
   selRole = r;
-  ['reception','lab','admin','pathologist'].forEach(function(x){
+  ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(x){
     var btn = document.getElementById('role-'+x);
     if (x===r) {
       btn.style.background='rgba(255,255,255,0.22)';
@@ -1295,7 +1318,7 @@ function unlock() {
   var btn = document.getElementById('admin-btn');
   if (btn) btn.style.display = (role==='admin'||role==='pathologist') ? 'block' : 'none';
   var fbtn = document.getElementById('field-btn');
-  if (fbtn) fbtn.style.display = (role==='reception'||role==='lab'||role==='admin'||role==='pathologist') ? 'block' : 'none';
+  if (fbtn) fbtn.style.display = (role==='reception'||role==='lab'||role==='admin'||role==='pathologist'||role==='phlebotomist') ? 'block' : 'none';
 }
 
 // ── DASHBOARD ──
@@ -1416,7 +1439,7 @@ function toggleHomeCollection() {
     setTimeout(captureGPS, 300);
   }
   if (src!=='Home Collection') { curGPS=null; document.getElementById('gps-status').textContent='Not captured';
-  isUrgent=false; discountApproved=false;
+  isUrgent=false; discountApproved=false; if(document.getElementById('collection-charge-strip')) document.getElementById('collection-charge-strip').style.display='none';
   var utog=document.getElementById('urgent-toggle'); if(utog){utog.classList.remove('on'); document.getElementById('urgent-label').classList.remove('on'); document.getElementById('urgent-label').textContent='Mark as Urgent'; document.getElementById('urgent-sub').classList.remove('on'); document.getElementById('urgent-sub').textContent='Tap to flag for priority processing'; document.getElementById('urgent-check').classList.remove('on'); document.getElementById('urgent-check').textContent='';} }
 }
 var curGPS = null;
@@ -1641,13 +1664,31 @@ function toggleUrgent() {
 function step2Next() {
   if (!selTests.length) { toast('Select at least one test','warn'); return; }
   curOrder.tests=selTests;
-  var total=selTests.reduce(function(s,t){ return s+(t.rate||0); },0);
-  curOrder.totalAmount=total;
-  document.getElementById('bill-amt').textContent='Rs.'+total.toLocaleString('en-IN');
-  document.getElementById('paid-amt').value=total;
+  var testTotal=selTests.reduce(function(s,t){ return s+(t.rate||0); },0);
+  curOrder.testTotal=testTotal;
+  // Show collection charge strip for home collection
+  var isHome = curOrder.source === 'Home Collection';
+  var ccStrip = document.getElementById('collection-charge-strip');
+  if (ccStrip) ccStrip.style.display = isHome ? 'block' : 'none';
+  updateBillTotal();
   document.getElementById('discount').value='';
   document.getElementById('bill-note').textContent='';
   setPay('cash'); showStep(3);
+}
+
+function updateBillTotal() {
+  var testTotal = curOrder.testTotal || 0;
+  var isHome = curOrder.source === 'Home Collection';
+  var cc = isHome ? parseFloat(document.getElementById('collection-charge').value||0) : 0;
+  curOrder.collectionCharge = cc;
+  var total = testTotal + cc;
+  curOrder.totalAmount = total;
+  document.getElementById('bill-amt').textContent = 'Rs.' + total.toLocaleString('en-IN')
+    + (cc > 0 ? ' (incl. Rs.' + cc + ' collection)' : '');
+  document.getElementById('paid-amt').value = total;
+  // Re-apply discount if any
+  var discVal = parseFloat(document.getElementById('discount').value||0);
+  if (discVal > 0) applyDiscount();
 }
 function setPay(m) {
   payMode=m;
@@ -1660,7 +1701,7 @@ function setPay(m) {
   if (ps) ps.style.display = (m==='upi'||m==='card') ? 'block' : 'none';
 }
 var discType = 'amt';
-var rxPhotoB64 = '';
+var rxPhotos = []; // array of base64 strings, up to 4 pages
 var proofPhotoB64 = '';
 
 function setDiscType(type) {
@@ -1692,10 +1733,12 @@ function applyDiscount() {
     var calcEl = document.getElementById('disc-calc');
     if (calcEl) calcEl.textContent = '';
   }
-  var net = Math.max(0, total - disc);
-  document.getElementById('bill-amt').textContent = 'Rs.' + net.toLocaleString('en-IN');
+  var cc = curOrder.collectionCharge || 0;
+  var net = Math.max(0, total - disc) + cc;
+  document.getElementById('bill-amt').textContent = 'Rs.' + net.toLocaleString('en-IN')
+    + (cc > 0 ? ' (incl. Rs.' + cc + ' collection)' : '');
   document.getElementById('paid-amt').value = net;
-  document.getElementById('bill-note').textContent = disc > 0 ? 'Discount: Rs.' + disc.toLocaleString('en-IN') + ' (' + (discType==='pct'?raw+'%':'amount') + ')' : '';
+  document.getElementById('bill-note').textContent = disc > 0 ? 'Discount Rs.' + disc.toLocaleString('en-IN') + ' on tests only' + (cc>0?' · Collection charge Rs.'+cc+' not discounted':'') : '';
   // Approval check
   var needsApproval = (disc > discountApprovalThresholdAmt || (total>0 && disc/total*100 > discountApprovalThresholdPct));
   var role = curProfile && curProfile.role || '';
@@ -1731,33 +1774,152 @@ function handlePhoto(type, input) {
     var img = new Image();
     img.onload = function() {
       var canvas = document.createElement('canvas');
-      var maxW = 800;
+      var maxW = 600; // reduced from 800 for Firestore 1MB limit
       var scale = img.width > maxW ? maxW / img.width : 1;
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      var b64 = canvas.toDataURL('image/jpeg', 0.7);
-      if (type === 'rx') {
-        rxPhotoB64 = b64;
-        document.getElementById('rx-img').src = b64;
-        document.getElementById('rx-preview').style.display = 'block';
-      } else {
-        proofPhotoB64 = b64;
-        document.getElementById('proof-img').src = b64;
-        document.getElementById('proof-preview').style.display = 'block';
+      var quality = 0.6; // reduced from 0.7
+      var b64 = canvas.toDataURL('image/jpeg', quality);
+      // If still > 200KB base64, compress further
+      if (b64.length > 270000) {
+        b64 = canvas.toDataURL('image/jpeg', 0.45);
       }
-      toast('Photo added', 'ok');
+      // Warn if still large
+      var kb = Math.round(b64.length * 0.75 / 1024);
+      if (b64.length > 400000) {
+        toast('Photo large (' + kb + 'KB) — may affect save speed', 'warn');
+      }
+      proofPhotoB64 = b64;
+      document.getElementById('proof-img').src = b64;
+      document.getElementById('proof-preview').style.display = 'block';
+      toast('Payment proof added (' + kb + 'KB)', 'ok');
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
 
+// ── PRESCRIPTION FILE HANDLER (image or PDF) ──
+function handleRxFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  if (file.type === 'application/pdf') {
+    handleRxPDF(file);
+  } else {
+    handleRxPhoto(input);
+  }
+}
+
+function handleRxPDF(file) {
+  if (rxPhotos.length >= 4) { toast('Maximum 4 pages already added', 'warn'); return; }
+  // Check PDF.js is loaded
+  if (typeof pdfjsLib === 'undefined') {
+    toast('PDF viewer loading — try again in a moment', 'warn'); return;
+  }
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var loadingTask = pdfjsLib.getDocument({data: e.target.result});
+    loadingTask.promise.then(function(pdf) {
+      var totalPages = pdf.numPages;
+      var slotsLeft = 4 - rxPhotos.length;
+      var pagesToRender = Math.min(totalPages, slotsLeft);
+      if (totalPages > slotsLeft) {
+        toast('PDF has ' + totalPages + ' pages — adding first ' + pagesToRender + ' (limit 4 total)', 'warn');
+      }
+      var rendered = 0;
+      function renderPage(pageNum) {
+        pdf.getPage(pageNum).then(function(page) {
+          // Render at 1.2x scale — good quality vs size balance
+          var viewport = page.getViewport({scale: 1.2});
+          var canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          var ctx = canvas.getContext('2d');
+          page.render({canvasContext: ctx, viewport: viewport}).promise.then(function() {
+            var b64 = canvas.toDataURL('image/jpeg', 0.6);
+            if (b64.length > 270000) b64 = canvas.toDataURL('image/jpeg', 0.45);
+            var kb = Math.round(b64.length * 0.75 / 1024);
+            rxPhotos.push(b64);
+            renderRxThumbs();
+            rendered++;
+            toast('PDF page ' + pageNum + ' added (' + kb + 'KB)', 'ok');
+            if (rendered < pagesToRender) renderPage(pageNum + 1);
+          });
+        });
+      }
+      renderPage(1);
+    }).catch(function(e) {
+      toast('Could not read PDF: ' + e.message, 'err');
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function captureRxPhoto(source) {
+  if (rxPhotos.length >= 4) { toast('Maximum 4 prescription pages', 'warn'); return; }
+  var input = document.getElementById('rx-input');
+  if (source === 'camera') input.setAttribute('capture', 'environment');
+  else input.removeAttribute('capture');
+  input.click();
+}
+
+function handleRxPhoto(input) {
+  var file = input.files[0];
+  if (!file) return;
+  if (rxPhotos.length >= 4) { toast('Maximum 4 pages reached', 'warn'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      var maxW = 600;
+      var scale = img.width > maxW ? maxW / img.width : 1;
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      var b64 = canvas.toDataURL('image/jpeg', 0.6);
+      if (b64.length > 270000) b64 = canvas.toDataURL('image/jpeg', 0.45);
+      var kb = Math.round(b64.length * 0.75 / 1024);
+      rxPhotos.push(b64);
+      renderRxThumbs();
+      toast('Page ' + rxPhotos.length + ' added (' + kb + 'KB)', 'ok');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  input.value = ''; // reset so same file can be re-selected
+}
+
+function renderRxThumbs() {
+  var thumbs = document.getElementById('rx-thumbs');
+  var countLbl = document.getElementById('rx-count-lbl');
+  var addBtns = document.getElementById('rx-add-btns');
+  if (!thumbs) return;
+  countLbl.textContent = rxPhotos.length + ' / 4 pages';
+  thumbs.innerHTML = rxPhotos.map(function(b64, i) {
+    return '<div style="position:relative;width:72px">'
+      + '<img src="' + b64 + '" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:0.5px solid var(--border)">'
+      + '<div style="position:absolute;top:2px;left:4px;font-size:9px;font-family:var(--mono);background:rgba(0,0,0,0.55);color:#fff;padding:1px 4px;border-radius:3px">P' + (i+1) + '</div>'
+      + '<button onclick="removeRxPhoto(' + i + ')" style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:#EF4444;color:#fff;border:none;font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">&#10005;</button>'
+      + '</div>';
+  }).join('');
+  // Hide add buttons when at max
+  if (addBtns) addBtns.style.display = rxPhotos.length >= 4 ? 'none' : 'flex';
+}
+
+function removeRxPhoto(i) {
+  rxPhotos.splice(i, 1);
+  renderRxThumbs();
+}
+
 function clearPhoto(type) {
   if (type === 'rx') {
-    rxPhotoB64 = '';
-    document.getElementById('rx-preview').style.display = 'none';
-    document.getElementById('rx-input').value = '';
+    rxPhotos = [];
+    renderRxThumbs();
   } else {
     proofPhotoB64 = '';
     document.getElementById('proof-preview').style.display = 'none';
@@ -1766,15 +1928,26 @@ function clearPhoto(type) {
 }
 function submitOrder() {
   var disc=parseFloat(document.getElementById('discount').value||0);
+  // Block if discount approval is pending
+  var total = curOrder.totalAmount || 0;
+  var role = curProfile && curProfile.role || '';
+  var isPriv = role==='pathologist' || role==='admin';
+  var needsApproval = disc > 0 && (disc > discountApprovalThresholdAmt || (total>0 && disc/total*100 > discountApprovalThresholdPct));
+  if (needsApproval && !isPriv && !discountApproved) {
+    document.getElementById('discount-approval-banner').style.display = 'block';
+    document.getElementById('disc-approval-sub').textContent = 'Discount Rs.'+disc.toLocaleString('en-IN')+' requires Pathologist/Admin approval before saving.';
+    toast('Discount requires approval — enter Pathologist PIN', 'warn');
+    return;
+  }
   var paid=payMode==='credit'?0:parseFloat(document.getElementById('paid-amt').value||0);
   var order={
     patientName:curOrder.patientName, age:curOrder.age||'', sex:curOrder.sex||'',
     phone:curOrder.phone||'', refBy:curOrder.refBy||'', tests:curOrder.tests,
     source:curOrder.source||'Walk-in', address:curOrder.address||'', gps:curOrder.gps||null,
-    totalAmount:curOrder.totalAmount, discount:disc,
+    totalAmount:curOrder.totalAmount, testTotal:curOrder.testTotal||curOrder.totalAmount, collectionCharge:curOrder.collectionCharge||0, discount:disc,
     netAmount:Math.max(0,curOrder.totalAmount-disc),
     paidAmount:paid, dueAmount:Math.max(0,curOrder.totalAmount-disc)-paid,
-    payMode:payMode, discountType:discType, rxPhoto:rxPhotoB64||'', paymentProof:proofPhotoB64||'', notes:document.getElementById('bill-notes').value,
+    payMode:payMode, discountType:discType, rxPhotos:rxPhotos.length?rxPhotos:[], rxPhoto:rxPhotos[0]||'', paymentProof:proofPhotoB64||'', notes:document.getElementById('bill-notes').value,
     history:curOrder.history||{},
     date:todayStr(), createdAt:firebase.firestore.FieldValue.serverTimestamp(),
     createdBy:curUser.uid, createdByName:(curProfile&&curProfile.name)||curUser.email,
@@ -1789,7 +1962,7 @@ function submitOrder() {
   }).catch(function(e){ toast('Save failed - check connection','err'); });
 }
 function newOrder() {
-  curOrder={}; selTests=[]; payMode='cash'; curHistory={}; selDiagnoses=[]; selMeds=[]; rxPhotoB64=''; proofPhotoB64=''; discType='amt'; curGPS=null;
+  curOrder={}; selTests=[]; payMode='cash'; curHistory={}; selDiagnoses=[]; selMeds=[]; rxPhotos=[]; proofPhotoB64=''; discType='amt'; curGPS=null;
   ['pt-name','pt-age','pt-phone','pt-ref','pt-address','bill-notes'].forEach(function(id){
     document.getElementById(id).value='';
   });
@@ -1967,7 +2140,14 @@ function renderOrderDetail(o) {
     + '</div></div>'
 
     // Action buttons
-    + '<button class="btn" style="width:100%;margin-bottom:10px;border-color:var(--accent);color:var(--accent)" onclick="openEditModal()">&#9998; Edit Order</button>'
+    + (function(){
+        var role = curProfile && curProfile.role || '';
+        var isOwner = o.createdBy === (curUser && curUser.uid);
+        var canEdit = role==='pathologist'||role==='admin'||role==='reception' || (role==='phlebotomist'&&isOwner);
+        if (canEdit) return '<button class="btn" style="width:100%;margin-bottom:10px;border-color:var(--accent);color:var(--accent)" onclick="openEditModal()">&#9998; Edit Order</button>';
+        if (role==='phlebotomist') return '<button class="btn" style="width:100%;margin-bottom:10px;opacity:0.4;cursor:not-allowed" disabled title="You can only edit orders you created">&#9998; Edit Order (not yours)</button>';
+        return ''; // lab sees no edit button
+      })()
     + '<button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="openDetailTRF()">&#128221; View / Print TRF</button>'
     + '<button class="btn" style="width:100%;margin-bottom:10px" onclick="downloadTRFpdf()">&#128196; Download PDF</button>'
     + '<button class="btn" style="width:100%;" onclick="shareDetailWA()">&#128172; Share via WhatsApp</button>';
@@ -2042,8 +2222,21 @@ function buildAuditTrail(o) {
   }
 
   // 7. Rx photo
-  if (o.rxPhoto) {
-    events.push({ title: 'Prescription Photo Attached', type: 'info' });
+  var rxCount = (o.rxPhotos && o.rxPhotos.length) || (o.rxPhoto ? 1 : 0);
+  if (rxCount > 0) {
+    events.push({ title: 'Prescription Attached (' + rxCount + (rxCount>1?' pages':' page') + ')', type: 'info' });
+  }
+
+  // 7b. Field transfers
+  if (o.fieldTransfers && o.fieldTransfers.length) {
+    o.fieldTransfers.forEach(function(t) {
+      events.push({
+        title: 'Sample Transferred',
+        sub: (t.fromName||'-') + ' → ' + (t.toName||'-') + ' · ' + (t.reason||''),
+        at: (t.date||'') + ' ' + (t.at||''),
+        type: 'info'
+      });
+    });
   }
 
   // 8. Amendments (edits)
@@ -2069,7 +2262,12 @@ function openEditModal() {
   var o = curDetailOrder;
   if (!o) return;
   var role = curProfile && curProfile.role || '';
-  if (role === 'lab') { toast('Lab role cannot edit orders', 'warn'); return; }
+  // Lab cannot edit anyone's orders
+  if (role === 'lab') { toast('Lab Tech role cannot edit orders', 'warn'); return; }
+  // Phlebotomist can only edit their own orders
+  if (role === 'phlebotomist' && o.createdBy !== curUser.uid) {
+    toast('You can only edit orders you created', 'warn'); return;
+  }
 
   // Populate fields
   document.getElementById('edit-name').value = o.patientName || '';
@@ -2125,22 +2323,35 @@ function submitDiscountPin() {
   var pin = document.getElementById('disc-pin-input').value.trim();
   var errEl = document.getElementById('disc-pin-err');
   if (pin.length < 4) { errEl.textContent = 'Enter 4-digit PIN'; return; }
-  // Verify against curProfile (current user must be pathologist/admin, or use stored PIN)
-  db.collection('staff').where('pin','==',pin).where('active','==',true).get().then(function(snap) {
+
+  // First check if current user is already privileged and PIN matches their own
+  var myRole = curProfile && curProfile.role || '';
+  var myPin = curProfile && curProfile.pin || '';
+  if ((myRole==='pathologist'||myRole==='admin') && myPin && pin===myPin) {
+    discountApproved = true;
+    document.getElementById('discount-approval-banner').style.display = 'none';
+    toast('Discount approved ✓', 'ok'); return;
+  }
+
+  // Otherwise check all staff — fetch all pathologist/admin staff and match PIN client-side
+  // (avoids composite index requirement)
+  errEl.textContent = 'Verifying...';
+  db.collection('staff').where('active','==',true).get().then(function(snap) {
     var approved = false;
     snap.forEach(function(d) {
-      var r = d.data().role;
-      if (r==='pathologist'||r==='admin') approved = true;
+      var s = d.data();
+      if ((s.role==='pathologist'||s.role==='admin') && s.pin===pin) approved = true;
     });
     if (approved) {
       discountApproved = true;
       document.getElementById('discount-approval-banner').style.display = 'none';
       toast('Discount approved ✓', 'ok');
+      errEl.textContent = '';
     } else {
-      errEl.textContent = 'Invalid PIN or insufficient role';
+      errEl.textContent = 'Incorrect PIN or insufficient role';
       document.getElementById('disc-pin-input').value = '';
     }
-  }).catch(function(){ errEl.textContent = 'Verification failed'; });
+  }).catch(function(){ errEl.textContent = 'Verification failed — check connection'; });
 }
 
 
@@ -2368,6 +2579,22 @@ function downloadTRFpdf() {
   y += 5;
   if(o.lastEditedBy) doc.text('Last edited by: '+o.lastEditedBy+' at '+o.lastEditedAt, ml, y);
 
+  // Prescription pages
+  var rxPages = (o.rxPhotos && o.rxPhotos.length) ? o.rxPhotos : (o.rxPhoto ? [o.rxPhoto] : []);
+  if (rxPages.length > 0) {
+    rxPages.forEach(function(src, pi) {
+      if (y > ph - 60) { doc.addPage(); y = mt; }
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(150,150,150);
+      doc.text('PRESCRIPTION' + (rxPages.length > 1 ? ' — PAGE ' + (pi+1) : ''), ml, y);
+      y += 5;
+      try {
+        var imgH = Math.min(80, (ph - y - 20));
+        doc.addImage(src, 'JPEG', ml, y, cw, imgH);
+        y += imgH + 6;
+      } catch(e) {}
+    });
+  }
+
   var filename = 'TRF_'+(o.patientName||'patient').replace(/\s+/g,'_')+'_'+(o.date||'').replace(/\//g,'-')+'.pdf';
   doc.save(filename);
   toast('PDF downloaded','ok');
@@ -2395,12 +2622,27 @@ function loadField() {
   var today = todayStr();
   document.getElementById('field-date').textContent = today;
   if (fieldUnsubscribe) fieldUnsubscribe();
+  // Load all home collection orders for today — filter relevance client-side
   fieldUnsubscribe = db.collection('orders')
     .where('date', '==', today)
     .where('source', '==', 'Home Collection')
     .onSnapshot(function(snap) {
+      var myUid = curUser && curUser.uid;
+      var role = curProfile && curProfile.role || '';
       var orders = [];
-      snap.forEach(function(d) { orders.push(Object.assign({id: d.id}, d.data())); });
+      snap.forEach(function(d) {
+        var o = Object.assign({id: d.id}, d.data());
+        // Phlebotomist sees: orders they created OR orders transferred to them
+        // Other roles see all
+        if (role === 'phlebotomist') {
+          var isAssignedToMe = o.fieldAssignedToUid === myUid;
+          var isCreatedByMe = o.createdBy === myUid;
+          var isOriginallyMine = !o.fieldAssignedToUid && isCreatedByMe;
+          var isPendingToMe = o.fieldTransferPending && o.fieldTransferPending.toUid === myUid;
+          if (!isAssignedToMe && !isOriginallyMine && !isPendingToMe) return;
+        }
+        orders.push(o);
+      });
       orders.sort(function(a,b){ return (a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0)-(b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0); });
       renderFieldTasks(orders);
     }, function(){});
@@ -2455,30 +2697,194 @@ function renderFieldTasks(orders) {
     }).join('');
 
     var fidx = fieldOrders.indexOf(o);
+    var myUid = curUser && curUser.uid;
+    var isAssignedToMe = o.fieldAssignedToUid === myUid;
+    var isCreatedByMe = o.createdBy === myUid;
+    var canAct = isCreatedByMe || isAssignedToMe;
+
+    // Transfer history chips
+    var transferChain = '';
+    if (o.fieldTransfers && o.fieldTransfers.length) {
+      transferChain = '<div style="margin-bottom:6px">';
+      o.fieldTransfers.forEach(function(t) {
+        transferChain += '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);background:var(--surface2);padding:3px 7px;border-radius:20px;display:inline-block;margin-right:4px;margin-bottom:2px">'
+          + esc(t.fromName) + ' → ' + esc(t.toName) + ' (' + esc(t.at) + ')</div>';
+      });
+      transferChain += '</div>';
+    }
+
+    // Pending transfer — needs acceptance
+    var myUid2 = curUser && curUser.uid;
+    var isPendingToMe = o.fieldTransferPending && o.fieldTransferPending.toUid === myUid2;
+    var transferBanner = '';
+    if (isPendingToMe) {
+      transferBanner = '<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);padding:8px 10px;margin-bottom:8px">'
+        + '<div style="font-size:11px;font-weight:600;color:#92400E;margin-bottom:4px">&#8644; Transfer Pending — Your Acceptance Required</div>'
+        + '<div style="font-size:11px;color:#78350F">From: ' + esc(o.fieldTransferPending.fromName||'-') + ' · ' + esc(o.fieldTransferPending.reason||'') + '</div>'
+        + '<div style="display:flex;gap:8px;margin-top:8px">'
+        + '<button class="btn-accept" style="flex:1;padding:7px;font-size:12px" onclick="fieldTransferAction('+fidx+',0)">&#10003; Accept</button>'
+        + '<button class="btn-reject" style="flex:1;padding:7px;font-size:12px" onclick="fieldTransferAction('+fidx+',1)">&#10005; Reject</button>'
+        + '</div></div>';
+    } else if (isAssignedToMe && !isCreatedByMe) {
+      transferBanner = '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:var(--radius);padding:6px 10px;margin-bottom:6px;font-size:11px;color:#1E40AF">'
+        + '&#8617; Transferred to you by ' + esc(o.fieldTransfers && o.fieldTransfers.length ? o.fieldTransfers[o.fieldTransfers.length-1].fromName : o.createdByName||'-')
+        + (o.fieldTransfers && o.fieldTransfers.length ? ' · ' + esc(o.fieldTransfers[o.fieldTransfers.length-1].reason||'') : '')
+        + '</div>';
+    }
+
     var actions = '';
-    if (!isCollected && !isDelivered) {
-      actions = '<button class="btn btn-primary" style="flex:1;font-size:12px;padding:8px" onclick="fieldActionIdx(' + fidx + ',\"collect\")">&#10003; Mark Collected</button>';
-    } else if (isCollected) {
-      actions = '<button class="btn" style="flex:1;font-size:12px;padding:8px;color:var(--accent);border-color:var(--accent)" onclick="fieldActionIdx(' + fidx + ',\"deliver\")">&#128230; Mark Delivered</button>';
+    if (!isCollected && !isDelivered && canAct) {
+      actions = '<button class="btn btn-primary" style="flex:1;font-size:12px;padding:8px" onclick="fieldActionIdx(' + fidx + ',\"collect\")">&#10003; Collect</button>'
+              + '<button class="btn" style="flex:1;font-size:12px;padding:8px" onclick="openTransferModal(' + fidx + ')">&#8644; Transfer</button>';
+    } else if (isCollected && canAct) {
+      actions = '<button class="btn" style="flex:1;font-size:12px;padding:8px;color:var(--accent);border-color:var(--accent)" onclick="fieldActionIdx(' + fidx + ',\"deliver\")">&#128230; Deliver</button>'
+              + '<button class="btn" style="flex:1;font-size:12px;padding:8px" onclick="openTransferModal(' + fidx + ')">&#8644; Transfer PP</button>';
     }
 
     return '<div class="field-task-card'+(isCollected||isDelivered?' done':'')+'">'
       + '<div class="field-task-header">'
-      + '<span class="field-task-meta">' + esc(o.createdByName||'-') + '</span>'
+      + '<span class="field-task-meta">' + esc(isAssignedToMe && !isCreatedByMe ? 'Orig: '+esc(o.createdByName||'-') : o.createdByName||'-') + '</span>'
       + statusBadge
       + '</div>'
       + '<div class="field-task-body">'
+      + transferBanner
       + '<div class="field-task-patient">'+esc(o.patientName||'-')+'</div>'
       + '<div class="field-task-meta">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+' · '+esc(o.phone||'-')+'</div>'
       + (o.address?'<div class="field-task-address">'+esc(o.address)+'</div>':'')
       + mapLink
-      + '<div class="field-task-tests">'+esc((o.tests||[]).map(function(t){return t.name;}).slice(0,4).join(', '))+(( o.tests||[]).length>4?' +'+((o.tests||[]).length-4)+' more':'')+'</div>'
+      + '<div class="field-task-tests">'+esc((o.tests||[]).map(function(t){return t.name;}).slice(0,4).join(', '))+((o.tests||[]).length>4?' +'+((o.tests||[]).length-4)+' more':'')+'</div>'
       + (tubeChips?'<div class="field-task-tubes">'+tubeChips+'</div>':'')
+      + transferChain
       + (o.fieldNotes?'<div style="font-size:11px;color:var(--text2);background:var(--surface2);padding:4px 8px;border-radius:6px;margin-bottom:6px">'+esc(o.fieldNotes)+'</div>':'')
       + (actions?'<div class="field-task-actions">'+actions+'</div>':'')
       + '</div></div>';
   }).join('');
 }
+
+var transferTargetIdx = null;
+
+function openTransferModal(idx) {
+  transferTargetIdx = idx;
+  var o = fieldOrders[idx];
+  if (!o) return;
+  document.getElementById('transfer-modal-sub').textContent =
+    'Transferring: ' + (o.patientName||'') + ' · ' + (o.tests||[]).map(function(t){return t.name;}).join(', ').substring(0,60);
+  document.getElementById('transfer-reason').value = '';
+  document.getElementById('err-transfer-reason').classList.remove('on');
+
+  // Load phlebotomist staff into dropdown
+  var sel = document.getElementById('transfer-to-select');
+  sel.innerHTML = '<option value="">Select phlebotomist...</option>';
+  db.collection('staff').where('active','==',true).get().then(function(snap) {
+    snap.forEach(function(d) {
+      var s = d.data();
+      if (s.role !== 'phlebotomist') return;
+      if (d.id === (curUser&&curUser.uid)) return; // exclude self
+      var opt = document.createElement('option');
+      opt.value = d.id;
+      opt.dataset.name = s.name;
+      opt.textContent = s.name;
+      sel.appendChild(opt);
+    });
+  });
+
+  var bg = document.getElementById('field-transfer-bg');
+  bg.style.display = 'flex';
+  setTimeout(function(){ bg.classList.add('open'); }, 10);
+}
+
+function fieldTransferAction(idx, code) {
+  var o = fieldOrders[idx];
+  if (!o) return;
+  if (code === 0) acceptTransfer(o.id);
+  else rejectTransfer(o.id);
+}
+
+function acceptTransfer(orderId) {
+  var myName = (curProfile&&curProfile.name)||curUser.email;
+  db.collection('orders').doc(orderId).update({
+    fieldAssignedToUid: curUser.uid,
+    fieldAssignedToName: myName,
+    fieldTransferPending: firebase.firestore.FieldValue.delete()
+  }).then(function(){
+    toast('Transfer accepted — order now assigned to you ✓', 'ok');
+  }).catch(function(){ toast('Failed — check connection', 'err'); });
+}
+
+function rejectTransfer(orderId) {
+  db.collection('orders').doc(orderId).get().then(function(snap) {
+    if (!snap.exists) return;
+    var o = snap.data();
+    var pending = o.fieldTransferPending;
+    if (!pending) return;
+    var myName = (curProfile&&curProfile.name)||curUser.email;
+    // Remove last transfer from fieldTransfers array (the pending one)
+    var transfers = (o.fieldTransfers||[]).slice(0,-1);
+    db.collection('orders').doc(orderId).update({
+      fieldTransferPending: firebase.firestore.FieldValue.delete(),
+      fieldTransfers: transfers
+    }).then(function(){
+      toast('Transfer rejected — order stays with ' + (pending.fromName||'sender'), 'warn');
+    }).catch(function(){ toast('Failed — check connection', 'err'); });
+  });
+}
+
+
+function closeTransferModal() {
+  var bg = document.getElementById('field-transfer-bg');
+  bg.classList.remove('open');
+  setTimeout(function(){ bg.style.display='none'; }, 280);
+  transferTargetIdx = null;
+}
+
+function submitTransfer() {
+  var sel = document.getElementById('transfer-to-select');
+  var toUid = sel.value;
+  var toName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].dataset.name || '' : '';
+  var reason = document.getElementById('transfer-reason').value.trim();
+  var errEl = document.getElementById('err-transfer-reason');
+
+  if (!toUid) { toast('Select a phlebotomist', 'warn'); return; }
+  if (!reason) { errEl.classList.add('on'); return; }
+  errEl.classList.remove('on');
+
+  var o = fieldOrders[transferTargetIdx];
+  if (!o) return;
+
+  var now = new Date();
+  var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  var fromName = (curProfile&&curProfile.name)||curUser.email;
+
+  var transfer = {
+    fromUid: curUser.uid,
+    fromName: fromName,
+    toUid: toUid,
+    toName: toName,
+    reason: reason,
+    at: timeStr,
+    date: todayStr()
+  };
+
+  closeTransferModal();
+
+  db.collection('orders').doc(o.id).update({
+    fieldTransferPending: {
+      toUid: toUid,
+      toName: toName,
+      fromUid: curUser.uid,
+      fromName: fromName,
+      reason: reason,
+      at: timeStr,
+      date: todayStr()
+    },
+    fieldTransfers: firebase.firestore.FieldValue.arrayUnion(transfer)
+  }).then(function() {
+    toast('Transfer sent — awaiting acceptance from ' + toName, 'ok');
+  }).catch(function(e) {
+    toast('Transfer failed — check connection', 'err');
+  });
+}
+
 
 var fieldOrders = [];
 function fieldActionIdx(idx, action) {
@@ -3006,6 +3412,7 @@ function openTRF() {
     + '<div><div style="font-size:10px;color:#999">Date</div><div style="font-size:14px">' + esc(o.date||'-') + '</div></div>'
     + ''
     + '<div><div style="font-size:10px;color:#999">Source</div><div style="font-size:14px">' + esc(o.source||'Walk-in') + '</div></div>'
+    + (o.collectionCharge>0 ? '<div><div style="font-size:10px;color:#999">Collection Charge</div><div style="font-size:14px;font-weight:500;color:#1D4ED8">Rs.'+o.collectionCharge+'</div></div>' : '')
     + (o.address ? '<div style="grid-column:span 2"><div style="font-size:10px;color:#999">Address</div><div style="font-size:13px">' + esc(o.address) + '</div></div>' : '')
     + (o.gps ? '<div style="grid-column:span 2"><div style="font-size:10px;color:#999">GPS</div><div style="font-size:11px;font-family:monospace;color:#1D4ED8">' + o.gps.lat + ', ' + o.gps.lng + ' (±' + o.gps.accuracy + 'm)</div></div>' : '')
     + '</div></div>'
@@ -3044,7 +3451,10 @@ function openTRF() {
     + '<div style="background:#fff;border:0.5px solid #ddd;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#999">Collected by</div><div style="font-size:12px;margin-top:2px">' + esc(o.createdByName||'-') + '</div></div>'
     + '<div style="background:#fff;border:0.5px solid #ddd;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#999">Status</div><div style="font-size:12px;margin-top:2px;font-weight:500;color:#1A4A3A">' + esc((o.status||'PAID').toUpperCase()) + '</div></div>'
     + '</div>'
-    + (o.rxPhoto ? '<div style="margin-bottom:12px"><div style="font-size:11px;color:#999;margin-bottom:6px;text-transform:uppercase">Prescription</div><img src="' + o.rxPhoto + '" style="width:100%;border-radius:8px;border:0.5px solid #ddd"></div>' : '') + (o.paymentProof ? '<div style="margin-bottom:12px"><div style="font-size:11px;color:#999;margin-bottom:6px;text-transform:uppercase">Payment Proof</div><img src="' + o.paymentProof + '" style="width:100%;border-radius:8px;border:0.5px solid #ddd"></div>' : '') + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">'
+    + ((o.rxPhotos && o.rxPhotos.length ? o.rxPhotos : (o.rxPhoto ? [o.rxPhoto] : []))
+      .map(function(src, i) {
+        return '<div style="margin-bottom:8px"><div style="font-size:11px;color:#999;margin-bottom:4px;text-transform:uppercase">Prescription' + (o.rxPhotos && o.rxPhotos.length > 1 ? ' — Page ' + (i+1) : '') + '</div><img src="' + src + '" style="width:100%;border-radius:8px;border:0.5px solid #ddd"></div>';
+      }).join('')) + (o.paymentProof ? '<div style="margin-bottom:12px"><div style="font-size:11px;color:#999;margin-bottom:6px;text-transform:uppercase">Payment Proof</div><img src="' + o.paymentProof + '" style="width:100%;border-radius:8px;border:0.5px solid #ddd"></div>' : '') + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">'
     + '<button onclick="downloadTRFpdf()" style="padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer">&#128196; Download PDF</button>'
     + '<button onclick="shareTRFWA()" style="padding:12px;background:#25D366;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer">&#128172; WhatsApp</button>'
     + '</div>';
@@ -3168,7 +3578,7 @@ async function loadAdminStaff() {
     snap.forEach(function(d) {
       var s = d.data();
       var initials = (s.name||'?').split(' ').map(function(w){ return w[0]; }).join('').slice(0,2).toUpperCase();
-      var roleColor = {admin:'var(--accent)',pathologist:'var(--blue)',lab:'var(--gold)',reception:'var(--text2)'}[s.role] || 'var(--text2)';
+      var roleColor = {admin:'var(--accent)',pathologist:'var(--blue)',lab:'var(--gold)',reception:'var(--text2)',phlebotomist:'#059669'}[s.role] || 'var(--text2)';
       html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--border)">'
         + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0">' + initials + '</div>'
         + '<div style="flex:1;min-width:0">'
@@ -3196,7 +3606,7 @@ function showAddStaff() {
   document.getElementById('sm-email-note').textContent = 'A Firebase account will be created';
   document.getElementById('sm-deactivate-row').style.display = 'none';
   document.getElementById('sm-save-btn').textContent = 'Create Account';
-  ['reception','lab','admin','pathologist'].forEach(function(r){
+  ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
     document.getElementById('smr-'+r).className = 'tog';
   });
   document.getElementById('staff-modal').classList.add('open');
@@ -3218,7 +3628,7 @@ async function editStaff(id) {
     document.getElementById('sm-email-note').textContent = 'Leave password blank to keep existing';
     document.getElementById('sm-deactivate-row').style.display = s.active===false ? 'none' : 'block';
     document.getElementById('sm-save-btn').textContent = 'Save Changes';
-    ['reception','lab','admin','pathologist'].forEach(function(r){
+    ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
       document.getElementById('smr-'+r).className = 'tog' + (r===smRole?' on':'');
     });
     document.getElementById('staff-modal').classList.add('open');
@@ -3232,7 +3642,7 @@ function closeStaffModal() {
 
 function setStaffRole(r) {
   smRole = r;
-  ['reception','lab','admin','pathologist'].forEach(function(x){
+  ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(x){
     document.getElementById('smr-'+x).className = 'tog' + (x===r?' on':'');
   });
 }
@@ -3300,7 +3710,7 @@ async function deactivateStaff() {
 // Temp role functions
 function selectTempRole(role) {
   selTempRole = role;
-  ['reception','lab','admin','pathologist'].forEach(function(r){
+  ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
     document.getElementById('tr-'+r).className = 'tog' + (r===role?' on':'');
   });
 }

@@ -1,7 +1,7 @@
 // LabFlow Service Worker — OnePLUS Ultrasound Lab
 // Caches the app shell for offline loading
 // Version: bump this string to force cache refresh on deploy
-var CACHE_NAME = 'labflow-v3';
+var CACHE_NAME = 'labflow-v17';
 
 var APP_SHELL = [
   '/oneplus-lms/',

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>OnePLUS LMS</title>
+<title>OnePLUS LMS v17</title>
 <!-- LMS v5.0 | Built 2026-04-10 | Node-verified -->
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -341,8 +341,8 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <select id="pt-source" onchange="toggleHomeCollection()">
           <option value="Walk-in">Walk-in</option>
           <option value="Home Collection">Home Collection</option>
-          <option value="Doctor Referral">Doctor Referral</option>
-          <option value="Camp">Camp / Outreach</option>
+          <option value="Doctor Clinic">Doctor Clinic</option>
+          <option value="Hospital Collection">Hospital Collection</option>
         </select>
       </div>
       <div id="home-collection-fields" style="display:none">
@@ -1098,6 +1098,33 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div style="height:8px"></div>
     <div class="card-title" style="margin-bottom:8px">Active Temp Roles Today</div>
     <div id="temp-roles-list"><div class="empty">No temp roles active</div></div>
+
+    <!-- Temp Doctor Assignment -->
+    <div style="height:16px"></div>
+    <div class="card">
+      <div class="card-title">Temp Doctor Assignment</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Assign a clinic doctor to a covering staff member for today. Auto-fills as their referring doctor when creating orders.</div>
+      <div class="field">
+        <label>Covering Staff</label>
+        <select id="tempdr-staff">
+          <option value="">Select staff member...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Doctor to assign</label>
+        <select id="tempdr-doctor">
+          <option value="">Select clinic doctor...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Reason <span style="font-size:11px;color:var(--text3)">(optional)</span></label>
+        <input type="text" id="tempdr-reason" placeholder="e.g. Covering for Raj on leave">
+      </div>
+      <button class="btn btn-primary" onclick="grantTempDoctor()">Assign for Today</button>
+    </div>
+    <div style="height:8px"></div>
+    <div class="card-title" style="margin-bottom:8px">Active Doctor Assignments Today</div>
+    <div id="temp-doctor-list"><div class="empty">No temp assignments today</div></div>
   </div>
 </div>
 
@@ -1133,6 +1160,10 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="field">
       <label>PIN (4 digits)</label>
       <input type="password" id="sm-pin" placeholder="Daily login PIN" maxlength="4" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label>Default Referring Doctor <span style="font-size:11px;color:var(--text3);font-weight:400">— for Doctor Clinic orders</span></label>
+      <input type="text" id="sm-defdr" placeholder="Dr. Name (e.g. Dr. Sharma)" autocomplete="off">
     </div>
     <div class="field" style="background:var(--surface2);border-radius:var(--radius);padding:10px 12px">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -1183,6 +1214,28 @@ if (typeof firebase === 'undefined') {
 }
 </script>
 <script>
+
+// LabFlow — OnePLUS Ultrasound & Laboratory, Pitampura
+// Version: 17 | Built: 12 Apr 2026
+// Changes in v17:
+//   - Split payment (new + edit orders)
+//   - Offline persistence + service worker
+//   - Phone-first order form, phone-only repeat detection
+//   - Order sources: Walk-in, Home Collection, Doctor Clinic, Hospital Collection
+//   - Default doctor per staff + temp doctor assignment
+//   - Dashboard date picker, test row expand
+//   - EOD collection charges breakdown + Send to Admin WA
+//   - Edit restricted to Admin/Pathologist only
+//   - Payment diff prompt after edit (refund / additional)
+//   - Reverse handover (refund) mode
+//   - Staff: reactivate, delete, password reset, dashboard access toggle
+//   - Auto email sync from Firebase Auth on login
+//   - Firebase SDK load guard
+//   - Step1b toggle reset on new order
+//   - Direct WA patient link, URGENT in WA TRF
+//   - Patient details in handover cards
+//   - Double-accept transaction guard, over-transfer guard
+//   - Collection charges report by user (daily/weekly)
 
 // ── FIREBASE ──
 var FB_CONFIG = {
@@ -1473,10 +1526,26 @@ function unlock() {
       curProfile.email = newEmail;
       delete curProfile.pendingEmail;
     }).catch(function(e) {
-      // updateEmail can fail if session is old — reauthentication needed
       console.warn('pendingEmail update failed:', e.message);
     });
   }
+  // Check for temp doctor assignment for today
+  db.collection('temp_roles')
+    .where('staffId','==',curUser.uid)
+    .where('date','==',todayStr())
+    .where('active','==',true)
+    .where('type','==','doctor')
+    .get().then(function(snap) {
+      if (!snap.empty) {
+        var td = snap.docs[0].data().tempDoctor;
+        curProfile.effectiveDoctor = td;
+        toast('⚔ Today assigned to: ' + td, 'ok');
+      } else {
+        curProfile.effectiveDoctor = curProfile.defaultDoctor || '';
+      }
+    }).catch(function() {
+      curProfile.effectiveDoctor = curProfile.defaultDoctor || '';
+    });
   loadDash();
   stack=['s-dash'];
   goTo('s-dash', false);
@@ -1601,14 +1670,25 @@ function showStep(n) {
 function toggleHomeCollection() {
   var src = document.getElementById('pt-source').value;
   var hcf = document.getElementById('home-collection-fields');
-  hcf.style.display = src==='Home Collection' ? 'block' : 'none';
+  var needsAddress = src==='Home Collection' || src==='Hospital Collection';
+  hcf.style.display = needsAddress ? 'block' : 'none';
   if (src==='Home Collection') {
-    // Auto-start GPS capture when home collection is selected
     setTimeout(captureGPS, 300);
   }
-  if (src!=='Home Collection') { curGPS=null; document.getElementById('gps-status').textContent='Not captured';
-  isUrgent=false; discountApproved=false; if(document.getElementById('collection-charge-strip')) document.getElementById('collection-charge-strip').style.display='none';
-  var utog=document.getElementById('urgent-toggle'); if(utog){utog.classList.remove('on'); document.getElementById('urgent-label').classList.remove('on'); document.getElementById('urgent-label').textContent='Mark as Urgent'; document.getElementById('urgent-sub').classList.remove('on'); document.getElementById('urgent-sub').textContent='Tap to flag for priority processing'; document.getElementById('urgent-check').classList.remove('on'); document.getElementById('urgent-check').textContent='';} }
+  // Auto-fill referring doctor from staff profile when Doctor Clinic selected
+  if (src==='Doctor Clinic') {
+    var refField = document.getElementById('pt-ref');
+    var doctor = curProfile && (curProfile.effectiveDoctor || curProfile.defaultDoctor);
+    if (refField && !refField.value && doctor) {
+      refField.value = doctor;
+    }
+  }
+  if (!needsAddress) {
+    curGPS=null; document.getElementById('gps-status').textContent='Not captured';
+    isUrgent=false; discountApproved=false;
+    if(document.getElementById('collection-charge-strip')) document.getElementById('collection-charge-strip').style.display='none';
+    var utog=document.getElementById('urgent-toggle'); if(utog){utog.classList.remove('on'); document.getElementById('urgent-label').classList.remove('on'); document.getElementById('urgent-label').textContent='Mark as Urgent'; document.getElementById('urgent-sub').classList.remove('on'); document.getElementById('urgent-sub').textContent='Tap to flag for priority processing'; document.getElementById('urgent-check').classList.remove('on'); document.getElementById('urgent-check').textContent='';}
+  }
 }
 var curGPS = null;
 function captureGPS() {
@@ -1829,9 +1909,9 @@ function step2Next() {
   var testTotal=selTests.reduce(function(s,t){ return s+(t.rate||0); },0);
   curOrder.testTotal=testTotal;
   // Show collection charge strip for home collection
-  var isHome = curOrder.source === 'Home Collection';
+  var isExternal = curOrder.source !== 'Walk-in';
   var ccStrip = document.getElementById('collection-charge-strip');
-  if (ccStrip) ccStrip.style.display = isHome ? 'block' : 'none';
+  if (ccStrip) ccStrip.style.display = isExternal ? 'block' : 'none';
   updateBillTotal();
   document.getElementById('discount').value='';
   document.getElementById('bill-note').textContent='';
@@ -1850,8 +1930,8 @@ function step2Next() {
 
 function updateBillTotal() {
   var testTotal = curOrder.testTotal || 0;
-  var isHome = curOrder.source === 'Home Collection';
-  var cc = isHome ? parseFloat(document.getElementById('collection-charge').value||0) : 0;
+  var isExternal = curOrder.source !== 'Walk-in';
+  var cc = isExternal ? parseFloat(document.getElementById('collection-charge').value||0) : 0;
   curOrder.collectionCharge = cc;
   var total = testTotal + cc;
   curOrder.totalAmount = total;
@@ -2228,6 +2308,12 @@ function newOrder() {
   });
   document.getElementById('pt-sex').value='';
   document.getElementById('pt-source').value='Walk-in';
+  // Auto-set Doctor Clinic + referring doctor if staff has a default doctor configured
+  var effectiveDoctor = curProfile && (curProfile.effectiveDoctor || curProfile.defaultDoctor);
+  if (effectiveDoctor) {
+    document.getElementById('pt-source').value = 'Doctor Clinic';
+    document.getElementById('pt-ref').value = effectiveDoctor;
+  }
   document.getElementById('home-collection-fields').style.display='none';
   document.getElementById('gps-status').textContent='Not captured';
   document.getElementById('test-q').value='';
@@ -2290,7 +2376,13 @@ function renderOrders(orders) {
   if (!orders.length) { el.innerHTML='<div class="empty">No orders found</div>'; return; }
   el.innerHTML=orders.map(function(o){
     var srcBadge = (o.source&&o.source!=='Walk-in')
-      ? '<span style="font-size:9px;font-family:var(--mono);font-weight:600;text-transform:uppercase;padding:2px 6px;border-radius:20px;background:'+(o.source==='Home Collection'?'#DBEAFE;color:#1D4ED8':'#F3E8FF;color:#7C3AED')+'">'+(o.source==='Home Collection'?'&#127968; Home':'&#127973; '+o.source)+'</span>' : '';
+      ? (function(){
+          var sc='#F3E8FF;color:#7C3AED', icon='&#127973; ';
+          if(o.source==='Home Collection'){sc='#DBEAFE;color:#1D4ED8';icon='&#127968; ';}
+          else if(o.source==='Hospital Collection'){sc='#FEF3C7;color:#D97706';icon='&#127973; ';}
+          else if(o.source==='Doctor Clinic'){sc='#F0FDF4;color:#059669';icon='&#128084; ';}
+          return '<span style="font-size:9px;font-family:var(--mono);font-weight:600;text-transform:uppercase;padding:2px 6px;border-radius:20px;background:'+sc+'">'+icon+o.source+'</span>';
+        })() : '';
     return '<div class="order-card" style="cursor:pointer" onclick="openOrderDetail(\'' + o.id + '\')">'
       +'<div style="display:flex;justify-content:space-between;align-items:center">'
       +'<div style="font-size:11px;font-family:var(--mono);color:var(--text3)">#'+o.id.slice(-6).toUpperCase()+' · '+o.date+'</div>'
@@ -2994,10 +3086,10 @@ function loadField() {
   var today = todayStr();
   document.getElementById('field-date').textContent = today;
   if (fieldUnsubscribe) fieldUnsubscribe();
-  // Load all home collection orders for today — filter relevance client-side
+  // Load all home/hospital collection orders for today — filter relevance client-side
   fieldUnsubscribe = db.collection('orders')
     .where('date', '==', today)
-    .where('source', '==', 'Home Collection')
+    .where('source', 'in', ['Home Collection', 'Hospital Collection'])
     .onSnapshot(function(snap) {
       var myUid = curUser && curUser.uid;
       var role = curProfile && curProfile.role || '';
@@ -3499,7 +3591,7 @@ function submitHandover() {
     orderSnap.forEach(function(d) {
       var o = d.data();
       if (o.payMode === 'cash') cashCollected += (o.paidAmount||0);
-      if (o.source === 'Home Collection' || o.source === 'Doctor Referral') cashCollected += (o.collectionCharge||0);
+      if (o.source !== 'Walk-in') cashCollected += (o.collectionCharge||0);
     });
 
     var alreadyHandedOver = 0;
@@ -3707,7 +3799,7 @@ function loadCollectionCharges(period) {
       snap.forEach(function(d) {
         var o = d.data();
         var cc = o.collectionCharge || 0;
-        if (!cc) return;
+        if (!cc || o.source === 'Walk-in') return; // walk-in has no collection charge
         var uid = o.createdBy || 'unknown';
         var name = o.createdByName || 'Unknown';
         if (!byUser[uid]) byUser[uid] = { name: name, total: 0, orders: [] };
@@ -3773,7 +3865,7 @@ function loadEOD() {
   document.getElementById('eod-date').textContent=today;
   db.collection('orders').where('date','==',today).get().then(function(snap){
     var cash=0,upi=0,card=0,credit=0,total=0,coll=0;
-    snap.forEach(function(doc){ var o=doc.data(); var paid=o.paidAmount||0; total+=paid; coll+=(o.collectionCharge||0);
+    snap.forEach(function(doc){ var o=doc.data(); var paid=o.paidAmount||0; total+=paid; if(o.source!=='Walk-in') coll+=(o.collectionCharge||0);
       if(o.payMode==='split'&&o.splitPayments){ cash+=(o.splitPayments.cash||0); upi+=(o.splitPayments.upi||0); card+=(o.splitPayments.card||0); }
       else if(o.payMode==='cash') cash+=paid; else if(o.payMode==='upi') upi+=paid; else if(o.payMode==='card') card+=paid; else if(o.payMode==='credit') credit+=(o.totalAmount||0); });
     var fmt=function(n){ return 'Rs.'+n.toLocaleString('en-IN'); };
@@ -4244,6 +4336,35 @@ var selTempRole = '';
 async function loadAdminScreen() {
   await loadAdminStaff();
   await loadTempRoles();
+  await loadTempDoctor();
+  // Populate temp doctor dropdowns from staff list
+  var staffSnap = await db.collection('staff').where('active','==',true).get();
+  var staffSel = document.getElementById('tempdr-staff');
+  var doctorSel = document.getElementById('tempdr-doctor');
+  if (staffSel) {
+    staffSel.innerHTML = '<option value="">Select staff member...</option>';
+    staffSnap.forEach(function(d) {
+      var s = d.data();
+      var opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = s.name + ' (' + (s.role||'staff') + ')';
+      staffSel.appendChild(opt);
+    });
+  }
+  if (doctorSel) {
+    // Build unique list of doctors from staff defaultDoctor fields + existing orders
+    var doctors = {};
+    staffSnap.forEach(function(d) {
+      var s = d.data();
+      if (s.defaultDoctor) doctors[s.defaultDoctor] = true;
+    });
+    doctorSel.innerHTML = '<option value="">Select clinic doctor...</option>';
+    Object.keys(doctors).sort().forEach(function(dr) {
+      var opt = document.createElement('option');
+      opt.value = dr; opt.textContent = dr;
+      doctorSel.appendChild(opt);
+    });
+  }
 }
 
 async function loadAdminStaff() {
@@ -4263,6 +4384,7 @@ async function loadAdminStaff() {
         + '<div style="font-size:13px;font-weight:500">' + esc(s.name||'-') + (s.active===false?'<span style="font-size:10px;color:var(--red);margin-left:6px">INACTIVE</span>':'') + (s.dashboardAccess?'<span style="font-size:9px;font-family:var(--mono);background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;margin-left:6px">DASH</span>':'') + '</div>'
         + '<div style="font-size:11px;font-family:var(--mono);color:' + roleColor + '">' + (s.role||'').toUpperCase() + '</div>'
         + '<div style="font-size:11px;color:var(--text3)">' + esc(s.email||'') + '</div>'
+        + (s.defaultDoctor ? '<div style="font-size:10px;font-family:var(--mono);color:var(--accent);margin-top:2px">&#128084; ' + esc(s.defaultDoctor) + '</div>' : '')
         + '</div>'
         + '<button data-id="' + d.id + '" onclick="editStaff(this.dataset.id)" style="font-size:12px;padding:6px 12px;border:0.5px solid var(--border-strong);border-radius:8px;background:none;cursor:pointer;color:var(--text2)">Edit</button>'
         + '</div>';
@@ -4321,6 +4443,7 @@ function showAddStaff() {
   document.getElementById('sm-email').value = '';
   document.getElementById('sm-pass').value = '';
   document.getElementById('sm-pin').value = '';
+  var defdr = document.getElementById('sm-defdr'); if(defdr) defdr.value = '';
   document.getElementById('sm-err').textContent = '';
   document.getElementById('sm-pass-field').style.display = 'block';
   document.getElementById('sm-email-note').textContent = 'A Firebase account will be created';
@@ -4348,6 +4471,7 @@ async function editStaff(id) {
     document.getElementById('sm-email').value = s.email || '';
     document.getElementById('sm-pass').value = '';
     document.getElementById('sm-pin').value = s.pin || '';
+    var defdr = document.getElementById('sm-defdr'); if(defdr) defdr.value = s.defaultDoctor || '';
     document.getElementById('sm-err').textContent = '';
     document.getElementById('sm-pass-field').style.display = 'block';
     document.getElementById('sm-email-note').textContent = 'Leave password blank to keep existing';
@@ -4398,17 +4522,20 @@ async function saveStaff() {
       if (!pass || pass.length < 6) { err.textContent = 'Password must be at least 6 characters'; btn.disabled=false; btn.textContent='Create Account'; return; }
       if (!pin) { err.textContent = 'PIN is required for new staff'; btn.disabled=false; btn.textContent='Create Account'; return; }
       var cred = await auth.createUserWithEmailAndPassword(email, pass);
+      var defDr = (document.getElementById('sm-defdr').value||'').trim();
       await db.collection('staff').doc(cred.user.uid).set({
         name: name, email: email, role: smRole, pin: pin,
         uid: cred.user.uid, active: true,
         dashboardAccess: smDashAccess,
+        defaultDoctor: defDr,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         createdBy: curUser.uid
       });
       toast('Staff account created', 'ok');
     } else {
       // EDIT EXISTING
-      var update = { name: name, email: email, role: smRole, dashboardAccess: smDashAccess };
+      var defDr = (document.getElementById('sm-defdr').value||'').trim();
+      var update = { name: name, email: email, role: smRole, dashboardAccess: smDashAccess, defaultDoctor: defDr };
       if (pin) update.pin = pin;
 
       // Password change
@@ -4528,6 +4655,7 @@ async function grantTempRole() {
     if (snap.empty) { toast('Staff not found','err'); return; }
     var staffDoc = snap.docs[0];
     await db.collection('temp_roles').add({
+      type: 'role',
       staffId: staffDoc.id, staffName: staffDoc.data().name, staffEmail: email,
       tempRole: selTempRole, reason: reason, date: todayStr(),
       grantedBy: curUser.uid, grantedByName: (curProfile&&curProfile.name)||curUser.email,
@@ -4552,13 +4680,14 @@ async function loadTempRoles() {
     var html = '';
     snap.forEach(function(d) {
       var r = d.data();
+      if (r.type === 'doctor') return; // handled separately
       html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid var(--border)">'
         + '<div><div style="font-size:13px;font-weight:500">' + esc(r.staffName) + '</div>'
-        + '<div style="font-size:11px;color:var(--text3);font-family:var(--mono)">' + r.tempRole.toUpperCase() + (r.reason?' · '+esc(r.reason):'') + '</div></div>'
+        + '<div style="font-size:11px;color:var(--text3);font-family:var(--mono)">' + (r.tempRole||'').toUpperCase() + (r.reason?' · '+esc(r.reason):'') + '</div></div>'
         + '<button data-id="' + d.id + '" onclick="revokeTempRole(this.dataset.id)" style="font-size:12px;padding:5px 10px;border:0.5px solid var(--red);border-radius:6px;color:var(--red);background:none;cursor:pointer">Revoke</button>'
         + '</div>';
     });
-    el.innerHTML = html;
+    el.innerHTML = html || '<div class="empty">No temp roles active today</div>';
   } catch(e) { el.innerHTML = '<div class="empty">Error loading</div>'; }
 }
 
@@ -4567,6 +4696,68 @@ async function revokeTempRole(id) {
     await db.collection('temp_roles').doc(id).update({ active: false });
     toast('Revoked', 'ok');
     loadTempRoles();
+  } catch(e) { toast('Error','err'); }
+}
+
+async function grantTempDoctor() {
+  var staffSel = document.getElementById('tempdr-staff');
+  var doctorSel = document.getElementById('tempdr-doctor');
+  var reason = document.getElementById('tempdr-reason').value.trim();
+  var staffId = staffSel.value;
+  var staffName = staffSel.options[staffSel.selectedIndex] ? staffSel.options[staffSel.selectedIndex].textContent.trim() : '';
+  var doctor = doctorSel.value;
+  if (!staffId) { toast('Select a staff member','warn'); return; }
+  if (!doctor) { toast('Select a doctor','warn'); return; }
+  try {
+    var existing = await db.collection('temp_roles')
+      .where('staffId','==',staffId).where('date','==',todayStr())
+      .where('active','==',true).where('type','==','doctor').get();
+    var batch = db.batch();
+    existing.forEach(function(d){ batch.update(d.ref, {active:false}); });
+    await batch.commit();
+    await db.collection('temp_roles').add({
+      type: 'doctor',
+      staffId: staffId, staffName: staffName,
+      tempDoctor: doctor, reason: reason,
+      date: todayStr(),
+      grantedBy: curUser.uid, grantedByName: (curProfile&&curProfile.name)||curUser.email,
+      grantedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      active: true
+    });
+    toast('Doctor assigned to ' + staffName + ' for today ✓','ok');
+    staffSel.value = ''; doctorSel.value = '';
+    document.getElementById('tempdr-reason').value = '';
+    loadTempDoctor();
+  } catch(e) { toast('Error: ' + e.message,'err'); }
+}
+
+async function loadTempDoctor() {
+  var el = document.getElementById('temp-doctor-list');
+  if (!el) return;
+  try {
+    var snap = await db.collection('temp_roles')
+      .where('date','==',todayStr()).where('active','==',true).where('type','==','doctor').get();
+    if (snap.empty) { el.innerHTML = '<div class="empty">No temp assignments today</div>'; return; }
+    var html = '';
+    snap.forEach(function(d) {
+      var r = d.data();
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid var(--border)">'
+        + '<div><div style="font-size:13px;font-weight:500">' + esc(r.staffName) + '</div>'
+        + '<div style="font-size:12px;color:var(--accent);font-family:var(--mono)">⚔ ' + esc(r.tempDoctor) + '</div>'
+        + (r.reason ? '<div style="font-size:11px;color:var(--text3)">' + esc(r.reason) + '</div>' : '')
+        + '</div>'
+        + '<button data-id="' + d.id + '" onclick="revokeTempDoctor(this.dataset.id)" style="font-size:12px;padding:5px 10px;border:0.5px solid var(--red);border-radius:6px;color:var(--red);background:none;cursor:pointer">Remove</button>'
+        + '</div>';
+    });
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="empty">Error loading</div>'; }
+}
+
+async function revokeTempDoctor(id) {
+  try {
+    await db.collection('temp_roles').doc(id).update({ active: false });
+    toast('Assignment removed ✓','ok');
+    loadTempDoctor();
   } catch(e) { toast('Error','err'); }
 }
 

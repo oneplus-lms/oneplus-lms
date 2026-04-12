@@ -1106,6 +1106,13 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
+if (typeof firebase === 'undefined') {
+  document.getElementById('load-txt').textContent = 'Failed to load — check connection and refresh';
+  document.getElementById('load-retry').style.display = 'block';
+  throw new Error('Firebase SDK failed to load');
+}
+</script>
+<script>
 
 // ── FIREBASE ──
 var FB_CONFIG = {
@@ -2121,7 +2128,8 @@ function submitOrder() {
   }).catch(function(e){ toast('Save failed - check connection','err'); });
 }
 function newOrder() {
-  curOrder={}; selTests=[]; payMode='cash'; creditMode=false; splitPay={cash:0,upi:0,card:0}; curHistory={}; selDiagnoses=[]; selMeds=[]; rxPhotos=[]; proofPhotoB64=''; discType='amt'; curGPS=null;
+  curOrder={}; selTests=[]; payMode='cash'; creditMode=false; splitPay={cash:0,upi:0,card:0}; selDiagnoses=[]; selMeds=[]; rxPhotos=[]; proofPhotoB64=''; discType='amt'; curGPS=null;
+  curHistory = resetHistory(); // resets data AND visual toggle states in step1b
   ['pt-name','pt-age','pt-phone','pt-ref','pt-address','bill-notes'].forEach(function(id){
     document.getElementById(id).value='';
   });
@@ -2130,6 +2138,7 @@ function newOrder() {
   document.getElementById('home-collection-fields').style.display='none';
   document.getElementById('gps-status').textContent='Not captured';
   document.getElementById('test-q').value='';
+  document.getElementById('repeat-patient-banner').style.display='none';
   renderTests(); showStep(1); goTo('s-order');
 }
 

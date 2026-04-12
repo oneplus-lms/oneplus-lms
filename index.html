@@ -2293,12 +2293,28 @@ function submitOrder() {
     status:creditMode?'pending':'paid',
     urgent: isUrgent
   };
-  db.collection('orders').add(order).then(function(ref){
-    lastOrder={id:ref.id}; Object.assign(lastOrder,order);
-    document.getElementById('done-id').textContent=order.patientName+' — Saved ✓';
+  // Atomically get next serial number for today, then save order
+  var counterRef = db.collection('counters').doc(todayStr());
+  db.runTransaction(function(tx) {
+    return tx.get(counterRef).then(function(doc) {
+      var next = doc.exists ? (doc.data().seq || 0) + 1 : 1;
+      tx.set(counterRef, { seq: next, date: todayStr() }, { merge: true });
+      return next;
+    });
+  }).then(function(seq) {
+    // Format: DD/MM/YYYY - XXXX
+    var parts = todayStr().split('-'); // YYYY-MM-DD
+    var displayDate = parts[2] + '/' + parts[1] + '/' + parts[0];
+    var serial = String(seq).padStart(4, '0');
+    order.serialNo = displayDate + ' - ' + serial;
+    order.seq = seq;
+    return db.collection('orders').add(order);
+  }).then(function(ref) {
+    lastOrder = {id: ref.id}; Object.assign(lastOrder, order);
+    document.getElementById('done-id').textContent = order.patientName + ' — Saved ✓';
     goTo('s-done');
     loadStats();
-  }).catch(function(e){ toast('Save failed - check connection','err'); });
+  }).catch(function(e) { toast('Save failed - check connection', 'err'); });
 }
 function newOrder() {
   curOrder={}; selTests=[]; payMode='cash'; creditMode=false; splitPay={cash:0,upi:0,card:0}; selDiagnoses=[]; selMeds=[]; rxPhotos=[]; proofPhotoB64=''; discType='amt'; curGPS=null;
@@ -2386,6 +2402,7 @@ function renderOrders(orders) {
     return '<div class="order-card" style="cursor:pointer" onclick="openOrderDetail(\'' + o.id + '\')">'
       +'<div style="display:flex;justify-content:space-between;align-items:center">'
       +'<div style="font-size:11px;font-family:var(--mono);color:var(--text3)">#'+o.id.slice(-6).toUpperCase()+' · '+o.date+'</div>'
+      +(o.serialNo?'<div style="font-size:10px;font-family:var(--mono);color:var(--accent);font-weight:600">'+esc(o.serialNo)+'</div>':'')
       +srcBadge
       +'</div>'
       +'<div style="font-size:15px;font-weight:500;margin:4px 0 2px">'+esc(o.patientName)+'</div>'
@@ -2955,6 +2972,7 @@ function downloadTRFpdf() {
   doc.text('Mobile: '+(o.phone||'-'), ml+4, y+26);
   doc.text('Ref by: '+(o.refBy||'-'), ml+cw/2, y+20);
   doc.text('Source: '+(o.source||'Walk-in'), ml+cw/2, y+26);
+  if(o.serialNo) { doc.setFont('helvetica','bold'); doc.text('Serial No: '+o.serialNo, ml, y+34); doc.setFont('helvetica','normal'); }
   if (o.address) { doc.setFontSize(8); doc.text('Address: '+o.address, ml+4, y+31); }
   y += 38;
 
@@ -4119,6 +4137,7 @@ function openTRF() {
   if (!lastOrder) { toast('No order to print','warn'); return; }
   var o = lastOrder;
   var id = (o.id||'').slice(-6).toUpperCase();
+  if (o.serialNo) id = o.serialNo;
   document.getElementById('trf-order-id').textContent = o.patientName + (o.urgent ? ' — URGENT' : '');
   var rows = (o.tests||[]).map(function(t, i) {
     return '<tr><td style="padding:7px 8px;border-bottom:1px solid #eee;font-size:13px">' + (i+1) + '. ' + esc(t.name) + '</td>'
@@ -4140,7 +4159,7 @@ function openTRF() {
     + '<div><div style="font-size:10px;color:#999">Mobile</div><div style="font-size:14px">' + esc(o.phone||'-') + '</div></div>'
     + '<div><div style="font-size:10px;color:#999">Ref by</div><div style="font-size:14px">' + esc(o.refBy||'-') + '</div></div>'
     + '<div><div style="font-size:10px;color:#999">Date</div><div style="font-size:14px">' + esc(o.date||'-') + '</div></div>'
-    + ''
+    + '<div><div style="font-size:10px;color:#999">Serial No.</div><div style="font-size:14px;font-weight:600;font-family:monospace;color:#1A4A3A">' + esc(o.serialNo||'—') + '</div></div>'
     + '<div><div style="font-size:10px;color:#999">Source</div><div style="font-size:14px">' + esc(o.source||'Walk-in') + '</div></div>'
     + (o.collectionCharge>0 ? '<div><div style="font-size:10px;color:#999">Collection Charge</div><div style="font-size:14px;font-weight:500;color:#1D4ED8">Rs.'+o.collectionCharge+'</div></div>' : '')
     + (o.address ? '<div style="grid-column:span 2"><div style="font-size:10px;color:#999">Address</div><div style="font-size:13px">' + esc(o.address) + '</div></div>' : '')
@@ -4212,7 +4231,7 @@ function buildTRFWAText(o) {
     lines.push('');
   }
   lines.push('*OnePLUS Ultrasound & Lab — TRF*');
-  lines.push('Order #' + id + ' | ' + (o.date||''));
+  lines.push('Order #' + id + (o.serialNo ? ' | Serial: ' + o.serialNo : '') + ' | ' + (o.date||''));
   lines.push('');
   lines.push('*Patient:* ' + (o.patientName||''));
   lines.push('*Age/Sex:* ' + (o.age||'-') + ' yr, ' + (o.sex||''));

@@ -319,16 +319,16 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   </div>
   <div class="scroll-body">
     <div id="step1">
-      <div class="field"><label>Patient Name *</label><input type="text" id="pt-name" placeholder="Full name" oninput="scheduleNameLookup()"><div class="ferr" id="err-name">Required</div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="field"><label>Age</label><input type="number" id="pt-age" placeholder="35" min="0" max="120"></div>
-        <div class="field"><label>Sex</label><select id="pt-sex"><option value="">-</option><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
-      </div>
-      <div class="field"><label>Mobile</label><input type="tel" id="pt-phone" placeholder="9876543210" maxlength="10" inputmode="numeric" oninput="scheduleRepeatCheck()" onblur="checkRepeatPatient()"></div>
+      <div class="field"><label>Mobile *</label><input type="tel" id="pt-phone" placeholder="9876543210" maxlength="10" inputmode="numeric" oninput="scheduleRepeatCheck()" onblur="checkRepeatPatient()"><div class="ferr" id="err-phone"></div></div>
       <div id="repeat-patient-banner" style="display:none;background:#F0FDF4;border:1px solid #86EFAC;border-radius:var(--radius);padding:10px 12px;margin-bottom:10px;cursor:pointer" onclick="fillRepeatPatient()">
         <div style="font-size:11px;font-family:var(--mono);color:#166534;font-weight:600;margin-bottom:3px">&#10003; Returning Patient Found</div>
         <div id="repeat-patient-info" style="font-size:13px;color:#14532D"></div>
         <div style="font-size:11px;color:#16A34A;margin-top:3px">Tap to auto-fill details</div>
+      </div>
+      <div class="field"><label>Patient Name *</label><input type="text" id="pt-name" placeholder="Full name"><div class="ferr" id="err-name">Required</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field"><label>Age</label><input type="number" id="pt-age" placeholder="35" min="0" max="120"></div>
+        <div class="field"><label>Sex</label><select id="pt-sex"><option value="">-</option><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
       </div>
       <div class="field"><label>Referred by</label><input type="text" id="pt-ref" placeholder="Dr. name or self"></div>
       <div class="field">
@@ -1695,44 +1695,10 @@ function fillRepeatPatient() {
 }
 
 
+// Name lookup disabled — mobile number is the sole repeat patient trigger
 var nameLookupTimer = null;
-function scheduleNameLookup() {
-  // Only trigger if phone is empty — phone takes priority
-  var phone = document.getElementById('pt-phone').value.trim();
-  if (phone.length >= 6) return;
-  clearTimeout(nameLookupTimer);
-  var name = document.getElementById('pt-name').value.trim();
-  if (name.length < 3) {
-    document.getElementById('repeat-patient-banner').style.display = 'none';
-    return;
-  }
-  nameLookupTimer = setTimeout(function() { checkRepeatByName(name); }, 700);
-}
-
-function checkRepeatByName(name) {
-  // Firestore doesn't support LIKE, so fetch recent orders and filter client-side
-  // Use a date range — last 90 days is practical
-  var cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 90);
-  var cutoffStr = cutoff.getFullYear() + '-' + String(cutoff.getMonth()+1).padStart(2,'0') + '-' + String(cutoff.getDate()).padStart(2,'0');
-  db.collection('orders').where('date','>=',cutoffStr).orderBy('date','desc').limit(200).get()
-    .then(function(snap) {
-      var q = name.toLowerCase();
-      var matches = [];
-      snap.forEach(function(d) {
-        var o = d.data();
-        if (o.patientName && o.patientName.toLowerCase().indexOf(q) >= 0) {
-          matches.push(Object.assign({id: d.id}, o));
-        }
-      });
-      if (matches.length > 0) {
-        // Sort by date desc, take most recent
-        matches.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
-        showRepeatBanner(matches[0]);
-      }
-    })
-    .catch(function(){});
-}
+function scheduleNameLookup() { /* no-op — phone-only detection */ }
+function checkRepeatByName(name) { /* no-op — phone-only detection */ }
 
 // ── URGENT FLAG ──
 var isUrgent = false;

@@ -451,12 +451,32 @@ function renderHandovers(){
   }).map(function(h){
     var st=h.custodyStatus||'ACCEPTED';
     var bc=st==='PENDING'?'bpend':st==='REJECTED'?'brej':'bacc';
-    return '<div class="li"><div style="flex:1;min-width:0">'
-      +'<div class="lin">'+esc(h.recordedByName||'-')+' &rarr; '+esc(h.handoverTo||'-')+'</div>'
-      +'<div class="lim">'+esc(h.time||'')+(h.notes?' &middot; '+esc(h.notes):'')+'</div>'
-      +'</div><div style="text-align:right;flex-shrink:0">'
-      +'<div style="font-family:var(--mono);font-weight:500;font-size:13px">'+fmt(h.amount)+'</div>'
-      +'<span class="b '+bc+'">'+st+'</span></div></div>';
+    var ordersHtml='';
+    if(h.orders&&h.orders.length){
+      ordersHtml='<div style="margin-top:6px;border-top:0.5px solid var(--border);padding-top:6px">'
+        +h.orders.map(function(o){
+          return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0">'
+            +'<div style="flex:1;min-width:0"><span style="font-weight:500">'+esc(o.patientName)+'</span>'
+            +(o.age?' <span style="color:var(--text3)">'+o.age+'yr</span>':'')
+            +' <span style="color:var(--text3);font-size:10px">'+esc(o.tests||'')+'</span></div>'
+            +'<div style="font-family:var(--mono);color:var(--blue);margin-left:8px;white-space:nowrap">Rs.'+o.cashAmt.toLocaleString('en-IN')+'</div>'
+            +'</div>';
+        }).join('')
+        +'</div>';
+    }
+    return '<div class="li" style="flex-direction:column;align-items:stretch">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+        +'<div style="flex:1;min-width:0">'
+          +'<div class="lin">'+esc(h.recordedByName||'-')+' &rarr; '+esc(h.handoverTo||'-')+'</div>'
+          +'<div class="lim">'+esc(h.time||'')+(h.notes?' &middot; '+esc(h.notes):'')+'</div>'
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0;margin-left:8px">'
+          +'<div style="font-family:var(--mono);font-weight:500;font-size:13px">'+fmt(h.amount)+'</div>'
+          +'<span class="b '+bc+'">'+st+'</span>'
+        +'</div>'
+      +'</div>'
+      +ordersHtml
+    +'</div>';
   }).join('');
 }
 

@@ -3193,6 +3193,10 @@ function loadHO() {
     }, function(){ });
 }
 
+function renderOrdersInHandover(orders) {
+  if (!orders || !orders.length) return '';
+  return '<div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:8px">'    + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:6px">Patients included</div>'    + orders.map(function(o){        return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px">'          + '<div style="flex:1;min-width:0">'            + '<div style="font-weight:500">'+esc(o.patientName)+(o.age?' · '+o.age+'yr':'')+(o.sex?' '+esc(o.sex):'')+'</div>'            + '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(o.tests||'-')+'</div>'          + '</div>'          + '<div style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-left:8px;white-space:nowrap">Rs.'+o.cashAmt.toLocaleString('en-IN')+'</div>'          + '</div>';      }).join('')    + '</div>';}
+
 function renderHOPending(rows) {
   var myName = (curProfile&&curProfile.name)||'';
   var pending = rows.filter(function(h){
@@ -3204,45 +3208,21 @@ function renderHOPending(rows) {
   if (!pending.length) { sec.style.display='none'; return; }
   sec.style.display='block';
   list.innerHTML = pending.map(function(h){
-    return '<div class="ho-pending-item">'+
-      '<div class="ho-pending-meta">From <strong>'+esc(h.recordedByName||'-')+'</strong> · '+esc(h.time||'')+'</div>'+
-      '<div class="ho-pending-amt">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div>'+
-      '<div class="ho-pending-from">'+(h.notes?esc(h.notes):'No notes')+'</div>'+
-      '<div class="ho-pending-actions">'+
-        '<button class="btn-accept" onclick="hoConfirm(\'accept\',\''+h.id+'\',\''+esc(h.recordedByName||'')+'\','+(h.amount||0)+')">✓ Accept Custody</button>'+
-        '<button class="btn-reject" onclick="hoConfirm(\'reject\',\''+h.id+'\',\''+esc(h.recordedByName||'')+'\','+(h.amount||0)+')">✗ Reject</button>'+
-      '</div>'+
-    '</div>';
-  }).join('');
+    return '<div class="ho-pending-item">'      +'<div class="ho-pending-meta">From <strong>'+esc(h.recordedByName||'-')+'</strong> · '+esc(h.time||'')+'</div>'      +'<div class="ho-pending-amt">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div>'      +'<div class="ho-pending-from">'+(h.notes?esc(h.notes):'No notes')+'</div>'      +renderOrdersInHandover(h.orders)      +'<div class="ho-pending-actions">'        +'<button class="btn-accept" onclick="hoConfirm(&quot;accept&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10003; Accept Custody</button>'        +'<button class="btn-reject" onclick="hoConfirm(&quot;reject&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10007; Reject</button>'      +'</div>'    +'</div>';  }).join('');
 }
 
 function renderHOList(rows) {
   var el = document.getElementById('ho-list');
   if (!rows.length) { el.innerHTML='<div class="empty">No handovers recorded yet</div>'; return; }
   el.innerHTML = rows.map(function(h){
-    var status = h.custodyStatus || 'ACCEPTED'; // legacy records default to accepted
+    var status = h.custodyStatus || 'ACCEPTED';
     var badgeClass = status==='PENDING'?'pending':status==='REJECTED'?'rejected':'accepted';
     var badgeLabel = status==='PENDING'?'Awaiting Acceptance':status==='REJECTED'?'Rejected':'Accepted';
     var acceptedLine = '';
     if (status==='ACCEPTED' && h.acceptedAt) acceptedLine='<div><div class="ho-card-k">Accepted At</div><div class="ho-card-v">'+esc(h.acceptedAt)+'</div></div>';
     if (status==='REJECTED' && h.rejectedAt) acceptedLine='<div><div class="ho-card-k">Rejected At</div><div class="ho-card-v">'+esc(h.rejectedAt)+'</div></div>';
-    return '<div class="ho-handover-card">'+
-      '<div class="ho-card-header">'+
-        '<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">#'+h.id.slice(-6).toUpperCase()+'</span>'+
-        '<span class="ho-status-badge '+badgeClass+'">'+badgeLabel+'</span>'+
-        '<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(h.time||'')+'</span>'+
-      '</div>'+
-      '<div class="ho-card-body">'+
-        '<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>'+
-        '<div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div></div>'+
-        '<div><div class="ho-card-k">By</div><div class="ho-card-v">'+esc(h.recordedByName||'-')+'</div></div>'+
-        '<div><div class="ho-card-k">Notes</div><div class="ho-card-v">'+esc(h.notes||'-')+'</div></div>'+
-        acceptedLine+
-      '</div>'+
-    '</div>';
-  }).join('');
+    return '<div class="ho-handover-card">'      +'<div class="ho-card-header">'        +'<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">#'+h.id.slice(-6).toUpperCase()+'</span>'        +'<span class="ho-status-badge '+badgeClass+'">'+badgeLabel+'</span>'        +'<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(h.time||'')+'</span>'      +'</div>'      +'<div class="ho-card-body">'        +'<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>'        +'<div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div></div>'        +'<div><div class="ho-card-k">By</div><div class="ho-card-v">'+esc(h.recordedByName||'-')+'</div></div>'        +'<div><div class="ho-card-k">Notes</div><div class="ho-card-v">'+esc(h.notes||'-')+'</div></div>'        +acceptedLine      +'</div>'      +renderOrdersInHandover(h.orders)    +'</div>';  }).join('');
 }
-
 function submitHandover() {
   var sel = document.getElementById('ho-to');
   var to = sel.value;
@@ -3296,14 +3276,35 @@ function submitHandover() {
       return;
     }
 
-    // All guards passed — create the handover
+    // All guards passed — build order summary to attach
+    var myOrders = [];
+    orderSnap.forEach(function(d) {
+      var o = d.data();
+      // Include cash orders created by this user today
+      if (o.createdBy === myUid && (o.payMode === 'cash' || o.payMode === 'split')) {
+        var cashAmt = o.payMode === 'split' && o.splitPayments ? (o.splitPayments.cash||0) : (o.paidAmount||0);
+        if (cashAmt > 0) {
+          myOrders.push({
+            patientName: o.patientName||'',
+            age: o.age||'',
+            sex: o.sex||'',
+            tests: (o.tests||[]).map(function(t){ return t.name; }).join(', '),
+            cashAmt: cashAmt,
+            orderId: d.id.slice(-6).toUpperCase()
+          });
+        }
+      }
+    });
+
+    // Create the handover
     var now = new Date();
     db.collection('handovers').add({
       handoverTo: toName, amount: amt, notes: notes, date: today,
       time: now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       recordedBy: myUid, recordedByName: myName,
-      custodyStatus: 'PENDING'
+      custodyStatus: 'PENDING',
+      orders: myOrders
     }).then(function(){
       toast('Handover initiated — awaiting acceptance by '+toName,'ok');
       sel.value='';

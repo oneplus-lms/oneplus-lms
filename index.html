@@ -341,7 +341,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <input type="text" id="pt-ref" placeholder="Type doctor name to search..." autocomplete="off"
           oninput="inlineDoctorSearch(this.value,'pt-ref','pt-ref-list')"
           onfocus="if(this.value.length>=1)inlineDoctorSearch(this.value,'pt-ref','pt-ref-list')"
-          onblur="setTimeout(function(){hideDrList('pt-ref-list')},200)">
+          onblur="setTimeout(function(){hideDrList('pt-ref-list')},400)">
         <div id="pt-ref-list" style="display:none;position:absolute;left:0;right:0;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,0.15);z-index:300;max-height:220px;overflow-y:auto;margin-top:2px"></div>
       </div>
       <div class="field">
@@ -695,7 +695,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <input type="text" id="edit-ref" placeholder="Type doctor name to search..." autocomplete="off"
         oninput="inlineDoctorSearch(this.value,'edit-ref','edit-ref-list')"
         onfocus="if(this.value.length>=1)inlineDoctorSearch(this.value,'edit-ref','edit-ref-list')"
-        onblur="setTimeout(function(){hideDrList('edit-ref-list')},200)">
+        onblur="setTimeout(function(){hideDrList('edit-ref-list')},400)">
       <div id="edit-ref-list" style="display:none;position:absolute;left:0;right:0;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,0.15);z-index:300;max-height:220px;overflow-y:auto;margin-top:2px"></div>
     </div>
 
@@ -2056,16 +2056,20 @@ function inlineDoctorSearch(val, inputId, listId) {
 }
 
 function renderInlineList(val, el, inputId, listId) {
-  var q = val.toLowerCase().replace(/^dr\.?\s*/i,'').trim();
-  var results = !q ? [] : allDoctorsCache.filter(function(d){
-    return d.name && d.name.toLowerCase().replace(/^dr\s*/i,'').indexOf(q) >= 0;
+  var q = val.toLowerCase().trim();
+  // Search both with and without Dr prefix
+  var qStripped = q.replace(/^dr\.?\s*/i,'').trim();
+  var results = !qStripped ? [] : allDoctorsCache.filter(function(d){
+    if (!d.name) return false;
+    var n = d.name.toLowerCase();
+    return n.indexOf(qStripped) >= 0 || n.indexOf(q) >= 0;
   });
   if (!results.length) { el.style.display = 'none'; return; }
   var shown = results.slice(0, 80);
   el.innerHTML = shown.map(function(d) {
     var safe = esc(d.name).replace(/'/g,"&#39;");
-    return '<div onmousedown="pickInlineDoctor(\'' + safe + '\',\'' + inputId + '\',\'' + listId + '\')"'
-      + ' style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border)">'
+    return '<div onmousedown="pickInlineDoctor(\'' + safe + '\',\'' + inputId + '\',\'' + listId + '\')" ontouchstart="pickInlineDoctor(\'' + safe + '\',\'' + inputId + '\',\'' + listId + '\')"'
+      + ' style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);-webkit-tap-highlight-color:rgba(0,0,0,0.05)">'
       + '<div style="font-size:13px;font-weight:500">' + esc(d.name) + '</div>'
       + (d.specialization && d.specialization !== 'nan' ? '<div style="font-size:11px;color:var(--text3)">' + esc(d.specialization) + '</div>' : '')
       + '</div>';

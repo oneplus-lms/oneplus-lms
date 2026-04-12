@@ -1424,6 +1424,7 @@ auth.onAuthStateChanged(function(user) {
     } else {
       curProfile = { name: user.email, role: 'admin', pin: '' };
     }
+    prewarmDoctorCache(); // start loading 5,914 doctors in background before PIN entry
     setupPin();
     stack = ['s-pin'];
     goTo('s-pin', false);
@@ -2029,7 +2030,19 @@ async function clearDoctorRegistry() {
 var doctorPickerTargetId = null;
 // ── DOCTOR INLINE SEARCH ──
 var allDoctorsCache = null;
+var doctorCacheLoading = false;
 var doctorPickerTargetId = null;
+
+// Pre-warm doctor cache silently after login — so first search is instant
+function prewarmDoctorCache() {
+  if (allDoctorsCache || doctorCacheLoading) return;
+  doctorCacheLoading = true;
+  db.collection('doctors').orderBy('name').get().then(function(snap) {
+    allDoctorsCache = [];
+    snap.forEach(function(d){ allDoctorsCache.push(d.data()); });
+    doctorCacheLoading = false;
+  }).catch(function(){ doctorCacheLoading = false; });
+}
 
 function inlineDoctorSearch(val, inputId, listId) {
   var input = document.getElementById(inputId);
@@ -2044,14 +2057,25 @@ function inlineDoctorSearch(val, inputId, listId) {
   if (!val || val.trim().length < 1) { el.style.display = 'none'; return; }
   if (allDoctorsCache) {
     renderInlineList(val, el, inputId, listId);
-  } else {
+  } else if (doctorCacheLoading) {
     el.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Loading...</div>';
     el.style.display = 'block';
+    // Poll until cache ready — typically <500ms since prewarm started at login
+    var t = setInterval(function() {
+      if (allDoctorsCache) { clearInterval(t); renderInlineList(val, el, inputId, listId); }
+    }, 200);
+    setTimeout(function(){ clearInterval(t); }, 8000);
+  } else {
+    // Fallback: load now if prewarm somehow missed
+    el.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Loading...</div>';
+    el.style.display = 'block';
+    doctorCacheLoading = true;
     db.collection('doctors').orderBy('name').get().then(function(snap) {
       allDoctorsCache = [];
       snap.forEach(function(d){ allDoctorsCache.push(d.data()); });
+      doctorCacheLoading = false;
       renderInlineList(val, el, inputId, listId);
-    }).catch(function(){ el.style.display = 'none'; });
+    }).catch(function(){ doctorCacheLoading = false; el.style.display = 'none'; });
   }
 }
 
@@ -2062,7 +2086,8 @@ function renderInlineList(val, el, inputId, listId) {
   var results = !qStripped ? [] : allDoctorsCache.filter(function(d){
     if (!d.name) return false;
     var n = d.name.toLowerCase();
-    return n.indexOf(qStripped) >= 0 || n.indexOf(q) >= 0;
+    var nClean = n.replace(/([a-z])\.([a-z])/g,'$1 $2').replace(/([a-z])\./g,'$1').replace(/\s{2,}/g,' ');
+    return n.indexOf(qStripped) >= 0 || n.indexOf(q) >= 0 || nClean.indexOf(qStripped) >= 0;
   });
   if (!results.length) { el.style.display = 'none'; return; }
   var shown = results.slice(0, 80);
@@ -2080,10 +2105,20 @@ function renderInlineList(val, el, inputId, listId) {
   el.style.display = 'block';
 }
 
+function normaliseDrName(name) {
+  return name
+    .replace(/\bDr\.\s*/gi, 'Dr ')
+    .replace(/([A-Za-z])\.([A-Za-z])/g, '$1 $2')
+    .replace(/([A-Za-z])\.[\s]*/g, '$1 ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function pickInlineDoctor(name, inputId, listId) {
-  document.getElementById(inputId).value = name;
+  var clean = normaliseDrName(name);
+  document.getElementById(inputId).value = clean;
   hideDrList(listId);
-  addDoctorToRegistry(name);
+  if (clean !== name) addDoctorToRegistry(clean);
 }
 
 function hideDrList(listId) {
@@ -2094,7 +2129,10 @@ function addDoctorToRegistry(name) {
   if (!name || name.length < 3) return;
   var docId = name.replace(/[^a-zA-Z0-9\s\(\)]/g,'').replace(/\s+/g,'-').toLowerCase().slice(0,100);
   db.collection('doctors').doc(docId).set({name:name,source:'manual',active:true},{merge:true})
-    .then(function(){ allDoctorsCache=null; }).catch(function(){});
+    .then(function(){
+    // Update cache in-place instead of nuking it
+    if (allDoctorsCache) { var exists=allDoctorsCache.some(function(d){return d.name===name;}); if(!exists) allDoctorsCache.push({name:name,source:'manual',active:true}); }
+  }).catch(function(){});
 }
 
 function registerDoctorFromOrder(refBy) {

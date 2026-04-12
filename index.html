@@ -227,6 +227,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="app" onclick="hideSuggest(event)">
@@ -1143,6 +1144,23 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div style="height:8px"></div>
     <div class="card-title" style="margin-bottom:8px">Active Doctor Assignments Today</div>
     <div id="temp-doctor-list"><div class="empty">No temp assignments today</div></div>
+
+    <!-- Doctor Registry Upload — Admin only -->
+    <div style="height:16px"></div>
+    <div class="card">
+      <div class="card-title">Doctor Registry</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Upload the cleaned doctor list to Firestore. Run only once. Check status first.</div>
+      <div id="dr-upload-status" style="font-size:12px;font-family:var(--mono);color:var(--text3);margin-bottom:8px">Not checked yet</div>
+      <div id="dr-progress-bar" style="display:none;height:6px;background:var(--surface2);border-radius:3px;margin-bottom:8px;overflow:hidden">
+        <div id="dr-progress-fill" style="height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width 0.3s"></div>
+      </div>
+      <input type="file" id="dr-file-input" accept=".xlsx,.xls" style="display:none" onchange="handleDrFile(this)">
+      <button class="btn" style="width:100%;margin-bottom:8px" onclick="checkDoctorRegistry()">Check Registry Status</button>
+      <button class="btn btn-primary" style="width:100%" onclick="document.getElementById('dr-file-input').click()">Select Excel + Upload</button>
+      <div id="dr-clear-row" style="display:none;margin-top:8px">
+        <button class="btn btn-danger" style="width:100%;background:transparent;color:var(--red);border-color:var(--red)" onclick="clearDoctorRegistry()">Clear Registry</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1915,7 +1933,103 @@ var nameLookupTimer = null;
 function scheduleNameLookup() { /* no-op — phone-only detection */ }
 function checkRepeatByName(name) { /* no-op — phone-only detection */ }
 
-// ── DOCTOR PICKER MODAL ──
+// ── DOCTOR REGISTRY UPLOAD (Admin panel) ──
+async function checkDoctorRegistry() {
+  var statusEl = document.getElementById('dr-upload-status');
+  statusEl.textContent = 'Checking...';
+  try {
+    var snap = await db.collection('doctors').limit(1).get();
+    if (snap.empty) {
+      statusEl.textContent = 'Registry is empty — ready to upload';
+      statusEl.style.color = 'var(--text3)';
+    } else {
+      var countSnap = await db.collection('doctors').get();
+      statusEl.textContent = '✓ ' + countSnap.size.toLocaleString('en-IN') + ' doctors already in registry';
+      statusEl.style.color = 'var(--accent)';
+      document.getElementById('dr-clear-row').style.display = 'block';
+    }
+  } catch(e) { statusEl.textContent = 'Error: ' + e.message; }
+}
+
+function handleDrFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var statusEl = document.getElementById('dr-upload-status');
+  statusEl.textContent = 'Reading ' + file.name + '...';
+  statusEl.style.color = 'var(--text3)';
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      var wb = XLSX.read(ev.target.result, {type:'binary'});
+      var ws = wb.Sheets['Doctors'] || wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      var doctors = rows.map(function(r) {
+        return {
+          name: (r['Name']||'').toString().trim(),
+          specialization: (r['Specialization']||'').toString().trim(),
+          legacyId: (r['Doctor_ID']||'').toString().trim(),
+          source: 'imported', active: true
+        };
+      }).filter(function(d){ return d.name && d.name !== 'nan' && d.name.length > 1; });
+      statusEl.textContent = 'Read ' + doctors.length + ' doctors — uploading...';
+      uploadDoctors(doctors);
+    } catch(e) { statusEl.textContent = 'Read error: ' + e.message; }
+  };
+  reader.readAsBinaryString(file);
+}
+
+async function uploadDoctors(doctors) {
+  var statusEl = document.getElementById('dr-upload-status');
+  var progressBar = document.getElementById('dr-progress-bar');
+  var progressFill = document.getElementById('dr-progress-fill');
+  progressBar.style.display = 'block';
+
+  var BATCH = 400;
+  var total = doctors.length;
+  var uploaded = 0;
+
+  for (var i = 0; i < total; i += BATCH) {
+    var chunk = doctors.slice(i, i + BATCH);
+    var batch = db.batch();
+    chunk.forEach(function(d) {
+      var docId = d.name.replace(/[^a-zA-Z0-9\s\(\)]/g,'').replace(/\s+/g,'-').toLowerCase().slice(0,100);
+      batch.set(db.collection('doctors').doc(docId), d, {merge:true});
+    });
+    try {
+      await batch.commit();
+      uploaded += chunk.length;
+      var pct = Math.round(uploaded/total*100);
+      progressFill.style.width = pct + '%';
+      statusEl.textContent = 'Uploading... ' + uploaded + '/' + total + ' (' + pct + '%)';
+    } catch(e) {
+      statusEl.textContent = 'Batch error at ' + i + ': ' + e.message;
+    }
+    await new Promise(function(r){ setTimeout(r, 150); });
+  }
+
+  statusEl.textContent = '✓ Done — ' + uploaded + ' doctors uploaded to registry';
+  statusEl.style.color = 'var(--accent)';
+  allDoctorsCache = null; // invalidate picker cache
+  toast('Doctor registry uploaded ✓ — ' + uploaded + ' doctors', 'ok');
+}
+
+async function clearDoctorRegistry() {
+  if (!confirm('Delete ALL doctors from registry? This cannot be undone.')) return;
+  var statusEl = document.getElementById('dr-upload-status');
+  statusEl.textContent = 'Clearing...';
+  try {
+    var snap = await db.collection('doctors').get();
+    var batch = db.batch();
+    snap.forEach(function(d){ batch.delete(d.ref); });
+    await batch.commit();
+    statusEl.textContent = 'Registry cleared — ' + snap.size + ' doctors removed';
+    statusEl.style.color = 'var(--red)';
+    allDoctorsCache = null;
+    document.getElementById('dr-clear-row').style.display = 'none';
+  } catch(e) { statusEl.textContent = 'Error: ' + e.message; }
+}
+
+
 var doctorPickerTargetId = null;
 var allDoctorsCache = null; // full list cached after first load
 

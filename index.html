@@ -843,17 +843,27 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
     <!-- Record new handover -->
     <div class="card">
-      <div class="card-title">Initiate Handover</div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Recipient must accept before custody transfers.</div>
+      <!-- Normal / Refund toggle -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
+        <button id="ho-mode-normal" onclick="setHOMode('normal')"
+          style="padding:8px;border-radius:var(--radius);border:1.5px solid var(--accent);background:var(--accent);color:#fff;font-size:12px;font-weight:500;cursor:pointer">
+          ↑ Handover
+        </button>
+        <button id="ho-mode-refund" onclick="setHOMode('refund')"
+          style="padding:8px;border-radius:var(--radius);border:1.5px solid var(--border-strong);background:var(--surface);color:var(--text2);font-size:12px;font-weight:500;cursor:pointer">
+          ↓ Refund / Return
+        </button>
+      </div>
+      <div id="ho-mode-desc" style="font-size:12px;color:var(--text2);margin-bottom:12px">Recipient must accept before custody transfers.</div>
       <div class="field">
-        <label>Handover To</label>
+        <label id="ho-to-label">Handover To</label>
         <select id="ho-to">
           <option value="">Select staff member...</option>
         </select>
       </div>
       <div class="field"><label>Cash Amount (Rs.)</label><input type="number" id="ho-amt" placeholder="0" inputmode="numeric"></div>
       <div class="field"><label>Notes</label><input type="text" id="ho-notes" placeholder="Shift end, remarks..."></div>
-      <button class="btn btn-primary" onclick="submitHandover()">Initiate Handover →</button>
+      <button class="btn btn-primary" id="ho-submit-btn" onclick="submitHandover()">Initiate Handover →</button>
     </div>
     <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Today's Handover Log</div>
     <div id="ho-list"><div class="empty">No handovers recorded yet</div></div>
@@ -924,6 +934,8 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       </div>
       <div class="wa-preview" id="wa-text">Generating...</div>
       <button class="btn btn-primary" onclick="shareWA()">Share on WhatsApp</button>
+      <div style="height:8px"></div>
+      <button class="btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="shareWAAdmin()">&#128172; Send to Admin</button>
       <div style="height:8px"></div>
       <button class="btn" onclick="saveEOD()">Save EOD Report</button>
     </div>
@@ -2386,9 +2398,8 @@ function renderOrderDetail(o) {
     + (function(){
         var role = curProfile && curProfile.role || '';
         var isOwner = o.createdBy === (curUser && curUser.uid);
-        var canEdit = role==='pathologist'||role==='admin'||role==='reception' || (role==='phlebotomist'&&isOwner);
+        var canEdit = role==='pathologist'||role==='admin';
         if (canEdit) return '<button class="btn" style="width:100%;margin-bottom:10px;border-color:var(--accent);color:var(--accent)" onclick="openEditModal()">&#9998; Edit Order</button>';
-        if (role==='phlebotomist') return '<button class="btn" style="width:100%;margin-bottom:10px;opacity:0.4;cursor:not-allowed" disabled title="You can only edit orders you created">&#9998; Edit Order (not yours)</button>';
         return ''; // lab sees no edit button
       })()
     + '<button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="openDetailTRF()">&#128221; View / Print TRF</button>'
@@ -2509,12 +2520,8 @@ function openEditModal() {
   var o = curDetailOrder;
   if (!o) return;
   var role = curProfile && curProfile.role || '';
-  // Lab cannot edit anyone's orders
-  if (role === 'lab') { toast('Lab Tech role cannot edit orders', 'warn'); return; }
-  // Phlebotomist can only edit their own orders
-  if (role === 'phlebotomist' && o.createdBy !== curUser.uid) {
-    toast('You can only edit orders you created', 'warn'); return;
-  }
+  // Only admin and pathologist can edit orders
+  if (role !== 'admin' && role !== 'pathologist') { toast('Only Admin and Pathologist can edit orders', 'warn'); return; }
 
   // Populate fields
   document.getElementById('edit-name').value = o.patientName || '';
@@ -2774,8 +2781,34 @@ function submitEditOrder() {
 
   db.collection('orders').doc(o.id).update(updatedData).then(function() {
     closeEditModal();
-    toast('Order updated ✓', 'ok');
-    // Refresh detail view
+    // Calculate payment difference
+    var oldPaid = o.paidAmount || 0;
+    var newNet = Math.max(0, total - disc);
+    var diff = Math.round((newNet - oldPaid) * 100) / 100;
+    if (Math.abs(diff) >= 1) {
+      var msg = diff > 0
+        ? 'Additional payment of Rs.' + diff.toLocaleString('en-IN') + ' is due from patient'
+        : 'Refund of Rs.' + Math.abs(diff).toLocaleString('en-IN') + ' is due to patient';
+      var action = diff > 0 ? 'Collect additional payment' : 'Initiate refund handover';
+      if (confirm(msg + '\n\n' + action + '?')) {
+        if (diff < 0) {
+          // Go to handover screen in refund mode
+          goTo('s-ho');
+          setTimeout(function() {
+            document.getElementById('ho-amt').value = Math.abs(diff);
+            document.getElementById('ho-notes').value = 'Refund — ' + (o.patientName||'') + ' (order #' + o.id.slice(-6).toUpperCase() + ')';
+            setHOMode('refund');
+          }, 300);
+        } else {
+          // Additional payment — update order with new paidAmount
+          db.collection('orders').doc(o.id).update({ paidAmount: oldPaid + diff, dueAmount: 0, status: 'paid' })
+            .then(function(){ toast('Additional payment recorded ✓', 'ok'); })
+            .catch(function(e){ toast('Update failed: ' + e.message, 'err'); });
+        }
+      }
+    } else {
+      toast('Order updated ✓', 'ok');
+    }
     Object.assign(curDetailOrder, updatedData);
     curDetailOrder.amendments = (curDetailOrder.amendments || []).concat([amendment]);
     renderOrderDetail(curDetailOrder);
@@ -3285,9 +3318,42 @@ function fieldConfirm() {
 // ── CASH HANDOVER — Chain of Custody ──
 var hoUnsubscribe = null; // Firestore real-time listener handle
 
+var hoMode = 'normal'; // 'normal' | 'refund'
+
+function setHOMode(mode) {
+  hoMode = mode;
+  var nb = document.getElementById('ho-mode-normal');
+  var rb = document.getElementById('ho-mode-refund');
+  var desc = document.getElementById('ho-mode-desc');
+  var lbl = document.getElementById('ho-to-label');
+  var btn = document.getElementById('ho-submit-btn');
+  nb.style.background = mode==='normal'?'var(--accent)':'var(--surface)';
+  nb.style.color = mode==='normal'?'#fff':'var(--text2)';
+  nb.style.borderColor = mode==='normal'?'var(--accent)':'var(--border-strong)';
+  rb.style.background = mode==='refund'?'#DC2626':'var(--surface)';
+  rb.style.color = mode==='refund'?'#fff':'var(--text2)';
+  rb.style.borderColor = mode==='refund'?'#DC2626':'var(--border-strong)';
+  if (mode==='refund') {
+    desc.textContent = 'Refund: request cash back from a staff member. They must accept to confirm the return.';
+    desc.style.color = '#DC2626';
+    lbl.textContent = 'Refund From';
+    btn.textContent = '↓ Request Refund';
+    btn.style.background = '#DC2626';
+    btn.style.borderColor = '#DC2626';
+  } else {
+    desc.textContent = 'Recipient must accept before custody transfers.';
+    desc.style.color = 'var(--text2)';
+    lbl.textContent = 'Handover To';
+    btn.textContent = 'Initiate Handover →';
+    btn.style.background = 'var(--accent)';
+    btn.style.borderColor = 'var(--accent)';
+  }
+}
+
 function loadHO() {
   var today = todayStr();
   document.getElementById('ho-date').textContent = today;
+  setHOMode('normal'); // always start in normal mode
 
   // Populate staff dropdown (exclude self)
   db.collection('staff').where('active','==',true).get().then(function(snap) {
@@ -3335,16 +3401,27 @@ function renderOrdersInHandover(orders) {
 
 function renderHOPending(rows) {
   var myName = (curProfile&&curProfile.name)||'';
+  var myFirst = myName.split(' ')[0].toLowerCase();
   var pending = rows.filter(function(h){
-    return h.custodyStatus==='PENDING' && h.handoverTo && myName &&
-           h.handoverTo.toLowerCase().indexOf(myName.split(' ')[0].toLowerCase())>=0;
+    if (h.custodyStatus !== 'PENDING') return false;
+    if (h.type === 'refund') {
+      // Refund pending: show to the person being asked to return cash
+      return h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0;
+    }
+    // Normal handover: show to recipient
+    return h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0;
   });
   var sec = document.getElementById('ho-pending-section');
   var list = document.getElementById('ho-pending-list');
   if (!pending.length) { sec.style.display='none'; return; }
   sec.style.display='block';
   list.innerHTML = pending.map(function(h){
-    return '<div class="ho-pending-item">'      +'<div class="ho-pending-meta">From <strong>'+esc(h.recordedByName||'-')+'</strong> · '+esc(h.time||'')+'</div>'      +'<div class="ho-pending-amt">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div>'      +'<div class="ho-pending-from">'+(h.notes?esc(h.notes):'No notes')+'</div>'      +renderOrdersInHandover(h.orders)      +'<div class="ho-pending-actions">'        +'<button class="btn-accept" onclick="hoConfirm(&quot;accept&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10003; Accept Custody</button>'        +'<button class="btn-reject" onclick="hoConfirm(&quot;reject&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10007; Reject</button>'      +'</div>'    +'</div>';  }).join('');
+    var isRefund = h.type === 'refund';
+    return '<div class="ho-pending-item" style="'+(isRefund?'border-left:3px solid #DC2626;':'')+'">'
+      +(isRefund?'<div style="font-size:10px;font-family:var(--mono);color:#DC2626;font-weight:600;margin-bottom:4px">↓ REFUND REQUEST</div>':'')
+      +'<div class="ho-pending-meta">'+(isRefund?'Refund requested by':'From')+' <strong>'+esc(h.recordedByName||'-')+'</strong> · '+esc(h.time||'')+'</div>'
+      +'<div class="ho-pending-amt">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div>'
+      +'<div class="ho-pending-from">'+(h.notes?esc(h.notes):'No notes')+'</div>'      +renderOrdersInHandover(h.orders)      +'<div class="ho-pending-actions">'        +'<button class="btn-accept" onclick="hoConfirm(&quot;accept&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10003; Accept Custody</button>'        +'<button class="btn-reject" onclick="hoConfirm(&quot;reject&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10007; Reject</button>'      +'</div>'    +'</div>';  }).join('');
 }
 
 function renderHOList(rows) {
@@ -3354,10 +3431,14 @@ function renderHOList(rows) {
     var status = h.custodyStatus || 'ACCEPTED';
     var badgeClass = status==='PENDING'?'pending':status==='REJECTED'?'rejected':'accepted';
     var badgeLabel = status==='PENDING'?'Awaiting Acceptance':status==='REJECTED'?'Rejected':'Accepted';
+    var refundBadge = h.type==='refund'?'<span style="font-size:9px;font-family:var(--mono);background:#FEE2E2;color:#DC2626;padding:1px 6px;border-radius:10px;margin-left:4px">REFUND</span>':'';
     var acceptedLine = '';
     if (status==='ACCEPTED' && h.acceptedAt) acceptedLine='<div><div class="ho-card-k">Accepted At</div><div class="ho-card-v">'+esc(h.acceptedAt)+'</div></div>';
     if (status==='REJECTED' && h.rejectedAt) acceptedLine='<div><div class="ho-card-k">Rejected At</div><div class="ho-card-v">'+esc(h.rejectedAt)+'</div></div>';
-    return '<div class="ho-handover-card">'      +'<div class="ho-card-header">'        +'<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">#'+h.id.slice(-6).toUpperCase()+'</span>'        +'<span class="ho-status-badge '+badgeClass+'">'+badgeLabel+'</span>'        +'<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(h.time||'')+'</span>'      +'</div>'      +'<div class="ho-card-body">'        +'<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>'        +'<div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div></div>'        +'<div><div class="ho-card-k">By</div><div class="ho-card-v">'+esc(h.recordedByName||'-')+'</div></div>'        +'<div><div class="ho-card-k">Notes</div><div class="ho-card-v">'+esc(h.notes||'-')+'</div></div>'        +acceptedLine      +'</div>'      +renderOrdersInHandover(h.orders)    +'</div>';  }).join('');
+    return '<div class="ho-handover-card">'      +'<div class="ho-card-header">'        +'<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">#'+h.id.slice(-6).toUpperCase()+'</span>'        +'<span class="ho-status-badge '+badgeClass+'">'+badgeLabel+'</span>'+refundBadge        +'<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(h.time||'')+'</span>'      +'</div>'      +'<div class="ho-card-body">'        +(h.type==='refund'
+          ?'<div><div class="ho-card-k">Refund From</div><div class="ho-card-v" style="color:#DC2626">'+esc(h.refundRequestedFromName||h.handoverFrom||'-')+'</div></div>'
+          +'<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>'
+          :'<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>')        +'<div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div></div>'        +'<div><div class="ho-card-k">By</div><div class="ho-card-v">'+esc(h.recordedByName||'-')+'</div></div>'        +'<div><div class="ho-card-k">Notes</div><div class="ho-card-v">'+esc(h.notes||'-')+'</div></div>'        +acceptedLine      +'</div>'      +renderOrdersInHandover(h.orders)    +'</div>';  }).join('');
 }
 function submitHandover() {
   var sel = document.getElementById('ho-to');
@@ -3365,22 +3446,55 @@ function submitHandover() {
   var toName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].dataset.name || to : to;
   var amt = parseFloat(document.getElementById('ho-amt').value||0);
   var notes = document.getElementById('ho-notes').value.trim();
-  if (!to) { toast('Select a recipient','warn'); return; }
+  if (!to) { toast(hoMode==='refund'?'Select who to refund from':'Select a recipient','warn'); return; }
   if (!amt || amt<=0) { toast('Enter a valid amount','warn'); return; }
 
   var today = todayStr();
   var myUid = curUser.uid;
   var myName = (curProfile&&curProfile.name)||curUser.email;
 
+  // REFUND MODE — request cash back from another staff member
+  // No cash-in-hand check needed (we're receiving, not giving)
+  if (hoMode === 'refund') {
+    // Check no pending refund already exists from us
+    db.collection('handovers').where('date','==',today).get().then(function(hoSnap) {
+      var hasPending = false;
+      hoSnap.forEach(function(d) {
+        var h = d.data();
+        if (h.recordedBy === myUid && h.custodyStatus === 'PENDING') hasPending = true;
+      });
+      if (hasPending) { toast('You already have a pending handover. Wait for it to resolve first.','warn'); return; }
+      var now = new Date();
+      db.collection('handovers').add({
+        handoverTo: myName,   // refund goes TO the initiator
+        handoverFrom: toName, // refund comes FROM this person
+        amount: amt, notes: notes ? notes : 'Refund', date: today,
+        time: now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        recordedBy: myUid, recordedByName: myName,
+        refundRequestedFrom: to, refundRequestedFromName: toName,
+        custodyStatus: 'PENDING',
+        type: 'refund'
+      }).then(function(){
+        toast('Refund request sent to '+toName+' — awaiting their acceptance','ok');
+        sel.value='';
+        document.getElementById('ho-amt').value='';
+        document.getElementById('ho-notes').value='';
+        setHOMode('normal');
+        loadStats();
+      }).catch(function(){ toast('Failed — check connection','err'); });
+    }).catch(function(){ toast('Could not verify — check connection','err'); });
+    return;
+  }
+
+  // NORMAL HANDOVER MODE
   // Guard: compute actual cash in hand before allowing transfer
-  // Cash in hand = today's cash orders + collection charges − accepted handovers initiated by me
   Promise.all([
     db.collection('orders').where('date','==',today).get(),
     db.collection('handovers').where('date','==',today).get()
   ]).then(function(results) {
     var orderSnap = results[0], hoSnap = results[1];
 
-    // Cash collected today (cash pay mode + collection charges)
     var cashCollected = 0;
     orderSnap.forEach(function(d) {
       var o = d.data();
@@ -3388,7 +3502,6 @@ function submitHandover() {
       if (o.source === 'Home Collection' || o.source === 'Doctor Referral') cashCollected += (o.collectionCharge||0);
     });
 
-    // Deduct accepted outgoing handovers already done by me today
     var alreadyHandedOver = 0;
     var hasPendingOut = false;
     hoSnap.forEach(function(d) {
@@ -3398,41 +3511,32 @@ function submitHandover() {
       if (h.custodyStatus === 'PENDING') hasPendingOut = true;
     });
 
-    // Guard 1: Block if already has a pending outgoing handover (dual-device / double-tap)
     if (hasPendingOut) {
       toast('You already have a pending handover awaiting acceptance. Wait for it to be accepted or rejected first.','warn');
       return;
     }
 
     var cashInHand = cashCollected - alreadyHandedOver;
-
-    // Guard 2: Over-transfer check
-    if (amt > cashInHand + 0.01) { // 0.01 tolerance for float
+    if (amt > cashInHand + 0.01) {
       toast('Amount exceeds your cash in hand (Rs.'+Math.max(0,cashInHand).toLocaleString('en-IN')+')','warn');
       return;
     }
 
-    // All guards passed — build order summary to attach
     var myOrders = [];
     orderSnap.forEach(function(d) {
       var o = d.data();
-      // Include cash orders created by this user today
       if (o.createdBy === myUid && (o.payMode === 'cash' || o.payMode === 'split')) {
         var cashAmt = o.payMode === 'split' && o.splitPayments ? (o.splitPayments.cash||0) : (o.paidAmount||0);
         if (cashAmt > 0) {
           myOrders.push({
-            patientName: o.patientName||'',
-            age: o.age||'',
-            sex: o.sex||'',
+            patientName: o.patientName||'', age: o.age||'', sex: o.sex||'',
             tests: (o.tests||[]).map(function(t){ return t.name; }).join(', '),
-            cashAmt: cashAmt,
-            orderId: d.id.slice(-6).toUpperCase()
+            cashAmt: cashAmt, orderId: d.id.slice(-6).toUpperCase()
           });
         }
       }
     });
 
-    // Create the handover
     var now = new Date();
     db.collection('handovers').add({
       handoverTo: toName, amount: amt, notes: notes, date: today,
@@ -3440,6 +3544,7 @@ function submitHandover() {
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       recordedBy: myUid, recordedByName: myName,
       custodyStatus: 'PENDING',
+      type: 'normal',
       orders: myOrders
     }).then(function(){
       toast('Handover initiated — awaiting acceptance by '+toName,'ok');
@@ -3688,6 +3793,12 @@ function loadEOD() {
 function shareWA() {
   var text=document.getElementById('wa-text').textContent;
   window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+}
+function shareWAAdmin() {
+  var text=document.getElementById('wa-text').textContent;
+  // Admin WhatsApp number — change this if admin number changes
+  var ADMIN_WA = '919312218812'; // Dr. Nitin — 91 + 10-digit number
+  window.open('https://wa.me/'+ADMIN_WA+'?text='+encodeURIComponent(text),'_blank');
 }
 function saveEOD() {
   var today=todayStr();

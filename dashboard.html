@@ -101,6 +101,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div class="tb-right">
       <div class="live" title="Live"></div>
       <span id="ddate" class="tb-meta"></span>
+      <input type="date" id="dash-date-picker"
+        style="font-size:12px;font-family:var(--mono);border:1px solid var(--border);border-radius:6px;padding:3px 8px;background:var(--surface2);color:var(--text);cursor:pointer"
+        onchange="onDashDateChange(this.value)">
       <span id="drefresh" class="tb-meta"></span>
       <button class="sout" onclick="doSignOut()">Sign out</button>
     </div>
@@ -244,18 +247,38 @@ function td(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1)
 function fmt(n){return 'Rs.'+(n||0).toLocaleString('en-IN');}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+var dashDate = td(); // currently viewed date
+
 function startDash(){
-  var today=td();
-  var d=new Date();
-  document.getElementById('ddate').textContent=d.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
-  uO=db.collection('orders').where('date','==',today).onSnapshot(function(snap){
+  dashDate = td();
+  var picker = document.getElementById('dash-date-picker');
+  if (picker) picker.value = dashDate;
+  loadDashDate(dashDate);
+}
+
+function onDashDateChange(val){
+  if (!val) return;
+  dashDate = val;
+  if (uO) { uO(); uO=null; }
+  if (uH) { uH(); uH=null; }
+  loadDashDate(dashDate);
+}
+
+function loadDashDate(date){
+  var d = new Date(date+'T00:00:00');
+  var isToday = date === td();
+  document.getElementById('ddate').textContent = d.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})+(isToday?' (Today)':'');
+  // Limit date picker to today
+  var picker = document.getElementById('dash-date-picker');
+  if (picker) { picker.max = td(); picker.value = date; }
+  uO=db.collection('orders').where('date','==',date).onSnapshot(function(snap){
     allOrders=[];
     snap.forEach(function(doc){allOrders.push(Object.assign({id:doc.id},doc.data()));});
     allOrders.sort(function(a,b){return(b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0);});
     renderAll();
     document.getElementById('drefresh').textContent='Updated '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
   });
-  uH=db.collection('handovers').where('date','==',today).onSnapshot(function(snap){
+  uH=db.collection('handovers').where('date','==',date).onSnapshot(function(snap){
     allHandovers=[];
     snap.forEach(function(doc){allHandovers.push(Object.assign({id:doc.id},doc.data()));});
     renderHandovers();

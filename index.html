@@ -694,16 +694,36 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
 
     <div class="edit-section-lbl">Payment</div>
-    <div class="pay-mode-grid" style="margin-bottom:10px">
-      <button class="pay-mode-btn" id="epm-cash" onclick="setEditPay('cash')">&#128181; Cash</button>
-      <button class="pay-mode-btn" id="epm-upi" onclick="setEditPay('upi')">&#128241; UPI</button>
-      <button class="pay-mode-btn" id="epm-card" onclick="setEditPay('card')">&#128179; Card</button>
-      <button class="pay-mode-btn on-credit" id="epm-credit" onclick="setEditPay('credit')">&#128218; Credit</button>
+    <!-- Split payment inputs -->
+    <div id="edit-split-pay-section">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+        <div>
+          <label style="font-size:11px;font-family:var(--mono);color:var(--text3);display:block;margin-bottom:4px">&#128181; Cash</label>
+          <input type="number" id="epm-amt-cash" placeholder="0" inputmode="numeric" min="0"
+            style="width:100%;padding:8px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;font-family:var(--mono);box-sizing:border-box"
+            oninput="onEditSplitInput()">
+        </div>
+        <div>
+          <label style="font-size:11px;font-family:var(--mono);color:var(--text3);display:block;margin-bottom:4px">&#128241; UPI</label>
+          <input type="number" id="epm-amt-upi" placeholder="0" inputmode="numeric" min="0"
+            style="width:100%;padding:8px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;font-family:var(--mono);box-sizing:border-box"
+            oninput="onEditSplitInput()">
+        </div>
+        <div>
+          <label style="font-size:11px;font-family:var(--mono);color:var(--text3);display:block;margin-bottom:4px">&#128179; Card</label>
+          <input type="number" id="epm-amt-card" placeholder="0" inputmode="numeric" min="0"
+            style="width:100%;padding:8px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;font-family:var(--mono);box-sizing:border-box"
+            oninput="onEditSplitInput()">
+        </div>
+      </div>
+      <div id="edit-split-status" style="font-size:12px;font-family:var(--mono);padding:6px 10px;border-radius:6px;margin-bottom:8px;display:none"></div>
     </div>
-    <div class="field" id="edit-paid-field">
-      <label>Amount Paid (Rs.)</label>
-      <input type="number" id="edit-paid" placeholder="0" inputmode="numeric">
+    <button class="pay-mode-btn on-credit" id="epm-credit" onclick="setEditPay('credit')" style="width:100%;margin-bottom:8px">&#128218; Credit (collect later)</button>
+    <div id="edit-credit-note" style="display:none;font-size:12px;font-family:var(--mono);color:var(--amber,#D97706);padding:6px 10px;border-radius:6px;background:rgba(217,119,6,0.08);margin-bottom:8px">
+      Full amount on credit
+      <button onclick="clearEditCredit()" style="margin-left:8px;font-size:11px;padding:2px 8px;border:1px solid var(--amber,#D97706);border-radius:4px;background:transparent;color:var(--amber,#D97706);cursor:pointer">✕ Cancel</button>
     </div>
+    <input type="hidden" id="edit-paid" value="0">
     <div class="field">
       <label>Discount (Rs.)</label>
       <input type="number" id="edit-discount" placeholder="0" inputmode="numeric">
@@ -878,19 +898,52 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div style="flex:1"><div class="topbar-title">EOD Report</div><div class="topbar-sub" id="eod-date"></div></div>
   </div>
   <div class="scroll-body">
-    <div class="card">
-      <div class="card-title">Today's Numbers</div>
-      <div class="row"><span style="font-size:13px;color:var(--text2)">Total Orders</span><span style="font-size:13px;font-weight:500" id="eod-orders">-</span></div>
-      <div class="row"><span style="font-size:13px;color:var(--text2)">Cash</span><span style="font-size:13px;font-weight:500" id="eod-cash">-</span></div>
-      <div class="row"><span style="font-size:13px;color:var(--text2)">UPI</span><span style="font-size:13px;font-weight:500" id="eod-upi">-</span></div>
-      <div class="row"><span style="font-size:13px;color:var(--text2)">Card</span><span style="font-size:13px;font-weight:500" id="eod-card">-</span></div>
-      <div class="row"><span style="font-size:13px;color:var(--text2)">Credit</span><span style="font-size:13px;font-weight:500" id="eod-credit">-</span></div>
-      <div class="row"><span style="font-size:13px;font-weight:500">Total Revenue</span><span style="font-size:16px;font-weight:500;color:var(--accent)" id="eod-total">-</span></div>
+    <!-- Tab strip -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
+      <button id="eod-tab-summary" onclick="showEODTab('summary')"
+        style="padding:9px;border-radius:var(--radius);border:1.5px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;font-weight:500;cursor:pointer">
+        Summary
+      </button>
+      <button id="eod-tab-charges" onclick="showEODTab('charges')"
+        style="padding:9px;border-radius:var(--radius);border:1.5px solid var(--border-strong);background:var(--surface);color:var(--text2);font-size:13px;font-weight:500;cursor:pointer">
+        Collection Charges
+      </button>
     </div>
-    <div class="wa-preview" id="wa-text">Generating...</div>
-    <button class="btn btn-primary" onclick="shareWA()">Share on WhatsApp</button>
-    <div style="height:8px"></div>
-    <button class="btn" onclick="saveEOD()">Save EOD Report</button>
+
+    <!-- Summary tab -->
+    <div id="eod-panel-summary">
+      <div class="card">
+        <div class="card-title">Today's Numbers</div>
+        <div class="row"><span style="font-size:13px;color:var(--text2)">Total Orders</span><span style="font-size:13px;font-weight:500" id="eod-orders">-</span></div>
+        <div class="row"><span style="font-size:13px;color:var(--text2)">Cash</span><span style="font-size:13px;font-weight:500" id="eod-cash">-</span></div>
+        <div class="row"><span style="font-size:13px;color:var(--text2)">UPI</span><span style="font-size:13px;font-weight:500" id="eod-upi">-</span></div>
+        <div class="row"><span style="font-size:13px;color:var(--text2)">Card</span><span style="font-size:13px;font-weight:500" id="eod-card">-</span></div>
+        <div class="row"><span style="font-size:13px;color:var(--text2)">Credit</span><span style="font-size:13px;font-weight:500" id="eod-credit">-</span></div>
+        <div class="row"><span style="font-size:13px;color:var(--text2)">Collection Charges</span><span style="font-size:13px;font-weight:500;color:var(--blue,#2563EB)" id="eod-coll">-</span></div>
+        <div class="row"><span style="font-size:13px;font-weight:500">Total Revenue</span><span style="font-size:16px;font-weight:500;color:var(--accent)" id="eod-total">-</span></div>
+      </div>
+      <div class="wa-preview" id="wa-text">Generating...</div>
+      <button class="btn btn-primary" onclick="shareWA()">Share on WhatsApp</button>
+      <div style="height:8px"></div>
+      <button class="btn" onclick="saveEOD()">Save EOD Report</button>
+    </div>
+
+    <!-- Collection Charges tab -->
+    <div id="eod-panel-charges" style="display:none">
+      <!-- Period selector -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
+        <button id="cc-tab-daily" onclick="showCCPeriod('daily')"
+          style="padding:8px;border-radius:var(--radius);border:1.5px solid var(--accent);background:var(--accent);color:#fff;font-size:12px;font-family:var(--mono);cursor:pointer">
+          Today
+        </button>
+        <button id="cc-tab-weekly" onclick="showCCPeriod('weekly')"
+          style="padding:8px;border-radius:var(--radius);border:1.5px solid var(--border-strong);background:var(--surface);color:var(--text2);font-size:12px;font-family:var(--mono);cursor:pointer">
+          This Week
+        </button>
+      </div>
+      <div id="cc-loading" class="empty">Loading...</div>
+      <div id="cc-list"></div>
+    </div>
   </div>
 </div>
 
@@ -1567,6 +1620,9 @@ function captureGPS() {
 }
 function step1Next() {
   var name=document.getElementById('pt-name').value.trim();
+  var phone=document.getElementById('pt-phone').value.trim();
+  if (!phone || phone.length < 6) { document.getElementById('err-phone').textContent='Required'; document.getElementById('err-phone').classList.add('on'); return; }
+  document.getElementById('err-phone').classList.remove('on');
   if (!name) { document.getElementById('err-name').classList.add('on'); return; }
   document.getElementById('err-name').classList.remove('on');
   curOrder.patientName=name;
@@ -2476,9 +2532,33 @@ function openEditModal() {
   editSelTests = (o.tests || []).map(function(t) { return Object.assign({}, t); });
   renderEditTests();
 
-  // Set pay mode
+  // Set pay mode — load split amounts if applicable
+  editCreditMode = false;
   editPayMode = o.payMode || 'cash';
-  setEditPay(editPayMode);
+  // Reset split inputs
+  ['epm-amt-cash','epm-amt-upi','epm-amt-card'].forEach(function(id){
+    var el=document.getElementById(id); if(el){el.disabled=false;el.style.opacity='1';el.value='';}
+  });
+  document.getElementById('edit-split-pay-section').style.opacity='1';
+  document.getElementById('epm-credit').style.display='block';
+  document.getElementById('edit-credit-note').style.display='none';
+  document.getElementById('edit-split-status').style.display='none';
+
+  if (o.payMode === 'credit') {
+    setEditPay('credit');
+  } else if (o.payMode === 'split' && o.splitPayments) {
+    document.getElementById('epm-amt-cash').value = o.splitPayments.cash || '';
+    document.getElementById('epm-amt-upi').value  = o.splitPayments.upi  || '';
+    document.getElementById('epm-amt-card').value = o.splitPayments.card || '';
+  } else {
+    // Single mode — put paidAmount in matching input
+    var pmField = o.payMode === 'upi' ? 'epm-amt-upi' : o.payMode === 'card' ? 'epm-amt-card' : 'epm-amt-cash';
+    document.getElementById(pmField).value = o.paidAmount || 0;
+  }
+  // Store net for status feedback
+  var net0 = Math.max(0, (o.totalAmount||0) - (o.discount||0));
+  document.getElementById('edit-paid').value = o.paidAmount || 0;
+  document.getElementById('edit-paid').dataset.net = net0;
 
   // Show modal
   var bg = document.getElementById('edit-modal-bg');
@@ -2575,19 +2655,63 @@ function updateEditTotal() {
   var total = editSelTests.reduce(function(s, t) { return s + (t.rate || 0); }, 0);
   var disc = parseFloat(document.getElementById('edit-discount').value || 0);
   var net = Math.max(0, total - disc);
-  document.getElementById('edit-paid').value = editPayMode === 'credit' ? 0 : net;
+  document.getElementById('edit-paid').dataset.net = net;
+  if (editCreditMode) { document.getElementById('edit-paid').value = 0; return; }
+  // Reset cash input to net as default, clear others
+  document.getElementById('epm-amt-cash').value = net || '';
+  document.getElementById('epm-amt-upi').value = '';
+  document.getElementById('epm-amt-card').value = '';
+  document.getElementById('edit-paid').value = net;
+  document.getElementById('edit-split-status').style.display = 'none';
 }
 
 function setEditPay(mode) {
   editPayMode = mode;
-  ['cash','upi','card','credit'].forEach(function(m) {
-    var btn = document.getElementById('epm-' + m);
-    if (btn) btn.style.opacity = m === mode ? '1' : '0.45';
-    if (btn) btn.style.fontWeight = m === mode ? '600' : '400';
-    if (btn) btn.style.borderWidth = m === mode ? '2px' : '1px';
+  if (mode === 'credit') {
+    editCreditMode = true;
+    ['epm-amt-cash','epm-amt-upi','epm-amt-card'].forEach(function(id){
+      var el=document.getElementById(id); if(el){el.value='';el.disabled=true;el.style.opacity='0.4';}
+    });
+    document.getElementById('edit-split-pay-section').style.opacity='0.4';
+    document.getElementById('epm-credit').style.display='none';
+    document.getElementById('edit-credit-note').style.display='block';
+    document.getElementById('edit-split-status').style.display='none';
+    document.getElementById('edit-paid').value='0';
+  }
+}
+
+function clearEditCredit() {
+  editCreditMode = false;
+  editPayMode = 'cash';
+  ['epm-amt-cash','epm-amt-upi','epm-amt-card'].forEach(function(id){
+    var el=document.getElementById(id); if(el){el.disabled=false;el.style.opacity='1';}
   });
-  document.getElementById('edit-paid-field').style.display = mode === 'credit' ? 'none' : 'block';
-  if (mode === 'credit') document.getElementById('edit-paid').value = 0;
+  document.getElementById('edit-split-pay-section').style.opacity='1';
+  document.getElementById('epm-credit').style.display='block';
+  document.getElementById('edit-credit-note').style.display='none';
+  onEditSplitInput();
+}
+
+function onEditSplitInput() {
+  if (editCreditMode) return;
+  var pCash = Math.max(0, parseFloat(document.getElementById('epm-amt-cash').value)||0);
+  var pUpi  = Math.max(0, parseFloat(document.getElementById('epm-amt-upi').value)||0);
+  var pCard = Math.max(0, parseFloat(document.getElementById('epm-amt-card').value)||0);
+  var total = pCash + pUpi + pCard;
+  document.getElementById('edit-paid').value = total;
+  // Determine mode
+  var modes = [];
+  if (pCash>0) modes.push('cash'); if (pUpi>0) modes.push('upi'); if (pCard>0) modes.push('card');
+  editPayMode = modes.length===1 ? modes[0] : (modes.length>1 ? 'split' : 'cash');
+  // Status feedback
+  var net = parseFloat(document.getElementById('edit-paid').dataset.net||0)||0;
+  var status = document.getElementById('edit-split-status');
+  if (!net) { status.style.display='none'; return; }
+  var due = Math.round((net-total)*100)/100;
+  status.style.display='block';
+  if (Math.abs(due)<0.5) { status.textContent='✓ Fully paid — Rs.'+net.toLocaleString('en-IN'); status.style.background='rgba(16,185,129,0.1)'; status.style.color='var(--green,#10B981)'; }
+  else if (due>0) { status.textContent='Balance due: Rs.'+due.toLocaleString('en-IN'); status.style.background='rgba(245,158,11,0.1)'; status.style.color='var(--amber,#D97706)'; }
+  else { status.textContent='Overpaid by Rs.'+Math.abs(due).toLocaleString('en-IN'); status.style.background='rgba(239,68,68,0.1)'; status.style.color='var(--red,#EF4444)'; }
 }
 
 function submitEditOrder() {
@@ -2601,7 +2725,19 @@ function submitEditOrder() {
   var ref = document.getElementById('edit-ref').value.trim();
   var notes = document.getElementById('edit-notes').value.trim();
   var disc = parseFloat(document.getElementById('edit-discount').value || 0);
-  var paid = editPayMode === 'credit' ? 0 : parseFloat(document.getElementById('edit-paid').value || 0);
+  var paid, finalPayMode, splitPayments;
+  if (editCreditMode) {
+    paid = 0; finalPayMode = 'credit'; splitPayments = null;
+  } else {
+    var pCash = Math.max(0, parseFloat(document.getElementById('epm-amt-cash').value)||0);
+    var pUpi  = Math.max(0, parseFloat(document.getElementById('epm-amt-upi').value)||0);
+    var pCard = Math.max(0, parseFloat(document.getElementById('epm-amt-card').value)||0);
+    paid = pCash + pUpi + pCard;
+    var modes = [];
+    if (pCash>0) modes.push('cash'); if (pUpi>0) modes.push('upi'); if (pCard>0) modes.push('card');
+    finalPayMode = modes.length===1 ? modes[0] : (modes.length>1 ? 'split' : 'cash');
+    splitPayments = modes.length>1 ? {cash:pCash, upi:pUpi, card:pCard} : null;
+  }
   var total = editSelTests.reduce(function(s, t) { return s + (t.rate || 0); }, 0);
 
   // Build change summary for audit
@@ -2609,7 +2745,7 @@ function submitEditOrder() {
   if (name !== o.patientName) changes.push('Name: ' + o.patientName + ' → ' + name);
   if (phone !== (o.phone||'')) changes.push('Phone changed');
   if (ref !== (o.refBy||'')) changes.push('Ref: ' + (o.refBy||'-') + ' → ' + ref);
-  if (editPayMode !== o.payMode) changes.push('Payment: ' + o.payMode + ' → ' + editPayMode);
+  if (editPayMode !== o.payMode) changes.push('Payment: ' + o.payMode + ' → ' + finalPayMode);
   if (paid !== (o.paidAmount||0)) changes.push('Paid: Rs.' + o.paidAmount + ' → Rs.' + paid);
   if (disc !== (o.discount||0)) changes.push('Discount: Rs.' + (o.discount||0) + ' → Rs.' + disc);
   var oldTestNames = (o.tests||[]).map(function(t){return t.name;}).sort().join(',');
@@ -2631,7 +2767,7 @@ function submitEditOrder() {
     tests: editSelTests, totalAmount: total, discount: disc,
     netAmount: Math.max(0, total - disc), paidAmount: paid,
     dueAmount: Math.max(0, total - disc) - paid,
-    payMode: editPayMode, status: editPayMode === 'credit' ? 'pending' : 'paid',
+    payMode: finalPayMode, splitPayments: splitPayments, status: editCreditMode ? 'pending' : 'paid',
     lastEditedBy: amendment.byName, lastEditedAt: amendment.at,
     amendments: firebase.firestore.FieldValue.arrayUnion(amendment)
   };
@@ -3406,13 +3542,133 @@ function hoConfirmExecute() {
 }
 
 // ── EOD ──
+function showEODTab(tab) {
+  document.getElementById('eod-panel-summary').style.display = tab==='summary' ? 'block' : 'none';
+  document.getElementById('eod-panel-charges').style.display = tab==='charges' ? 'block' : 'none';
+  var s = document.getElementById('eod-tab-summary');
+  var c = document.getElementById('eod-tab-charges');
+  s.style.background = tab==='summary'?'var(--accent)':'var(--surface)';
+  s.style.color = tab==='summary'?'#fff':'var(--text2)';
+  s.style.borderColor = tab==='summary'?'var(--accent)':'var(--border-strong)';
+  c.style.background = tab==='charges'?'var(--accent)':'var(--surface)';
+  c.style.color = tab==='charges'?'#fff':'var(--text2)';
+  c.style.borderColor = tab==='charges'?'var(--accent)':'var(--border-strong)';
+  if (tab==='charges') loadCollectionCharges('daily');
+}
+
+var ccPeriod = 'daily';
+
+function showCCPeriod(period) {
+  ccPeriod = period;
+  var d = document.getElementById('cc-tab-daily');
+  var w = document.getElementById('cc-tab-weekly');
+  d.style.background = period==='daily'?'var(--accent)':'var(--surface)';
+  d.style.color = period==='daily'?'#fff':'var(--text2)';
+  d.style.borderColor = period==='daily'?'var(--accent)':'var(--border-strong)';
+  w.style.background = period==='weekly'?'var(--accent)':'var(--surface)';
+  w.style.color = period==='weekly'?'#fff':'var(--text2)';
+  w.style.borderColor = period==='weekly'?'var(--accent)':'var(--border-strong)';
+  loadCollectionCharges(period);
+}
+
+function loadCollectionCharges(period) {
+  var loading = document.getElementById('cc-loading');
+  var list = document.getElementById('cc-list');
+  loading.style.display = 'block';
+  list.innerHTML = '';
+
+  // Compute date range
+  var today = new Date();
+  var endStr = todayStr();
+  var startStr;
+  if (period === 'daily') {
+    startStr = endStr;
+  } else {
+    // This week — Monday to today
+    var day = today.getDay(); // 0=Sun
+    var diff = (day === 0) ? 6 : day - 1; // days since Monday
+    var monday = new Date(today);
+    monday.setDate(today.getDate() - diff);
+    startStr = monday.getFullYear() + '-' + String(monday.getMonth()+1).padStart(2,'0') + '-' + String(monday.getDate()).padStart(2,'0');
+  }
+
+  db.collection('orders')
+    .where('date', '>=', startStr)
+    .where('date', '<=', endStr)
+    .get()
+    .then(function(snap) {
+      // Group collection charges by user
+      var byUser = {}; // uid -> {name, total, orders: [{date, patient, amount}]}
+      snap.forEach(function(d) {
+        var o = d.data();
+        var cc = o.collectionCharge || 0;
+        if (!cc) return;
+        var uid = o.createdBy || 'unknown';
+        var name = o.createdByName || 'Unknown';
+        if (!byUser[uid]) byUser[uid] = { name: name, total: 0, orders: [] };
+        byUser[uid].total += cc;
+        byUser[uid].orders.push({
+          date: o.date || '',
+          patient: o.patientName || '-',
+          amount: cc,
+          source: o.source || ''
+        });
+      });
+
+      loading.style.display = 'none';
+      var users = Object.keys(byUser);
+      if (!users.length) {
+        list.innerHTML = '<div class="empty">No collection charges for this period</div>';
+        return;
+      }
+
+      // Sort by total desc
+      users.sort(function(a,b){ return byUser[b].total - byUser[a].total; });
+
+      // Grand total
+      var grandTotal = users.reduce(function(s,uid){ return s + byUser[uid].total; }, 0);
+
+      var html = '<div style="background:var(--accent-light);border:1px solid var(--accent);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">'
+        + '<div style="font-size:13px;font-weight:500">' + (period==='daily'?'Today':'This Week') + ' — Total</div>'
+        + '<div style="font-size:18px;font-weight:600;color:var(--accent)">Rs.' + grandTotal.toLocaleString('en-IN') + '</div>'
+        + '</div>';
+
+      users.forEach(function(uid) {
+        var u = byUser[uid];
+        // Sort orders by date desc
+        u.orders.sort(function(a,b){ return b.date.localeCompare(a.date); });
+        var ordersHtml = u.orders.map(function(o){
+          return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:0.5px solid var(--border)">'
+            + '<div><span style="color:var(--text3);font-family:var(--mono);font-size:10px">' + esc(o.date) + '</span> ' + esc(o.patient) + '</div>'
+            + '<div style="font-family:var(--mono);color:var(--blue,#2563EB);white-space:nowrap;margin-left:8px">Rs.' + o.amount.toLocaleString('en-IN') + '</div>'
+            + '</div>';
+        }).join('');
+
+        html += '<div class="card" style="margin-bottom:10px">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+            + '<div style="font-size:13px;font-weight:500">' + esc(u.name) + '</div>'
+            + '<div style="font-size:16px;font-weight:600;color:var(--accent);font-family:var(--mono)">Rs.' + u.total.toLocaleString('en-IN') + '</div>'
+          + '</div>'
+          + '<div style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-bottom:6px">' + u.orders.length + ' home collection' + (u.orders.length!==1?'s':'') + '</div>'
+          + ordersHtml
+          + '</div>';
+      });
+
+      list.innerHTML = html;
+    })
+    .catch(function(e) {
+      loading.style.display = 'none';
+      list.innerHTML = '<div class="empty">Error: ' + esc(e.message) + '</div>';
+    });
+}
+
 function loadEOD() {
   var today=todayStr();
   var d=new Date();
   document.getElementById('eod-date').textContent=today;
   db.collection('orders').where('date','==',today).get().then(function(snap){
-    var cash=0,upi=0,card=0,credit=0,total=0;
-    snap.forEach(function(doc){ var o=doc.data(); var paid=o.paidAmount||0; total+=paid;
+    var cash=0,upi=0,card=0,credit=0,total=0,coll=0;
+    snap.forEach(function(doc){ var o=doc.data(); var paid=o.paidAmount||0; total+=paid; coll+=(o.collectionCharge||0);
       if(o.payMode==='split'&&o.splitPayments){ cash+=(o.splitPayments.cash||0); upi+=(o.splitPayments.upi||0); card+=(o.splitPayments.card||0); }
       else if(o.payMode==='cash') cash+=paid; else if(o.payMode==='upi') upi+=paid; else if(o.payMode==='card') card+=paid; else if(o.payMode==='credit') credit+=(o.totalAmount||0); });
     var fmt=function(n){ return 'Rs.'+n.toLocaleString('en-IN'); };
@@ -3421,9 +3677,10 @@ function loadEOD() {
     document.getElementById('eod-upi').textContent=fmt(upi);
     document.getElementById('eod-card').textContent=fmt(card);
     document.getElementById('eod-credit').textContent=fmt(credit);
-    document.getElementById('eod-total').textContent=fmt(total);
+    document.getElementById('eod-coll').textContent=fmt(coll);
+    document.getElementById('eod-total').textContent=fmt(total+coll);
     var dateStr=d.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
-    var waLines = ['OnePLUS Ultrasound Lab - EOD Report', 'Date: '+dateStr, '', 'Total Orders: '+snap.size, 'Cash: '+fmt(cash), 'UPI: '+fmt(upi), 'Card: '+fmt(card), 'Credit: '+fmt(credit), '------------------------', 'Total Revenue: '+fmt(total), '', 'Prepared by '+((curProfile&&curProfile.name)||curUser.email), 'OnePLUS Lab Management System'];
+    var waLines = ['OnePLUS Ultrasound Lab - EOD Report', 'Date: '+dateStr, '', 'Total Orders: '+snap.size, 'Cash: '+fmt(cash), 'UPI: '+fmt(upi), 'Card: '+fmt(card), 'Credit: '+fmt(credit), 'Collection Charges: '+fmt(coll), '------------------------', 'Total Revenue: '+fmt(total+coll), '', 'Prepared by '+((curProfile&&curProfile.name)||curUser.email), 'OnePLUS Lab Management System'];
     var wa = waLines.join('\n');
     document.getElementById('wa-text').textContent=wa;
   }).catch(function(e){ document.getElementById('wa-text').textContent='Error loading: '+e.message; });

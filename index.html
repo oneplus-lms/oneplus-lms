@@ -336,15 +336,13 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <div class="field"><label>Age</label><input type="number" id="pt-age" placeholder="35" min="0" max="120"></div>
         <div class="field"><label>Sex</label><select id="pt-sex"><option value="">-</option><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
       </div>
-      <div class="field">
+      <div class="field" style="position:relative">
         <label>Referred by</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="text" id="pt-ref" placeholder="Dr name or self" autocomplete="off" style="flex:1">
-          <button type="button" onclick="openDoctorPicker('pt-ref')"
-            style="padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border-strong);background:var(--surface2);color:var(--text2);font-size:13px;cursor:pointer;white-space:nowrap">
-            &#128084; Pick
-          </button>
-        </div>
+        <input type="text" id="pt-ref" placeholder="Type doctor name to search..." autocomplete="off"
+          oninput="inlineDoctorSearch(this.value,'pt-ref','pt-ref-list')"
+          onfocus="if(this.value.length>=1)inlineDoctorSearch(this.value,'pt-ref','pt-ref-list')"
+          onblur="setTimeout(function(){hideDrList('pt-ref-list')},200)">
+        <div id="pt-ref-list" style="display:none;position:absolute;left:0;right:0;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,0.15);z-index:300;max-height:220px;overflow-y:auto;margin-top:2px"></div>
       </div>
       <div class="field">
         <label>Order Source</label>
@@ -692,15 +690,13 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="edit-section-lbl">Patient Info</div>
     <div class="field"><label>Patient Name</label><input type="text" id="edit-name" placeholder="Full name"></div>
     <div class="field"><label>Mobile</label><input type="tel" id="edit-phone" placeholder="9876543210" inputmode="numeric" maxlength="10"></div>
-    <div class="field">
+    <div class="field" style="position:relative">
       <label>Referred by</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="text" id="edit-ref" placeholder="Dr name or self" autocomplete="off" style="flex:1">
-        <button type="button" onclick="openDoctorPicker('edit-ref')"
-          style="padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border-strong);background:var(--surface2);color:var(--text2);font-size:13px;cursor:pointer;white-space:nowrap">
-          &#128084; Pick
-        </button>
-      </div>
+      <input type="text" id="edit-ref" placeholder="Type doctor name to search..." autocomplete="off"
+        oninput="inlineDoctorSearch(this.value,'edit-ref','edit-ref-list')"
+        onfocus="if(this.value.length>=1)inlineDoctorSearch(this.value,'edit-ref','edit-ref-list')"
+        onblur="setTimeout(function(){hideDrList('edit-ref-list')},200)">
+      <div id="edit-ref-list" style="display:none;position:absolute;left:0;right:0;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,0.15);z-index:300;max-height:220px;overflow-y:auto;margin-top:2px"></div>
     </div>
 
     <div class="edit-section-lbl">Tests</div>
@@ -2031,112 +2027,80 @@ async function clearDoctorRegistry() {
 
 
 var doctorPickerTargetId = null;
-var allDoctorsCache = null; // full list cached after first load
+// ── DOCTOR INLINE SEARCH ──
+var allDoctorsCache = null;
+var doctorPickerTargetId = null;
 
-function openDoctorPicker(targetInputId) {
-  doctorPickerTargetId = targetInputId;
-  document.getElementById('doctor-picker-bg').classList.add('open');
-  document.getElementById('doctor-picker-search').value = '';
-  document.getElementById('doctor-picker-list').innerHTML = '<div class="empty">Loading...</div>';
-  document.getElementById('doctor-picker-count').textContent = 'Loading...';
-  setTimeout(function(){ document.getElementById('doctor-picker-search').focus(); }, 300);
-  if (allDoctorsCache) {
-    renderDoctorPickerList(allDoctorsCache);
-  } else {
-    loadAllDoctors();
+function inlineDoctorSearch(val, inputId, listId) {
+  var input = document.getElementById(inputId);
+  var corrected = val.replace(/\bDr\.\s*/gi,'Dr ').replace(/([A-Za-z])\.([A-Za-z])/g,'$1 $2').replace(/\s{2,}/g,' ');
+  if (corrected !== val) {
+    var pos = input.selectionStart;
+    input.value = corrected;
+    try { input.setSelectionRange(pos, pos); } catch(e){}
+    val = corrected;
   }
-}
-
-function loadAllDoctors() {
-  db.collection('doctors').orderBy('name').get()
-    .then(function(snap) {
+  var el = document.getElementById(listId);
+  if (!val || val.trim().length < 1) { el.style.display = 'none'; return; }
+  if (allDoctorsCache) {
+    renderInlineList(val, el, inputId, listId);
+  } else {
+    el.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Loading...</div>';
+    el.style.display = 'block';
+    db.collection('doctors').orderBy('name').get().then(function(snap) {
       allDoctorsCache = [];
       snap.forEach(function(d){ allDoctorsCache.push(d.data()); });
-      renderDoctorPickerList(allDoctorsCache);
-    })
-    .catch(function(e) {
-      document.getElementById('doctor-picker-list').innerHTML = '<div class="empty">Could not load — check connection</div>';
-    });
+      renderInlineList(val, el, inputId, listId);
+    }).catch(function(){ el.style.display = 'none'; });
+  }
 }
 
-function filterDoctorPicker(query) {
-  if (!allDoctorsCache) return;
-  if (!query.trim()) {
-    renderDoctorPickerList(allDoctorsCache);
-    return;
-  }
-  var q = query.toLowerCase().replace(/^dr\.?\s*/i,'').trim();
-  var filtered = allDoctorsCache.filter(function(d){
-    return d.name && d.name.toLowerCase().indexOf(q) >= 0;
+function renderInlineList(val, el, inputId, listId) {
+  var q = val.toLowerCase().replace(/^dr\.?\s*/i,'').trim();
+  var results = !q ? [] : allDoctorsCache.filter(function(d){
+    return d.name && d.name.toLowerCase().replace(/^dr\s*/i,'').indexOf(q) >= 0;
   });
-  renderDoctorPickerList(filtered, query);
-}
-
-function renderDoctorPickerList(list, query) {
-  var el = document.getElementById('doctor-picker-list');
-  var count = document.getElementById('doctor-picker-count');
-  count.textContent = list.length.toLocaleString('en-IN') + ' doctors';
-  if (!list.length) {
-    el.innerHTML = '<div class="empty">No match — you can type the name directly in the field</div>';
-    return;
-  }
-  el.innerHTML = list.slice(0, 200).map(function(d) {
-    return '<div onclick="pickDoctor(\'' + esc(d.name).replace(/'/g,"\\'",'g') + '\')"'
-      + ' style="padding:11px 16px;cursor:pointer;border-bottom:0.5px solid var(--border);active:background:var(--surface2)">'
-      + '<div style="font-size:13px;font-weight:500;color:var(--text)">' + esc(d.name) + '</div>'
+  if (!results.length) { el.style.display = 'none'; return; }
+  var shown = results.slice(0, 80);
+  el.innerHTML = shown.map(function(d) {
+    var safe = esc(d.name).replace(/'/g,"&#39;");
+    return '<div onmousedown="pickInlineDoctor(\'' + safe + '\',\'' + inputId + '\',\'' + listId + '\')"'
+      + ' style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border)">'
+      + '<div style="font-size:13px;font-weight:500">' + esc(d.name) + '</div>'
       + (d.specialization && d.specialization !== 'nan' ? '<div style="font-size:11px;color:var(--text3)">' + esc(d.specialization) + '</div>' : '')
       + '</div>';
   }).join('');
-  if (list.length > 200) {
-    el.innerHTML += '<div style="padding:10px 16px;font-size:11px;color:var(--text3);font-family:var(--mono)">Showing first 200 of ' + list.length + ' — type to filter</div>';
+  if (results.length > 80) {
+    el.innerHTML += '<div style="padding:8px 14px;font-size:11px;color:var(--text3);font-family:var(--mono)">' + (results.length-80) + ' more — keep typing</div>';
   }
+  el.style.display = 'block';
 }
 
-function pickDoctor(name) {
-  if (doctorPickerTargetId) {
-    var input = document.getElementById(doctorPickerTargetId);
-    if (input) {
-      input.value = name;
-      addDoctorToRegistry(name);
-    }
-  }
-  closeDoctorPicker();
+function pickInlineDoctor(name, inputId, listId) {
+  document.getElementById(inputId).value = name;
+  hideDrList(listId);
+  addDoctorToRegistry(name);
 }
 
-function closeDoctorPicker() {
-  document.getElementById('doctor-picker-bg').classList.remove('open');
-  doctorPickerTargetId = null;
-}
-
-function normalizeDoctorInput(val) {
-  return val
-    .replace(/\bDr\.\s*/gi, 'Dr ')
-    .replace(/([A-Za-z])\.([A-Za-z])/g, '$1 $2')
-    .replace(/([A-Za-z])\.\s/g, '$1 ')
-    .replace(/\s{2,}/g, ' ');
+function hideDrList(listId) {
+  var el = document.getElementById(listId); if (el) el.style.display = 'none';
 }
 
 function addDoctorToRegistry(name) {
   if (!name || name.length < 3) return;
-  var normalized = normalizeDoctorInput(name).trim();
-  var docId = normalized.replace(/[^a-zA-Z0-9\s\(\)]/g,'').replace(/\s+/g,'-').toLowerCase().slice(0,100);
-  db.collection('doctors').doc(docId).set({
-    name: normalized, source: 'manual', active: true
-  }, {merge: true}).then(function(){
-    // Invalidate cache so new doctor appears next time
-    allDoctorsCache = null;
-  }).catch(function(){});
+  var docId = name.replace(/[^a-zA-Z0-9\s\(\)]/g,'').replace(/\s+/g,'-').toLowerCase().slice(0,100);
+  db.collection('doctors').doc(docId).set({name:name,source:'manual',active:true},{merge:true})
+    .then(function(){ allDoctorsCache=null; }).catch(function(){});
 }
 
 function registerDoctorFromOrder(refBy) {
   if (refBy && refBy.length > 2) addDoctorToRegistry(refBy);
 }
 
-// Remove old stubs no longer needed
-function searchDoctors(){}
-function hideDoctorSuggestions(){}
-function renderDoctorSuggestions(){}
-function selectDoctor(){}
+function openDoctorPicker(){}
+function closeDoctorPicker(){ var bg=document.getElementById('doctor-picker-bg'); if(bg) bg.classList.remove('open'); }
+function filterDoctorPicker(){}
+function pickDoctor(){}
 
 
 var isUrgent = false;

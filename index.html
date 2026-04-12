@@ -238,6 +238,11 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   <button id="load-retry" onclick="location.reload()" style="display:none;margin-top:12px;padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">Tap to retry</button>
 </div>
 
+<!-- Offline mode banner — shown when device has no connectivity -->
+<div id="offline-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:800;background:#92400E;color:#fff;font-size:12px;font-family:var(--mono);padding:8px 16px;text-align:center">
+  ⚡ Offline mode — orders will sync when connected
+</div>
+
 <!-- AUTH -->
 <div id="s-auth" class="screen">
   <div class="auth-wrap">
@@ -1127,17 +1132,37 @@ firebase.initializeApp(FB_CONFIG);
 var auth = firebase.auth();
 var db = firebase.firestore();
 
-// Kill old service workers
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(function(regs){
-    regs.forEach(function(r){ r.unregister(); });
+// Enable offline persistence — queues writes locally, syncs on reconnect
+db.enablePersistence({ synchronizeTabs: true })
+  .catch(function(err) {
+    if (err.code === 'failed-precondition') {
+      console.warn('Offline persistence unavailable: multiple tabs open');
+    } else if (err.code === 'unimplemented') {
+      console.warn('Offline persistence not supported in this browser');
+    }
   });
-  if ('caches' in window) {
-    caches.keys().then(function(keys){
-      keys.forEach(function(k){ caches.delete(k); });
-    });
+
+// Register service worker for app shell caching (offline load)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/oneplus-lms/sw.js')
+    .then(function(reg) { console.log('SW registered'); })
+    .catch(function(err) { console.warn('SW registration failed:', err); });
+}
+
+// Dynamic online/offline indicator
+function updateConnectivityUI() {
+  var dot = document.getElementById('sync-dot');
+  var banner = document.getElementById('offline-banner');
+  if (navigator.onLine) {
+    if (dot) { dot.textContent = '● Live'; dot.style.color = 'var(--green,#10B981)'; }
+    if (banner) banner.style.display = 'none';
+  } else {
+    if (dot) { dot.textContent = '● Offline'; dot.style.color = '#F59E0B'; }
+    if (banner) banner.style.display = 'block';
   }
 }
+window.addEventListener('online',  updateConnectivityUI);
+window.addEventListener('offline', updateConnectivityUI);
 
 // ── STATE ──
 var curUser = null;
@@ -1404,7 +1429,7 @@ function loadDash() {
   var name = curProfile && curProfile.name ? curProfile.name.split(' ')[0] : 'Doctor';
   document.getElementById('dash-greet').textContent = g + ', ' + name;
   document.getElementById('dash-role').textContent = (curProfile&&curProfile.role||'staff').toUpperCase() + ' - OnePLUS Pitampura';
-  document.getElementById('sync-dot').textContent = navigator.onLine ? 'Live' : 'Offline';
+  updateConnectivityUI();
   loadStats();
   loadRecent();
 }

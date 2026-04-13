@@ -610,7 +610,7 @@ function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v;
 
 rset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>OnePLUS LMS v19.2</title>
+<title>OnePLUS LMS v19.3</title>
 <!-- LMS v5.0 | Built 2026-04-10 | Node-verified -->
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2032,7 +2032,7 @@ if (typeof firebase === 'undefined') {
 
 // LabFlow — OnePLUS Ultrasound & Laboratory, Pitampura
 // Version: 17 | Built: 12 Apr 2026
-var APP_VERSION = 'v19.2';
+var APP_VERSION = 'v19.3';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4487,8 +4487,38 @@ function openTransferModal(idx) {
 function fieldTransferAction(idx, code) {
   var o = fieldOrders[idx];
   if (!o) return;
-  if (code === 0) acceptTransfer(o.id);
-  else rejectTransfer(o.id);
+  // Require PIN before accept or reject — same overlay used by handovers
+  _transferPinPending = {idx: idx, code: code, orderId: o.id,
+    fromName: o.fieldTransferPending ? (o.fieldTransferPending.fromName||'sender') : 'sender',
+    patientName: o.patientName||''};
+  var action = code === 0 ? 'Accept' : 'Reject';
+  var title = document.getElementById('ho-confirm-title');
+  var sub   = document.getElementById('ho-confirm-sub');
+  if (title) title.textContent = action + ' Transfer?';
+  if (sub)   sub.textContent   = action + ' task for ' + (o.patientName||'patient')
+    + ' from ' + (o.fieldTransferPending ? (o.fieldTransferPending.fromName||'sender') : 'sender')
+    + '. Enter your PIN to confirm.';
+  hoPinBuf = ''; hoUpdatePinDots();
+  var err = document.getElementById('ho-pin-err');
+  if (err) err.textContent = '';
+  // Override execute action temporarily
+  _hoExecuteOverride = _executeTransferPin;
+  document.getElementById('ho-confirm-overlay').style.display = 'flex';
+}
+
+var _transferPinPending = null;
+var _hoExecuteOverride  = null;
+
+function _executeTransferPin() {
+  if (!_transferPinPending) return;
+  var code = _transferPinPending.code;
+  var orderId = _transferPinPending.orderId;
+  _transferPinPending = null;
+  _hoExecuteOverride  = null;
+  document.getElementById('ho-confirm-overlay').style.display = 'none';
+  hoPinBuf = ''; hoUpdatePinDots();
+  if (code === 0) acceptTransfer(orderId);
+  else            rejectTransfer(orderId);
 }
 
 function acceptTransfer(orderId) {
@@ -4920,12 +4950,15 @@ function hoUpdatePinDots() {
   }
 }
 function hoConfirmExecute() {
-  if (!hoPendingAction || hoPinBuf.length < 4) return;
+  if (hoPinBuf.length < 4) return;
   var storedPin = curProfile && curProfile.pin ? curProfile.pin : '';
   if (storedPin && hoPinBuf !== storedPin) {
     document.getElementById('ho-pin-err').textContent = 'Incorrect PIN';
     hoPinBuf = ''; hoUpdatePinDots(); return;
   }
+  // If a transfer PIN override is active, route there instead
+  if (_hoExecuteOverride) { _hoExecuteOverride(); return; }
+  if (!hoPendingAction) return;
   var action = hoPendingAction.action;
   var hvid = hoPendingAction.hvid;
   hoConfirmCancel();

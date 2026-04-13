@@ -2042,7 +2042,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.9';
+var APP_VERSION = 'v19.10';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3589,24 +3589,32 @@ function submitOrder() {
     splitPayments = (modes.length > 1) ? {cash: pCash, upi: pUpi, card: pCard} : null;
   }
   var order={
-    patientName:curOrder.patientName, age:curOrder.age||'', sex:curOrder.sex||'',
-    phone:curOrder.phone||'', refBy:curOrder.refBy||'', tests:curOrder.tests,
-    source:curOrder.source||'Walk-in', address:curOrder.address||'', gps:curOrder.gps||null,
-    totalAmount:curOrder.totalAmount, testTotal:curOrder.testTotal||curOrder.totalAmount, collectionCharge:curOrder.collectionCharge||0, discount:disc,
-    netAmount:netAmt,
-    paidAmount:paid, dueAmount:dueAmt,
-    payMode:finalPayMode, splitPayments:splitPayments, discountType:discType,
-    rxPhotos:rxPhotos.length?rxPhotos:[], rxPhoto:rxPhotos[0]||'', paymentProof:proofPhotoB64||'', notes:document.getElementById('bill-notes').value,
-    history:curOrder.history||{},
-    date:todayStr(), createdAt:firebase.firestore.FieldValue.serverTimestamp(),
-    createdBy:curUser.uid, createdByName:(curProfile&&curProfile.name)||curUser.email,
-    status:creditMode?'pending':'paid',
-    urgent: isUrgent,
-    // Assignment included atomically — no race condition
+    patientName: curOrder.patientName || '',
+    age:         curOrder.age         || '',
+    sex:         curOrder.sex         || '',
+    phone:       curOrder.phone       || '',
+    refBy:       curOrder.refBy       || '',
+    tests:       curOrder.tests       || selTests,
+    source:      curOrder.source      || 'Walk-in',
+    address:     curOrder.address     || '',
+    gps:         curOrder.gps         || null,
+    totalAmount:  curOrder.totalAmount  || 0,
+    testTotal:    curOrder.testTotal    || curOrder.totalAmount || 0,
+    collectionCharge: curOrder.collectionCharge || 0,
+    discount: disc,
+    netAmount: netAmt,
+    paidAmount: paid, dueAmount: dueAmt,
+    payMode: finalPayMode, splitPayments: splitPayments || null, discountType: discType || 'amt',
+    rxPhotos: [], rxPhoto: '', paymentProof: '',
+    notes: document.getElementById('bill-notes').value || '',
+    history: curOrder.history || {},
+    date: todayStr(), createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    createdBy: curUser.uid, createdByName: (curProfile&&curProfile.name) || curUser.email,
+    status: creditMode ? 'pending' : 'paid',
+    urgent: isUrgent || false,
     fieldAssignedToUid:  curOrder._fieldAssignedToUid  || null,
     fieldAssignedToName: curOrder._fieldAssignedToName || null,
-    fieldAssignedAt: curOrder._fieldAssignedToUid
-      ? firebase.firestore.FieldValue.serverTimestamp() : null
+    fieldAssignedAt: curOrder._fieldAssignedToUid ? firebase.firestore.FieldValue.serverTimestamp() : null
   };
   // Atomically get next serial number for today, then save order
   var counterRef = db.collection('counters').doc(todayStr());

@@ -105,12 +105,12 @@
     <div id="step1">
       <div style="background:var(--accent);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px">
         <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px">Panel / Rate</div>
-        <div style="display:flex;gap:6px">
-          <button id="panel-btn-standard" onclick="setPanelAndRecalc('standard')" style="flex:1;padding:7px 2px;font-size:11px;border-radius:6px;border:1.5px solid #fff;background:#fff;color:var(--accent);cursor:pointer;font-weight:700">Standard</button>
-          <button id="panel-btn-jk" onclick="setPanelAndRecalc('jk')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">Dr J K Gupta</button>
-          <button id="panel-btn-du" onclick="setPanelAndRecalc('du')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">DU Panel</button>
-          <button id="panel-btn-sh" onclick="setPanelAndRecalc('sh')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">Dr Shalini Gupta</button>
-        </div>
+        <select id="panel-select" onchange="setPanelAndRecalc(this.value)" style="width:100%;padding:8px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.4);background:rgba(255,255,255,0.12);color:#fff;font-size:13px;font-family:var(--mono);cursor:pointer;appearance:auto">
+          <option value="standard" style="background:#1A4A3A;color:#fff">Standard</option>
+          <option value="jk" style="background:#1A4A3A;color:#fff">Dr J K Gupta</option>
+          <option value="du" style="background:#1A4A3A;color:#fff">DU Panel</option>
+          <option value="sh" style="background:#1A4A3A;color:#fff">Dr Shalini Gupta</option>
+        </select>
       </div>
       <div class="field"><label>Mobile *</label><input type="tel" id="pt-phone" placeholder="9876543210" maxlength="10" inputmode="numeric" oninput="scheduleRepeatCheck()" onblur="checkRepeatPatient()"><div class="ferr" id="err-phone"></div></div>
       <div id="repeat-patient-banner" style="display:none;background:#F0FDF4;border:1px solid #86EFAC;border-radius:var(--radius);padding:10px 12px;margin-bottom:10px;cursor:pointer" onclick="fillRepeatPatient()">
@@ -452,12 +452,12 @@
     <!-- Panel selector (reuses same panel system) -->
     <div style="background:var(--accent);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px">
       <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px">Panel / Rate</div>
-      <div style="display:flex;gap:6px">
-        <button id="est-panel-btn-standard" onclick="setEstPanel('standard')" style="flex:1;padding:7px 2px;font-size:11px;border-radius:6px;border:1.5px solid #fff;background:#fff;color:var(--accent);cursor:pointer;font-weight:700">Standard</button>
-        <button id="est-panel-btn-jk" onclick="setEstPanel('jk')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">Dr J K Gupta</button>
-        <button id="est-panel-btn-du" onclick="setEstPanel('du')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">DU Panel</button>
-        <button id="est-panel-btn-sh" onclick="setEstPanel('sh')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">Dr Shalini Gupta</button>
-      </div>
+      <select id="est-panel-select" onchange="setEstPanel(this.value)" style="width:100%;padding:8px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.4);background:rgba(255,255,255,0.12);color:#fff;font-size:13px;font-family:var(--mono);cursor:pointer;appearance:auto">
+        <option value="standard" style="background:#1A4A3A;color:#fff">Standard</option>
+        <option value="jk" style="background:#1A4A3A;color:#fff">Dr J K Gupta</option>
+        <option value="du" style="background:#1A4A3A;color:#fff">DU Panel</option>
+        <option value="sh" style="background:#1A4A3A;color:#fff">Dr Shalini Gupta</option>
+      </select>
     </div>
 
     <!-- Patient info (optional for estimate) -->
@@ -1206,6 +1206,8 @@ var estHits = [];
 
 function setEstPanel(panel) {
 estPanel = panel;
+var esel = document.getElementById('est-panel-select');
+if (esel) esel.value = panel;
 ['standard','jk','du','sh'].forEach(function(id) {
 var btn = document.getElementById('est-panel-btn-'+id);
 if (!btn) return;
@@ -1796,7 +1798,7 @@ return '<div style="background:var(--surface);border:0.5px solid var(--border);b
 
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
-var APP_VERSION = 'v19.17';
+var APP_VERSION = 'v19.18';
 
 var _dataLoaded = false;
 var _dataLoadCallbacks = [];
@@ -2306,6 +2308,9 @@ return null;
 }
 
 function setPanelButtons() {
+var sel = document.getElementById('panel-select');
+if (sel) sel.value = curPanel;
+// legacy button sync (no-op if buttons removed)
 ['standard','jk','du','sh'].forEach(function(id) {
 var btn = document.getElementById('panel-btn-'+id);
 if (!btn) return;

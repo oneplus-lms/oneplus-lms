@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard — OnePLUS</title>
+<title>LabFlow Dashboard v18.1 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -96,7 +96,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
 <div id="main">
   <div class="topbar">
-    <div><div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow</div>
+    <div><div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v18.1</span></div>
     <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div></div>
     <div class="tb-right">
       <div class="live" title="Live"></div>
@@ -378,10 +378,12 @@ function renderTable(orders){
     var ub=o.urgent?'<span class="b br">URG</span> ':'';
     var sb=o.payMode==='credit'?'<span class="b bgo">Credit</span>':'<span class="b bg">Paid</span>';
     if(o.amendments&&o.amendments.length)sb+=' <span style="font-size:10px;color:var(--amber)" title="Amended">✎</span>';
+    var panelNames={jk:'JK Gupta',du:'DU Panel',sh:'Shalini Gupta'};
+    var panelBadge=(o.panel&&o.panel!=='standard'&&panelNames[o.panel])?'<span style="font-size:9px;font-family:var(--mono);background:#EEF2FF;color:#3730A3;border-radius:4px;padding:1px 5px;margin-left:4px">'+panelNames[o.panel]+'</span>':'';
     var rxp=(o.rxPhotos&&o.rxPhotos.length)?o.rxPhotos.length:(o.rxPhoto?1:0);
     var cc=o.collectionCharge||0;
     var mainRow='<tr>'
-      +'<td><div style="font-weight:500">'+ub+esc(o.patientName)+'</div><div style="font-size:10px;color:var(--text3)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+'</div></td>'
+      +'<td><div style="font-weight:500">'+ub+esc(o.patientName)+panelBadge+'</div><div style="font-size:10px;color:var(--text3)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+'</div></td>'
       +'<td style="font-size:11px;color:var(--text2);max-width:180px">'+testsCell+'</td>'
       +'<td>'+src+'</td>'
       +'<td style="font-family:var(--mono);font-weight:500">'+fmt(o.paidAmount)+'</td>'

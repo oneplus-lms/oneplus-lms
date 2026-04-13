@@ -2,7 +2,6 @@
 const CACHE_NAME = 'labflow-v19.18';
 
 const PRECACHE = [
-  '/oneplus-lms/',
   '/oneplus-lms/index.html',
   '/oneplus-lms/manifest.json',
   '/oneplus-lms/icon-192.png',

@@ -545,7 +545,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
           </div>
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-size:11px;color:var(--text3)">Rs.</span>
-            <input type="number" id="collection-charge" value="100" min="0" inputmode="numeric"
+            <input type="number" id="collection-charge" placeholder="0" min="0" inputmode="numeric"
               style="width:70px;padding:5px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:14px;font-weight:500;font-family:var(--mono);text-align:right"
               oninput="updateBillTotal()">
           </div>
@@ -1611,11 +1611,9 @@ function convertEstimateToOrder() {
   setPanelButtons();
   updateBillTotal();
 
-  // Pre-fill patient fields so user can review before going back to step 1 if needed
-  setTimeout(function(){
-    if (name) document.getElementById('pt-name').value = name;
-    if (phone) document.getElementById('pt-phone').value = phone;
-  }, 50);
+  // Fill patient fields immediately (synchronous — so submitOrder can read them)
+  if (name) document.getElementById('pt-name').value = name;
+  if (phone) document.getElementById('pt-phone').value = phone;
 
   toast('Estimate loaded — ' + testsToLoad.length + ' test' + (testsToLoad.length !== 1 ? 's' : '') + ' copied. Fill patient details to continue.', 'ok');
 }
@@ -2042,7 +2040,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.12';
+var APP_VERSION = 'v19.15';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3576,6 +3574,15 @@ async function uploadOrderPhotos(orderId, rxPhotos, proofB64) {
 }
 
 function submitOrder() {
+  // Read patient fields from DOM in case step1Next was skipped (e.g. estimate conversion)
+  if (!curOrder.patientName) curOrder.patientName = (document.getElementById('pt-name').value||'').trim();
+  if (!curOrder.phone)       curOrder.phone       = (document.getElementById('pt-phone').value||'').trim();
+  if (!curOrder.age)         curOrder.age         = document.getElementById('pt-age').value||'';
+  if (!curOrder.sex)         curOrder.sex         = document.getElementById('pt-sex').value||'';
+  if (!curOrder.refBy)       curOrder.refBy       = document.getElementById('pt-ref').value||'';
+  if (!curOrder.source)      curOrder.source      = document.getElementById('pt-source').value||'Walk-in';
+  if (!curOrder.address)     curOrder.address     = (document.getElementById('pt-address').value||'').trim();
+  if (!curOrder.history)     curOrder.history     = {};
   var disc=parseFloat(document.getElementById('discount').value||0);
   // Block if discount approval is pending
   var total = curOrder.totalAmount || 0;
@@ -4407,7 +4414,11 @@ function downloadTRFpdf() {
   if (o.discount>0) pdfPayLabel += ' | Discount: Rs.'+o.discount;
   doc.text('Payment: '+pdfPayLabel, ml+4, y+7);
   doc.setFont('helvetica','bold'); doc.setFontSize(13);
-  doc.text('Rs. '+(o.paidAmount||0).toLocaleString('en-IN'), pw-mr-4, y+10, {align:'right'});
+  if (o.dueAmount > 0) {
+    doc.text('Rs. '+(o.paidAmount||0).toLocaleString('en-IN') + ' | DUE Rs.'+(o.dueAmount||0).toLocaleString('en-IN'), pw-mr-4, y+10, {align:'right'});
+  } else {
+    doc.text('Rs. '+(o.paidAmount||0).toLocaleString('en-IN'), pw-mr-4, y+10, {align:'right'});
+  }
   y += 22;
 
   // Clinical history

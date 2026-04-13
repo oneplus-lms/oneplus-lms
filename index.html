@@ -1581,26 +1581,29 @@ function shareEstimateWAAny() {
   window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
 }
 
+var _fromEstimate = false;
+
 function convertEstimateToOrder() {
   if (!estTests.length) { toast('Add at least one test','warn'); return; }
-  // Pre-fill order form with estimate data and navigate
-  curOrder = {};
-  selTests = estTests.map(function(t){ return Object.assign({},t); });
-  curPanel = estPanel;
   var name = document.getElementById('est-name').value.trim();
   var phone = document.getElementById('est-phone').value.trim();
-  var disc = calcEstimate().disc;
+  var testsToLoad = estTests.map(function(t){ return Object.assign({},t); });
+  var panelToLoad = estPanel;
+  // Flag prevents showScreen from wiping selTests on navigation
+  _fromEstimate = true;
+  curOrder = {};
+  selTests = testsToLoad;
+  curPanel = panelToLoad;
   goTo('s-order');
+  _fromEstimate = false;
   showStep(1);
-  // Fill patient fields after navigation
+  renderTests();
   setTimeout(function(){
     if (name) document.getElementById('pt-name').value = name;
     if (phone) document.getElementById('pt-phone').value = phone;
     setPanelButtons();
-    // Skip to step 2 since tests are pre-loaded
-    step1Next();
-  }, 100);
-  toast('Estimate loaded — complete patient details','ok');
+  }, 50);
+  toast('Estimate loaded — ' + testsToLoad.length + ' test' + (testsToLoad.length !== 1 ? 's' : '') + ' copied', 'ok');
 }
 
 // Reset estimate when navigating to it
@@ -2025,7 +2028,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.5';
+var APP_VERSION = 'v19.6';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -2153,7 +2156,7 @@ function showScreen(id) {
   if (id === 's-eod') loadEOD();
   if (id === 's-admin') loadAdminScreen();
   if (id === 's-field') loadField();
-  if (id === 's-order') { curOrder={}; selTests=[]; curPanel='standard'; showStep(1); renderTests(); setPanelButtons(); }
+  if (id === 's-order' && !_fromEstimate) { curOrder={}; selTests=[]; curPanel='standard'; showStep(1); renderTests(); setPanelButtons(); }
   if (id === 's-estimate') { initEstimateScreen(); }
   if (id === 's-review') { loadReview(); }
   if (id === 's-phlebo') { startPhleboDash(); }

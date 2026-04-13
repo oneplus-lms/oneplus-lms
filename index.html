@@ -1593,7 +1593,7 @@ function convertEstimateToOrder() {
 
   // Navigate to order screen — flag stops showScreen from resetting state
   _fromEstimate = true;
-  curOrder = {};
+  curOrder = { _fromEstimate: true };
   selTests = testsToLoad;
   curPanel = panelToLoad;
   goTo('s-order');
@@ -2042,7 +2042,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.10';
+var APP_VERSION = 'v19.12';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3526,6 +3526,24 @@ function clearPhoto(type) {
     document.getElementById('proof-input').value = '';
   }
 }
+// ── FIRESTORE SAFETY: strip undefined values recursively ────────────────
+function cleanForFirestore(obj) {
+  if (Array.isArray(obj)) {
+    return obj.map(function(v) { return cleanForFirestore(v); });
+  }
+  if (obj !== null && typeof obj === 'object' &&
+      !(obj.constructor && obj.constructor.name === 'FieldValue') &&
+      !(typeof obj.toMillis === 'function')) {
+    var clean = {};
+    Object.keys(obj).forEach(function(k) {
+      var v = obj[k];
+      if (v !== undefined) clean[k] = cleanForFirestore(v);
+    });
+    return clean;
+  }
+  return obj === undefined ? null : obj;
+}
+
 // ── PHOTO UPLOAD TO FIREBASE STORAGE ────────────────────────────────────
 async function uploadOrderPhotos(orderId, rxPhotos, proofB64) {
   try {
@@ -3638,7 +3656,8 @@ function submitOrder() {
     order.rxPhotos = [];
     order.rxPhoto = '';
     order.paymentProof = '';
-    return db.collection('orders').add(order).then(function(ref) {
+    var safeOrder = cleanForFirestore(order);
+    return db.collection('orders').add(safeOrder).then(function(ref) {
       // Upload photos to Storage in background — don't block order confirmation
       uploadOrderPhotos(ref.id, photosToUpload, proofToUpload);
       return ref;
@@ -5746,7 +5765,9 @@ function toggleMed(m) {
 
 function step1bNext() {
   curOrder.history = Object.assign({}, curHistory);
-  selTests=[]; curPanel='standard'; renderTests(); showStep(2); setPanelButtons();
+  // Only reset tests if NOT coming from estimate conversion
+  if (!_fromEstimate && !curOrder._fromEstimate) { selTests=[]; curPanel='standard'; }
+  renderTests(); showStep(2); setPanelButtons();
 }
 
 // ── ADMIN / STAFF MANAGEMENT ──

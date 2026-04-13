@@ -1,622 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta cha
-// ── ESTIMATE GENERATOR ────────────────────────────────────────────────────
-var estPanel = 'standard';
-var estTests = [];
-var estDiscType = 'amt';
-var estHits = [];
-
-function setEstPanel(panel) {
-  estPanel = panel;
-  ['standard','jk','du','sh'].forEach(function(id) {
-    var btn = document.getElementById('est-panel-btn-'+id);
-    if (!btn) return;
-    var active = id === panel;
-    btn.style.background = active ? '#fff' : 'transparent';
-    btn.style.color = active ? 'var(--accent)' : '#fff';
-    btn.style.borderColor = active ? '#fff' : 'rgba(255,255,255,0.35)';
-    btn.style.fontWeight = active ? '700' : '400';
-  });
-  // Recalculate rates for already-added tests
-  estTests = estTests.map(function(t) {
-    var key = (t.dept||'').toUpperCase()+'|'+(t.name||'').toUpperCase();
-    var p = PANELS[key];
-    var panelRate = p ? (panel==='jk'?p.jk:panel==='du'?p.du:panel==='sh'?p.sh:null) : null;
-    return Object.assign({}, t, { rate: panelRate !== null && panelRate !== undefined ? panelRate : t.stdRate });
-  });
-  renderEstTests();
-  calcEstimate();
-}
-
-function setEstDiscType(type) {
-  estDiscType = type;
-  document.getElementById('est-disc-type-amt').style.background = type==='amt' ? 'var(--accent)' : 'var(--surface)';
-  document.getElementById('est-disc-type-amt').style.color = type==='amt' ? '#fff' : 'var(--text2)';
-  document.getElementById('est-disc-type-pct').style.background = type==='pct' ? 'var(--accent)' : 'var(--surface)';
-  document.getElementById('est-disc-type-pct').style.color = type==='pct' ? '#fff' : 'var(--text2)';
-  calcEstimate();
-}
-
-function searchEstTests(val) {
-  var el = document.getElementById('est-test-suggest');
-  if (!val || val.length < 1) { el.style.display='none'; return; }
-  if (!_dataLoaded) {
-    el.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Loading catalogue...</div>';
-    el.style.display = 'block'; return;
-  }
-  var lq = val.toLowerCase();
-  var scoredEst = [];
-  CATALOGUE.forEach(function(t) {
-    var n = t.name.toLowerCase();
-    var s = (t.short||'').toLowerCase();
-    if (n.indexOf(lq) === 0) scoredEst.push({t:t, rank:0});
-    else if (n.indexOf(lq) >= 0) scoredEst.push({t:t, rank:1});
-    else if (s && s.indexOf(lq) >= 0) scoredEst.push({t:t, rank:2});
-  });
-  scoredEst.sort(function(a,b){ return a.rank-b.rank; });
-  estHits = scoredEst.slice(0,10).map(function(x){ return x.t; });
-  if (!estHits.length) { el.style.display='none'; return; }
-  el.style.display='block';
-  el.innerHTML = estHits.map(function(t,i) {
-    var key = (t.dept||'').toUpperCase()+'|'+(t.name||'').toUpperCase();
-    var p = PANELS[key];
-    var panelRate = p ? (estPanel==='jk'?p.jk:estPanel==='du'?p.du:estPanel==='sh'?p.sh:null) : null;
-    var rate = panelRate !== null && panelRate !== undefined ? panelRate : (t.rate||0);
-    return '<div onmousedown="addEstTest('+i+')" ontouchstart="addEstTest('+i+')"'
-      +' style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
-      +'<div><div style="font-size:13px;font-weight:500">'+esc(t.name)+'</div>'
-      +'<div style="font-size:11px;color:var(--text3)">'+esc(t.dept)+'</div></div>'
-      +'<div style="font-family:var(--mono);font-size:12px;color:var(--accent)">Rs.'+rate+'</div>'
-      +'</div>';
-  }).join('');
-}
-
-function addEstTest(i) {
-  var t = estHits[i];
-  if (!t) return;
-  if (estTests.find(function(x){ return x.name===t.name; })) { toast('Already added','warn'); return; }
-  var key = (t.dept||'').toUpperCase()+'|'+(t.name||'').toUpperCase();
-  var p = PANELS[key];
-  var panelRate = p ? (estPanel==='jk'?p.jk:estPanel==='du'?p.du:estPanel==='sh'?p.sh:null) : null;
-  var stdRate = t.rate || 0;
-  var rate = panelRate !== null && panelRate !== undefined ? panelRate : stdRate;
-  estTests.push(Object.assign({}, t, {rate: rate, stdRate: stdRate}));
-  document.getElementById('est-test-q').value='';
-  document.getElementById('est-test-suggest').style.display='none';
-  renderEstTests();
-  calcEstimate();
-}
-
-function removeEstTest(i) {
-  estTests.splice(i,1);
-  renderEstTests();
-  calcEstimate();
-}
-
-function renderEstTests() {
-  var el = document.getElementById('est-sel-tests');
-  if (!el) return;
-  el.innerHTML = estTests.length ? estTests.map(function(t,i) {
-    return '<div class="chip"><div><div style="font-size:13px;font-weight:500">'+esc(t.name)+'</div>'
-      +'<div style="font-size:11px;color:var(--text3);font-family:var(--mono)">'+esc(t.dept)+'</div></div>'
-      +'<div style="display:flex;align-items:center;gap:8px">'
-      +'<div style="font-size:13px;color:var(--text2)">Rs.'+(t.rate||0)+'</div>'
-      +'<button class="chip-del" onclick="removeEstTest('+i+')">x</button></div></div>';
-  }).join('') : '<div style="color:var(--text3);font-size:13px;text-align:center;padding:12px">No tests added</div>';
-}
-
-function calcEstimate() {
-  var gross = estTests.reduce(function(s,t){ return s+(t.rate||0); },0);
-  var discVal = parseFloat(document.getElementById('est-discount').value||0)||0;
-  var disc = estDiscType==='pct' ? Math.round(gross*discVal/100) : discVal;
-  disc = Math.min(disc, gross);
-  var net = Math.max(0, gross-disc);
-  document.getElementById('est-total').textContent = 'Rs.'+net.toLocaleString('en-IN');
-  var discCalc = document.getElementById('est-disc-calc');
-  var noteEl = document.getElementById('est-note');
-  if (disc > 0) {
-    discCalc.textContent = '− Rs.'+disc.toLocaleString('en-IN');
-    noteEl.textContent = 'After Rs.'+disc.toLocaleString('en-IN')+' discount';
-  } else { discCalc.textContent=''; noteEl.textContent=''; }
-  return {gross:gross, disc:disc, net:net};
-}
-
-function buildEstimateText() {
-  var vals = calcEstimate();
-  var name = document.getElementById('est-name').value.trim();
-  var panelLabel = PANEL_NAMES[estPanel]||'Standard';
-  var lines = [];
-  lines.push('*OnePLUS Ultrasound & Lab — Estimate*');
-  if (name) lines.push('*Patient:* '+name);
-  lines.push('*Panel:* '+panelLabel);
-  lines.push('*Date:* '+new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}));
-  lines.push('');
-  lines.push('*Tests:*');
-  estTests.forEach(function(t) {
-    lines.push('  - '+t.name+' — Rs.'+(t.rate||0).toLocaleString('en-IN'));
-  });
-  lines.push('');
-  if (vals.disc > 0) {
-    lines.push('Gross: Rs.'+vals.gross.toLocaleString('en-IN'));
-    lines.push('Discount: − Rs.'+vals.disc.toLocaleString('en-IN'));
-  }
-  lines.push('*Total: Rs.'+vals.net.toLocaleString('en-IN')+'*');
-  lines.push('');
-  lines.push('_OnePLUS Ultrasound & Laboratory, Pitampura_');
-  lines.push('_011-4248 0101_');
-  lines.push('_'+fmtTimestamp()+'_');
-  return lines.join('\n');
-}
-
-function shareEstimateWA() {
-  if (!estTests.length) { toast('Add at least one test','warn'); return; }
-  var phone = document.getElementById('est-phone').value.replace(/\D/g,'');
-  var waNum = phone.length===10 ? '91'+phone : phone.length===12&&phone.startsWith('91') ? phone : '';
-  if (!waNum) { toast('Enter a valid 10-digit mobile number','warn'); document.getElementById('est-phone').focus(); return; }
-  var text = buildEstimateText();
-  window.open('https://wa.me/'+waNum+'?text='+encodeURIComponent(text),'_blank');
-}
-
-function shareEstimateWAAny() {
-  if (!estTests.length) { toast('Add at least one test','warn'); return; }
-  var text = buildEstimateText();
-  window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
-}
-
-function convertEstimateToOrder() {
-  if (!estTests.length) { toast('Add at least one test','warn'); return; }
-  // Pre-fill order form with estimate data and navigate
-  curOrder = {};
-  selTests = estTests.map(function(t){ return Object.assign({},t); });
-  curPanel = estPanel;
-  var name = document.getElementById('est-name').value.trim();
-  var phone = document.getElementById('est-phone').value.trim();
-  var disc = calcEstimate().disc;
-  goTo('s-order');
-  showStep(1);
-  // Fill patient fields after navigation
-  setTimeout(function(){
-    if (name) document.getElementById('pt-name').value = name;
-    if (phone) document.getElementById('pt-phone').value = phone;
-    setPanelButtons();
-    // Skip to step 2 since tests are pre-loaded
-    step1Next();
-  }, 100);
-  toast('Estimate loaded — complete patient details','ok');
-}
-
-// Reset estimate when navigating to it
-var _origGoTo = goTo;
-// Hook goTo for s-estimate reset
-function initEstimateScreen() {
-  estPanel='standard'; estTests=[]; estDiscType='amt'; estHits=[];
-  var nameEl=document.getElementById('est-name'); if(nameEl) nameEl.value='';
-  var phoneEl=document.getElementById('est-phone'); if(phoneEl) phoneEl.value='';
-  var discEl=document.getElementById('est-discount'); if(discEl) discEl.value='';
-  var qEl=document.getElementById('est-test-q'); if(qEl) qEl.value='';
-  renderEstTests(); calcEstimate(); setEstPanel('standard');
-}
-
-// ── ROLE-BASED ROUTING + MANAGER + PHLEBOTOMIST HOME ──────────────────────
-function routeAfterPin(role) {
-  var vspan = document.getElementById('app-version-p');
-  if (vspan) vspan.textContent = APP_VERSION;
-
-  if (role === 'phlebotomist') {
-    goTo('s-dash', false); stack=['s-dash'];
-    loadDash();
-    var fieldBtnP = document.getElementById('field-btn');
-    var adminBtnP = document.getElementById('admin-btn');
-    var reviewBtnP = document.getElementById('review-btn');
-    if (fieldBtnP) fieldBtnP.style.display = 'block';
-    if (adminBtnP) adminBtnP.style.display = 'none';
-    if (reviewBtnP) reviewBtnP.style.display = 'none';
-    goTo('s-phlebo'); startPhleboDash();
-  } else {
-    goTo('s-dash', false); stack=['s-dash'];
-    loadDash();
-    // Show/hide buttons
-    var adminBtn = document.getElementById('admin-btn');
-    var reviewBtn = document.getElementById('review-btn');
-    var fieldBtn = document.getElementById('field-btn');
-    if (adminBtn) adminBtn.style.display = (role==='admin') ? 'block' : 'none';
-    if (reviewBtn) reviewBtn.style.display = (role==='admin'||role==='manager') ? 'block' : 'none';
-    if (fieldBtn) fieldBtn.style.display = 'block'; // all roles see field tasks
-    // Manager sees staff list (read-only) via admin screen but no add/edit buttons
-  }
-}
-
-// ── PHLEBOTOMIST DASHBOARD ────────────────────────────────────────────────
-var phleboDashUnsub = null;
-var URGENT_LATE_MINS = 30;
-
-function startPhleboDash() {
-  if (phleboDashUnsub) { phleboDashUnsub(); phleboDashUnsub=null; }
-  var myUid = curUser && curUser.uid;
-  var today = todayStr();
-  phleboDashUnsub = db.collection('orders')
-    .where('date','==',today)
-    .where('source','in',['Home Collection','Hospital Collection'])
-    .onSnapshot(function(snap) {
-      var orders = [];
-      snap.forEach(function(d) {
-        var o = Object.assign({id:d.id}, d.data());
-        // Show orders assigned to me OR created by me (if unassigned)
-        var assignedToMe = o.fieldAssignedToUid === myUid;
-        var createdByMe = o.createdBy === myUid;
-        var unassigned = !o.fieldAssignedToUid;
-        var pendingToMe = o.fieldTransferPending && o.fieldTransferPending.toUid === myUid;
-        if (assignedToMe || (createdByMe && unassigned) || pendingToMe) orders.push(o);
-      });
-      // Sort: urgent pending first, then pending by time, then collected, then delivered
-      orders.sort(function(a,b) {
-        var rank = function(o) {
-          if (o.fieldStatus==='delivered') return 3;
-          if (o.fieldStatus==='collected') return 2;
-          return o.urgent ? 0 : 1;
-        };
-        return rank(a)-rank(b);
-      });
-      renderPhleboDash(orders);
-    });
-}
-
-function renderPhleboDash(orders) {
-  var pending   = orders.filter(function(o){ return !o.fieldStatus&&!o.fieldTransferPending; });
-  var collected = orders.filter(function(o){ return o.fieldStatus==='collected'; });
-  var delivered = orders.filter(function(o){ return o.fieldStatus==='delivered'; });
-
-  function setEl(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
-  setEl('ph-total', orders.length);
-  setEl('ph-pending', pending.length);
-  setEl('ph-collected', collected.length);
-  setEl('ph-delivered', delivered.length);
-
-  // Late urgent alert
-  var now = Date.now();
-  var lateUrgent = pending.filter(function(o) {
-    if (!o.urgent) return false;
-    if (!o.fieldAssignedAt) return false;
-    var at = o.fieldAssignedAt.toMillis ? o.fieldAssignedAt.toMillis() : 0;
-    return (now - at) > URGENT_LATE_MINS * 60000;
-  });
-  var lateEl = document.getElementById('ph-late-alert');
-  if (lateEl) lateEl.style.display = lateUrgent.length ? 'block' : 'none';
-
-  // Render task cards
-  fieldOrders = orders; // reuse fieldOrders array for action functions
-  var el = document.getElementById('phlebo-task-list');
-  if (!el) return;
-  if (!orders.length) {
-    el.innerHTML = '<div class="empty" style="margin-top:32px">&#10003; No tasks assigned for today</div>';
-    return;
-  }
-
-  el.innerHTML = orders.map(function(o, fidx) {
-    var isCollected = o.fieldStatus==='collected';
-    var isDelivered = o.fieldStatus==='delivered';
-    var myUid = curUser&&curUser.uid;
-    var canAct = (o.fieldAssignedToUid===myUid || o.createdBy===myUid);
-
-    // Time tracking
-    function elapsedStr(fromTs) {
-      if (!fromTs) return '';
-      var ms = Date.now() - (fromTs.toMillis ? fromTs.toMillis() : 0);
-      var mins = Math.floor(ms/60000);
-      if (mins < 60) return mins+'m ago';
-      return Math.floor(mins/60)+'h '+( mins%60)+'m ago';
-    }
-    var assignedAgo = o.fieldAssignedAt ? elapsedStr(o.fieldAssignedAt) : '';
-    var collectedAgo = o.collectedAt ? elapsedStr(o.collectedAt) : '';
-
-    var urgentBanner = o.urgent && !isCollected && !isDelivered
-      ? '<div style="background:#FEE2E2;border-radius:6px;padding:7px 10px;margin-bottom:8px;font-size:12px;font-weight:600;color:#991B1B">&#128680; URGENT — Priority collection</div>' : '';
-
-    var statusColor = isDelivered ? '#059669' : isCollected ? '#1D4ED8' : o.urgent ? '#DC2626' : '#D97706';
-    var statusLabel = isDelivered ? 'Delivered' : isCollected ? 'Collected' : o.urgent ? 'URGENT' : 'Pending';
-
-    var mapLink = o.gps
-      ? ' <a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="font-size:11px;color:var(--blue)">&#128205; Maps</a>' : '';
-
-    var tubeMap = {};
-    (o.tests||[]).forEach(function(t) {
-      var dept = t.dept||'BIOCHEMISTRY';
-      var deptData = (PA_DATA&&PA_DATA[dept])||(PA_DATA&&PA_DATA['BIOCHEMISTRY'])||{default:{tube:'NA',color:'#6B7280',label:'-'},patterns:[]};
-      var sample = deptData.default;
-      var nm = (t.name||'').toLowerCase();
-      if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw)>=0) sample=p.data; }); });
-      if (sample.tube!=='NA') tubeMap[sample.label]=sample;
-    });
-    var tubeChips = Object.values(tubeMap).map(function(t){
-      return '<span style="font-size:10px;font-family:var(--mono);background:'+t.color+'22;color:'+t.color+';border:1px solid '+t.color+'44;border-radius:10px;padding:2px 7px;display:inline-block;margin-right:4px">'+esc(t.label)+'</span>';
-    }).join('');
-
-    var isPendingToMe = o.fieldTransferPending && o.fieldTransferPending.toUid === (curUser&&curUser.uid);
-    var transferBanner = '';
-    if (isPendingToMe) {
-      transferBanner = '<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:8px 10px;margin-bottom:8px">'
-        +'<div style="font-size:11px;font-weight:600;color:#92400E;margin-bottom:4px">&#8644; Transfer — Tap to accept or reject</div>'
-        +'<div style="display:flex;gap:8px;margin-top:6px">'
-        +'<button class="btn-accept" style="flex:1;padding:7px;font-size:12px" onclick="fieldTransferAction('+fidx+',0)">&#10003; Accept</button>'
-        +'<button class="btn-reject" style="flex:1;padding:7px;font-size:12px" onclick="fieldTransferAction('+fidx+',1)">&#10005; Reject</button>'
-        +'</div></div>';
-    }
-
-    var actions = '';
-    if (!isCollected && !isDelivered && canAct && !isPendingToMe) {
-      actions = '<button class="btn btn-primary" style="flex:1;font-size:13px;padding:10px" onclick="fieldActionIdx('+fidx+','collect')">&#10003; Collected</button>'
-              + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
-    } else if (isCollected && canAct) {
-      actions = '<button class="btn" style="flex:1;font-size:13px;padding:10px;color:var(--accent);border-color:var(--accent)" onclick="fieldActionIdx('+fidx+','deliver')">&#128230; Delivered</button>'
-              + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
-    }
-
-    var cardBg = o.urgent && !isCollected && !isDelivered ? 'background:#FFF5F5;border-color:#FCA5A5' : 'background:var(--surface);border-color:var(--border)';
-
-    return '<div style="'+cardBg+';border:1px solid;border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">'
-      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
-      + '<div style="font-size:16px;font-weight:600">'+esc(o.patientName||'-')+'</div>'
-      + '<span style="font-size:10px;font-family:var(--mono);font-weight:700;color:'+statusColor+';background:'+statusColor+'18;border-radius:10px;padding:3px 8px">'+statusLabel+'</span>'
-      + '</div>'
-      + urgentBanner
-      + transferBanner
-      + '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+' &nbsp;&#128222; <a href="tel:'+esc(o.phone||'')+'" style="color:var(--blue)">'+esc(o.phone||'-')+'</a></div>'
-      + (o.address?'<div style="font-size:12px;color:var(--text2);margin-bottom:4px">&#127968; '+esc(o.address)+mapLink+'</div>':'')
-      + (assignedAgo?'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);margin-bottom:4px">Assigned '+assignedAgo+'</div>':'')
-      + (collectedAgo?'<div style="font-size:10px;font-family:var(--mono);color:var(--blue);margin-bottom:4px">Collected '+collectedAgo+'</div>':'')
-      + '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">'+esc((o.tests||[]).map(function(t){return t.name;}).slice(0,4).join(', '))+((o.tests||[]).length>4?' +'+(o.tests.length-4)+' more':'')+'</div>'
-      + (tubeChips?'<div style="margin-bottom:10px">'+tubeChips+'</div>':'')
-      + (o.collectionCharge>0?'<div style="font-size:11px;font-family:var(--mono);color:var(--blue);margin-bottom:8px">Collection charge: Rs.'+o.collectionCharge+'</div>':'')
-      + (actions?'<div style="display:flex;gap:8px">'+actions+'</div>':'')
-      + '</div>';
-  }).join('');
-}
-
-// ── TIME TRACKING: patch fieldConfirm to save timestamps ─────────────────
-var _origFieldConfirm = fieldConfirm;
-fieldConfirm = function() {
-  if (!fieldPendingAction) return;
-  var action = fieldPendingAction.action;
-  var orderId = fieldPendingAction.orderId;
-  var notes = document.getElementById('field-col-notes').value.trim();
-  var now = new Date();
-  var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-  var byName = (curProfile&&curProfile.name)||curUser.email;
-  var update = {
-    fieldStatus: action==='collect' ? 'collected' : 'delivered',
-    fieldUpdatedBy: byName,
-    fieldUpdatedAt: timeStr
-  };
-  if (action === 'collect') update.collectedAt = firebase.firestore.FieldValue.serverTimestamp();
-  if (action === 'deliver') update.deliveredAt = firebase.firestore.FieldValue.serverTimestamp();
-  if (notes) update.fieldNotes = notes;
-  closeFieldModal();
-  db.collection('orders').doc(orderId).update(update)
-    .then(function(){ toast(action==='collect'?'Sample collected ✓':'Delivered ✓','ok'); })
-    .catch(function(){ toast('Update failed — check connection','err'); });
-};
-
-// ── ASSIGN PHLEBOTOMIST: load list when home collection selected ──────────
-var phlebotomistList = [];
-function loadPhlebotomistList() {
-  if (phlebotomistList.length) return; // cached
-  db.collection('staff').where('active','==',true).get().then(function(snap) {
-    phlebotomistList = [];
-    snap.forEach(function(d) {
-      var s = d.data();
-      if (s.role === 'phlebotomist') phlebotomistList.push({uid: d.id, name: s.name});
-    });
-    populatePhlebotomistDropdown();
-  });
-}
-
-function populatePhlebotomistDropdown() {
-  var sel = document.getElementById('pt-assign-phlebo');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">Unassigned</option>';
-  phlebotomistList.forEach(function(p) {
-    var opt = document.createElement('option');
-    opt.value = p.uid;
-    opt.dataset.name = p.name;
-    opt.textContent = p.name;
-    sel.appendChild(opt);
-  });
-}
-
-// ── PATCH toggleHomeCollection to load phlebotomists ─────────────────────
-var _origToggleHome = toggleHomeCollection;
-toggleHomeCollection = function() {
-  _origToggleHome();
-  var src = document.getElementById('pt-source').value;
-  if (src === 'Home Collection' || src === 'Hospital Collection') {
-    loadPhlebotomistList();
-    populatePhlebotomistDropdown();
-  }
-};
-
-// ── PATCH step1Next to save fieldAssignedTo and assignedAt ───────────────
-var _origStep1Next = step1Next;
-step1Next = function() {
-  var sel = document.getElementById('pt-assign-phlebo');
-  if (sel && sel.value) {
-    curOrder.fieldAssignedToUid = sel.value;
-    curOrder.fieldAssignedToName = sel.options[sel.selectedIndex].dataset.name || '';
-    curOrder.fieldAssignedAt = firebase.firestore.FieldValue.serverTimestamp();
-  } else {
-    curOrder.fieldAssignedToUid = null;
-    curOrder.fieldAssignedToName = null;
-    curOrder.fieldAssignedAt = null;
-  }
-  _origStep1Next();
-};
-
-// ── PATCH submitOrder to include fieldAssigned fields ────────────────────
-// Already handled via curOrder since submitOrder reads curOrder.fieldAssigned* implicitly
-// But we need to include them in the order doc — patch submitOrder to add them
-var _origSubmitOrder = submitOrder;
-submitOrder = function() {
-  // We inject fieldAssigned into the order object via a pre-hook on the order variable
-  // Since submitOrder builds 'order' locally, we must patch the Firestore add call
-  // Simplest: add fields to curOrder before submitOrder runs
-  var sel = document.getElementById('pt-assign-phlebo');
-  if (sel && sel.value) {
-    curOrder._fieldAssignedToUid  = sel.value;
-    curOrder._fieldAssignedToName = sel.options[sel.selectedIndex]&&sel.options[sel.selectedIndex].dataset.name||'';
-  }
-  _origSubmitOrder();
-};
-
-// ── PATCH submitOrder internals to write assignment to Firestore ──────────
-// After order is saved we update with assignment data if set
-// Actually we need to inject into the order object BEFORE db.add()
-// Best approach: override db.collection('orders').add in the submitOrder closure — too complex
-// Instead: after save, update doc with fieldAssigned fields
-var _origLoadStats = loadStats;
-// Hook into the then() callback: patch via monkey-patching goTo
-function _onOrderSaved(orderId) {
-  if (curOrder._fieldAssignedToUid) {
-    db.collection('orders').doc(orderId).update({
-      fieldAssignedToUid: curOrder._fieldAssignedToUid,
-      fieldAssignedToName: curOrder._fieldAssignedToName,
-      fieldAssignedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).catch(function(){});
-    curOrder._fieldAssignedToUid = null;
-    curOrder._fieldAssignedToName = null;
-  }
-}
-
-// ── MANAGER ROLE: hide Add Staff button in admin screen ──────────────────
-function applyManagerRestrictions(role) {
-  if (role !== 'manager') return;
-  // Hide add/edit/delete staff buttons — show read-only staff list
-  var addBtn = document.querySelector('#s-admin .topbar button:not(.back-btn)');
-  if (addBtn) addBtn.style.display = 'none';
-  // Hide temp role, temp doctor, doctor upload sections
-  ['temp-role-section','temp-doctor-section','doctor-upload-section'].forEach(function(id){
-    var el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-  });
-}
-
-// ── PHLEBOTOMIST REVIEW ──────────────────────────────────────────────────
-var reviewPeriod = 'week';
-
-function setReviewPeriod(period) {
-  reviewPeriod = period;
-  ['week','month','custom'].forEach(function(id){
-    var btn = document.getElementById('rev-btn-'+id);
-    if (btn) btn.className = 'tog'+(id===period?' on':'');
-  });
-  var customDates = document.getElementById('rev-custom-dates');
-  if (customDates) customDates.style.display = period==='custom' ? 'block' : 'none';
-  if (period !== 'custom') loadReview();
-}
-
-function loadReview() {
-  var today = todayStr();
-  var from, to;
-  if (reviewPeriod === 'week') {
-    var d = new Date(); var mon = new Date(d);
-    mon.setDate(d.getDate()-((d.getDay()+6)%7));
-    from = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
-    to = today;
-    set('review-period-lbl','This Week ('+from+' → '+to+')');
-  } else if (reviewPeriod === 'month') {
-    from = today.slice(0,8)+'01'; to = today;
-    set('review-period-lbl','This Month ('+from+' → '+to+')');
-  } else {
-    from = document.getElementById('rev-from').value;
-    to   = document.getElementById('rev-to').value;
-    if (!from||!to) { toast('Select date range','warn'); return; }
-    set('review-period-lbl',from+' → '+to);
-  }
-  var el = document.getElementById('review-list');
-  if (el) el.innerHTML = '<div class="empty">Loading...</div>';
-  db.collection('orders')
-    .where('date','>=',from).where('date','<=',to)
-    .where('source','in',['Home Collection','Hospital Collection'])
-    .get().then(function(snap) {
-      var byPhlebo = {};
-      snap.forEach(function(d) {
-        var o = d.data();
-        var uid   = o.fieldAssignedToUid || o.createdBy || 'unassigned';
-        var uname = o.fieldAssignedToName || o.createdByName || 'Unassigned';
-        if (!byPhlebo[uid]) byPhlebo[uid] = {name:uname, total:0, collected:0, delivered:0, urgent:0, lateUrgent:0, collectMins:[], deliverMins:[]};
-        var b = byPhlebo[uid]; b.total++;
-        if (o.fieldStatus==='collected'||o.fieldStatus==='delivered') b.collected++;
-        if (o.fieldStatus==='delivered') b.delivered++;
-        if (o.urgent) {
-          b.urgent++;
-          // Check if late (assigned → collected > 30 min)
-          if (o.fieldAssignedAt && o.collectedAt) {
-            var at = o.fieldAssignedAt.toMillis ? o.fieldAssignedAt.toMillis() : 0;
-            var ct = o.collectedAt.toMillis ? o.collectedAt.toMillis() : 0;
-            var mins = (ct-at)/60000;
-            if (mins > URGENT_LATE_MINS) b.lateUrgent++;
-          } else if (!o.collectedAt) {
-            b.lateUrgent++; // never collected = late
-          }
-        }
-        // Collect-to-deliver time
-        if (o.collectedAt && o.deliveredAt) {
-          var cm = (o.deliveredAt.toMillis()-o.collectedAt.toMillis())/60000;
-          b.deliverMins.push(cm);
-        }
-        // Assign-to-collect time
-        if (o.fieldAssignedAt && o.collectedAt) {
-          var am2 = (o.collectedAt.toMillis()-o.fieldAssignedAt.toMillis())/60000;
-          b.collectMins.push(am2);
-        }
-      });
-      renderReview(byPhlebo);
-    });
-}
-
-function avg(arr) {
-  if (!arr.length) return null;
-  return Math.round(arr.reduce(function(s,v){return s+v;},0)/arr.length);
-}
-
-function renderReview(byPhlebo) {
-  var el = document.getElementById('review-list');
-  if (!el) return;
-  var keys = Object.keys(byPhlebo);
-  if (!keys.length) { el.innerHTML='<div class="empty">No home collection orders in this period</div>'; return; }
-  el.innerHTML = keys.map(function(uid) {
-    var b = byPhlebo[uid];
-    var collectAvg = avg(b.collectMins);
-    var deliverAvg = avg(b.deliverMins);
-    var urgentLate = b.lateUrgent;
-    var urgentOnTime = b.urgent - b.lateUrgent;
-    return '<div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">'
-      +'<div style="font-size:15px;font-weight:600;margin-bottom:10px">'+esc(b.name)+'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-      +'<div style="background:var(--surface2);border-radius:8px;padding:8px 10px"><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:2px">Assigned</div><div style="font-size:18px;font-family:var(--serif);font-weight:500">'+b.total+'</div></div>'
-      +'<div style="background:var(--surface2);border-radius:8px;padding:8px 10px"><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:2px">Completed</div><div style="font-size:18px;font-family:var(--serif);font-weight:500;color:#059669">'+b.delivered+'</div></div>'
-      +'<div style="background:var(--surface2);border-radius:8px;padding:8px 10px"><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:2px">Avg Collect Time</div><div style="font-size:15px;font-family:var(--mono);font-weight:500">'+(collectAvg!==null?collectAvg+'m':'—')+'</div></div>'
-      +'<div style="background:var(--surface2);border-radius:8px;padding:8px 10px"><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:2px">Avg Deliver Time</div><div style="font-size:15px;font-family:var(--mono);font-weight:500">'+(deliverAvg!==null?deliverAvg+'m':'—')+'</div></div>'
-      +'</div>'
-      +(b.urgent?'<div style="margin-top:10px;font-size:12px">Urgent: '
-        +'<span style="font-family:var(--mono);background:#D1FAE5;color:#065F46;border-radius:10px;padding:2px 8px;margin-right:4px">'+urgentOnTime+' on time</span>'
-        +(urgentLate?'<span style="font-family:var(--mono);background:#FEE2E2;color:#991B1B;border-radius:10px;padding:2px 8px">'+urgentLate+' late</span>':'')
-        +'</div>':'')
-      +'</div>';
-  }).join('');
-}
-
-function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
-
-rset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>OnePLUS LMS v19.3</title>
-<!-- LMS v5.0 | Built 2026-04-10 | Node-verified -->
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#1A4A3A">
-<link rel="manifest" href="manifest.json">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
 :root{--bg:#F4F1EC;--surface:#FDFCFA;--surface2:#EEE9E0;--border:rgba(60,50,30,0.12);--border-strong:rgba(60,50,30,0.22);--text:#1C1810;--text2:#6B6050;--text3:#A09080;--accent:#1A4A3A;--accent-light:#E4EDE9;--accent2:#C8501A;--accent2-light:#FAF0EB;--gold:#8B6914;--gold-light:#F5EDD0;--red:#8B1A1A;--red-light:#F5E4E4;--radius:10px;--radius-lg:16px;--mono:'DM Mono',monospace;--serif:'Fraunces',serif;--sans:'DM Sans',sans-serif}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -2029,6 +1415,624 @@ if (typeof firebase === 'undefined') {
 }
 </script>
 <script>
+
+
+// ── ESTIMATE GENERATOR ────────────────────────────────────────────────────
+var estPanel = 'standard';
+var estTests = [];
+var estDiscType = 'amt';
+var estHits = [];
+
+function setEstPanel(panel) {
+  estPanel = panel;
+  ['standard','jk','du','sh'].forEach(function(id) {
+    var btn = document.getElementById('est-panel-btn-'+id);
+    if (!btn) return;
+    var active = id === panel;
+    btn.style.background = active ? '#fff' : 'transparent';
+    btn.style.color = active ? 'var(--accent)' : '#fff';
+    btn.style.borderColor = active ? '#fff' : 'rgba(255,255,255,0.35)';
+    btn.style.fontWeight = active ? '700' : '400';
+  });
+  // Recalculate rates for already-added tests
+  estTests = estTests.map(function(t) {
+    var key = (t.dept||'').toUpperCase()+'|'+(t.name||'').toUpperCase();
+    var p = PANELS[key];
+    var panelRate = p ? (panel==='jk'?p.jk:panel==='du'?p.du:panel==='sh'?p.sh:null) : null;
+    return Object.assign({}, t, { rate: panelRate !== null && panelRate !== undefined ? panelRate : t.stdRate });
+  });
+  renderEstTests();
+  calcEstimate();
+}
+
+function setEstDiscType(type) {
+  estDiscType = type;
+  document.getElementById('est-disc-type-amt').style.background = type==='amt' ? 'var(--accent)' : 'var(--surface)';
+  document.getElementById('est-disc-type-amt').style.color = type==='amt' ? '#fff' : 'var(--text2)';
+  document.getElementById('est-disc-type-pct').style.background = type==='pct' ? 'var(--accent)' : 'var(--surface)';
+  document.getElementById('est-disc-type-pct').style.color = type==='pct' ? '#fff' : 'var(--text2)';
+  calcEstimate();
+}
+
+function searchEstTests(val) {
+  var el = document.getElementById('est-test-suggest');
+  if (!val || val.length < 1) { el.style.display='none'; return; }
+  if (!_dataLoaded) {
+    el.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Loading catalogue...</div>';
+    el.style.display = 'block'; return;
+  }
+  var lq = val.toLowerCase();
+  var scoredEst = [];
+  CATALOGUE.forEach(function(t) {
+    var n = t.name.toLowerCase();
+    var s = (t.short||'').toLowerCase();
+    if (n.indexOf(lq) === 0) scoredEst.push({t:t, rank:0});
+    else if (n.indexOf(lq) >= 0) scoredEst.push({t:t, rank:1});
+    else if (s && s.indexOf(lq) >= 0) scoredEst.push({t:t, rank:2});
+  });
+  scoredEst.sort(function(a,b){ return a.rank-b.rank; });
+  estHits = scoredEst.slice(0,10).map(function(x){ return x.t; });
+  if (!estHits.length) { el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML = estHits.map(function(t,i) {
+    var key = (t.dept||'').toUpperCase()+'|'+(t.name||'').toUpperCase();
+    var p = PANELS[key];
+    var panelRate = p ? (estPanel==='jk'?p.jk:estPanel==='du'?p.du:estPanel==='sh'?p.sh:null) : null;
+    var rate = panelRate !== null && panelRate !== undefined ? panelRate : (t.rate||0);
+    return '<div onmousedown="addEstTest('+i+')" ontouchstart="addEstTest('+i+')"'
+      +' style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+      +'<div><div style="font-size:13px;font-weight:500">'+esc(t.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--text3)">'+esc(t.dept)+'</div></div>'
+      +'<div style="font-family:var(--mono);font-size:12px;color:var(--accent)">Rs.'+rate+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function addEstTest(i) {
+  var t = estHits[i];
+  if (!t) return;
+  if (estTests.find(function(x){ return x.name===t.name; })) { toast('Already added','warn'); return; }
+  var key = (t.dept||'').toUpperCase()+'|'+(t.name||'').toUpperCase();
+  var p = PANELS[key];
+  var panelRate = p ? (estPanel==='jk'?p.jk:estPanel==='du'?p.du:estPanel==='sh'?p.sh:null) : null;
+  var stdRate = t.rate || 0;
+  var rate = panelRate !== null && panelRate !== undefined ? panelRate : stdRate;
+  estTests.push(Object.assign({}, t, {rate: rate, stdRate: stdRate}));
+  document.getElementById('est-test-q').value='';
+  document.getElementById('est-test-suggest').style.display='none';
+  renderEstTests();
+  calcEstimate();
+}
+
+function removeEstTest(i) {
+  estTests.splice(i,1);
+  renderEstTests();
+  calcEstimate();
+}
+
+function renderEstTests() {
+  var el = document.getElementById('est-sel-tests');
+  if (!el) return;
+  el.innerHTML = estTests.length ? estTests.map(function(t,i) {
+    return '<div class="chip"><div><div style="font-size:13px;font-weight:500">'+esc(t.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--text3);font-family:var(--mono)">'+esc(t.dept)+'</div></div>'
+      +'<div style="display:flex;align-items:center;gap:8px">'
+      +'<div style="font-size:13px;color:var(--text2)">Rs.'+(t.rate||0)+'</div>'
+      +'<button class="chip-del" onclick="removeEstTest('+i+')">x</button></div></div>';
+  }).join('') : '<div style="color:var(--text3);font-size:13px;text-align:center;padding:12px">No tests added</div>';
+}
+
+function calcEstimate() {
+  var gross = estTests.reduce(function(s,t){ return s+(t.rate||0); },0);
+  var discVal = parseFloat(document.getElementById('est-discount').value||0)||0;
+  var disc = estDiscType==='pct' ? Math.round(gross*discVal/100) : discVal;
+  disc = Math.min(disc, gross);
+  var net = Math.max(0, gross-disc);
+  document.getElementById('est-total').textContent = 'Rs.'+net.toLocaleString('en-IN');
+  var discCalc = document.getElementById('est-disc-calc');
+  var noteEl = document.getElementById('est-note');
+  if (disc > 0) {
+    discCalc.textContent = '− Rs.'+disc.toLocaleString('en-IN');
+    noteEl.textContent = 'After Rs.'+disc.toLocaleString('en-IN')+' discount';
+  } else { discCalc.textContent=''; noteEl.textContent=''; }
+  return {gross:gross, disc:disc, net:net};
+}
+
+function buildEstimateText() {
+  var vals = calcEstimate();
+  var name = document.getElementById('est-name').value.trim();
+  var panelLabel = PANEL_NAMES[estPanel]||'Standard';
+  var lines = [];
+  lines.push('*OnePLUS Ultrasound & Lab — Estimate*');
+  if (name) lines.push('*Patient:* '+name);
+  lines.push('*Panel:* '+panelLabel);
+  lines.push('*Date:* '+new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}));
+  lines.push('');
+  lines.push('*Tests:*');
+  estTests.forEach(function(t) {
+    lines.push('  - '+t.name+' — Rs.'+(t.rate||0).toLocaleString('en-IN'));
+  });
+  lines.push('');
+  if (vals.disc > 0) {
+    lines.push('Gross: Rs.'+vals.gross.toLocaleString('en-IN'));
+    lines.push('Discount: − Rs.'+vals.disc.toLocaleString('en-IN'));
+  }
+  lines.push('*Total: Rs.'+vals.net.toLocaleString('en-IN')+'*');
+  lines.push('');
+  lines.push('_OnePLUS Ultrasound & Laboratory, Pitampura_');
+  lines.push('_011-4248 0101_');
+  lines.push('_'+fmtTimestamp()+'_');
+  return lines.join('\n');
+}
+
+function shareEstimateWA() {
+  if (!estTests.length) { toast('Add at least one test','warn'); return; }
+  var phone = document.getElementById('est-phone').value.replace(/\D/g,'');
+  var waNum = phone.length===10 ? '91'+phone : phone.length===12&&phone.startsWith('91') ? phone : '';
+  if (!waNum) { toast('Enter a valid 10-digit mobile number','warn'); document.getElementById('est-phone').focus(); return; }
+  var text = buildEstimateText();
+  window.open('https://wa.me/'+waNum+'?text='+encodeURIComponent(text),'_blank');
+}
+
+function shareEstimateWAAny() {
+  if (!estTests.length) { toast('Add at least one test','warn'); return; }
+  var text = buildEstimateText();
+  window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+}
+
+function convertEstimateToOrder() {
+  if (!estTests.length) { toast('Add at least one test','warn'); return; }
+  // Pre-fill order form with estimate data and navigate
+  curOrder = {};
+  selTests = estTests.map(function(t){ return Object.assign({},t); });
+  curPanel = estPanel;
+  var name = document.getElementById('est-name').value.trim();
+  var phone = document.getElementById('est-phone').value.trim();
+  var disc = calcEstimate().disc;
+  goTo('s-order');
+  showStep(1);
+  // Fill patient fields after navigation
+  setTimeout(function(){
+    if (name) document.getElementById('pt-name').value = name;
+    if (phone) document.getElementById('pt-phone').value = phone;
+    setPanelButtons();
+    // Skip to step 2 since tests are pre-loaded
+    step1Next();
+  }, 100);
+  toast('Estimate loaded — complete patient details','ok');
+}
+
+// Reset estimate when navigating to it
+var _origGoTo = goTo;
+// Hook goTo for s-estimate reset
+function initEstimateScreen() {
+  estPanel='standard'; estTests=[]; estDiscType='amt'; estHits=[];
+  var nameEl=document.getElementById('est-name'); if(nameEl) nameEl.value='';
+  var phoneEl=document.getElementById('est-phone'); if(phoneEl) phoneEl.value='';
+  var discEl=document.getElementById('est-discount'); if(discEl) discEl.value='';
+  var qEl=document.getElementById('est-test-q'); if(qEl) qEl.value='';
+  renderEstTests(); calcEstimate(); setEstPanel('standard');
+}
+
+// ── ROLE-BASED ROUTING + MANAGER + PHLEBOTOMIST HOME ──────────────────────
+function routeAfterPin(role) {
+  var vspan = document.getElementById('app-version-p');
+  if (vspan) vspan.textContent = APP_VERSION;
+
+  if (role === 'phlebotomist') {
+    goTo('s-dash', false); stack=['s-dash'];
+    loadDash();
+    var fieldBtnP = document.getElementById('field-btn');
+    var adminBtnP = document.getElementById('admin-btn');
+    var reviewBtnP = document.getElementById('review-btn');
+    if (fieldBtnP) fieldBtnP.style.display = 'block';
+    if (adminBtnP) adminBtnP.style.display = 'none';
+    if (reviewBtnP) reviewBtnP.style.display = 'none';
+    goTo('s-phlebo'); startPhleboDash();
+  } else {
+    goTo('s-dash', false); stack=['s-dash'];
+    loadDash();
+    // Show/hide buttons
+    var adminBtn = document.getElementById('admin-btn');
+    var reviewBtn = document.getElementById('review-btn');
+    var fieldBtn = document.getElementById('field-btn');
+    if (adminBtn) adminBtn.style.display = (role==='admin') ? 'block' : 'none';
+    if (reviewBtn) reviewBtn.style.display = (role==='admin'||role==='manager') ? 'block' : 'none';
+    if (fieldBtn) fieldBtn.style.display = 'block'; // all roles see field tasks
+    // Manager sees staff list (read-only) via admin screen but no add/edit buttons
+  }
+}
+
+// ── PHLEBOTOMIST DASHBOARD ────────────────────────────────────────────────
+var phleboDashUnsub = null;
+var URGENT_LATE_MINS = 30;
+
+function startPhleboDash() {
+  if (phleboDashUnsub) { phleboDashUnsub(); phleboDashUnsub=null; }
+  var myUid = curUser && curUser.uid;
+  var today = todayStr();
+  phleboDashUnsub = db.collection('orders')
+    .where('date','==',today)
+    .where('source','in',['Home Collection','Hospital Collection'])
+    .onSnapshot(function(snap) {
+      var orders = [];
+      snap.forEach(function(d) {
+        var o = Object.assign({id:d.id}, d.data());
+        // Show orders assigned to me OR created by me (if unassigned)
+        var assignedToMe = o.fieldAssignedToUid === myUid;
+        var createdByMe = o.createdBy === myUid;
+        var unassigned = !o.fieldAssignedToUid;
+        var pendingToMe = o.fieldTransferPending && o.fieldTransferPending.toUid === myUid;
+        if (assignedToMe || (createdByMe && unassigned) || pendingToMe) orders.push(o);
+      });
+      // Sort: urgent pending first, then pending by time, then collected, then delivered
+      orders.sort(function(a,b) {
+        var rank = function(o) {
+          if (o.fieldStatus==='delivered') return 3;
+          if (o.fieldStatus==='collected') return 2;
+          return o.urgent ? 0 : 1;
+        };
+        return rank(a)-rank(b);
+      });
+      renderPhleboDash(orders);
+    });
+}
+
+function renderPhleboDash(orders) {
+  var pending   = orders.filter(function(o){ return !o.fieldStatus&&!o.fieldTransferPending; });
+  var collected = orders.filter(function(o){ return o.fieldStatus==='collected'; });
+  var delivered = orders.filter(function(o){ return o.fieldStatus==='delivered'; });
+
+  function setEl(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
+  setEl('ph-total', orders.length);
+  setEl('ph-pending', pending.length);
+  setEl('ph-collected', collected.length);
+  setEl('ph-delivered', delivered.length);
+
+  // Late urgent alert
+  var now = Date.now();
+  var lateUrgent = pending.filter(function(o) {
+    if (!o.urgent) return false;
+    if (!o.fieldAssignedAt) return false;
+    var at = o.fieldAssignedAt.toMillis ? o.fieldAssignedAt.toMillis() : 0;
+    return (now - at) > URGENT_LATE_MINS * 60000;
+  });
+  var lateEl = document.getElementById('ph-late-alert');
+  if (lateEl) lateEl.style.display = lateUrgent.length ? 'block' : 'none';
+
+  // Render task cards
+  fieldOrders = orders; // reuse fieldOrders array for action functions
+  var el = document.getElementById('phlebo-task-list');
+  if (!el) return;
+  if (!orders.length) {
+    el.innerHTML = '<div class="empty" style="margin-top:32px">&#10003; No tasks assigned for today</div>';
+    return;
+  }
+
+  el.innerHTML = orders.map(function(o, fidx) {
+    var isCollected = o.fieldStatus==='collected';
+    var isDelivered = o.fieldStatus==='delivered';
+    var myUid = curUser&&curUser.uid;
+    var canAct = (o.fieldAssignedToUid===myUid || o.createdBy===myUid);
+
+    // Time tracking
+    function elapsedStr(fromTs) {
+      if (!fromTs) return '';
+      var ms = Date.now() - (fromTs.toMillis ? fromTs.toMillis() : 0);
+      var mins = Math.floor(ms/60000);
+      if (mins < 60) return mins+'m ago';
+      return Math.floor(mins/60)+'h '+( mins%60)+'m ago';
+    }
+    var assignedAgo = o.fieldAssignedAt ? elapsedStr(o.fieldAssignedAt) : '';
+    var collectedAgo = o.collectedAt ? elapsedStr(o.collectedAt) : '';
+
+    var urgentBanner = o.urgent && !isCollected && !isDelivered
+      ? '<div style="background:#FEE2E2;border-radius:6px;padding:7px 10px;margin-bottom:8px;font-size:12px;font-weight:600;color:#991B1B">&#128680; URGENT — Priority collection</div>' : '';
+
+    var statusColor = isDelivered ? '#059669' : isCollected ? '#1D4ED8' : o.urgent ? '#DC2626' : '#D97706';
+    var statusLabel = isDelivered ? 'Delivered' : isCollected ? 'Collected' : o.urgent ? 'URGENT' : 'Pending';
+
+    var mapLink = o.gps
+      ? ' <a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="font-size:11px;color:var(--blue)">&#128205; Maps</a>' : '';
+
+    var tubeMap = {};
+    (o.tests||[]).forEach(function(t) {
+      var dept = t.dept||'BIOCHEMISTRY';
+      var deptData = (PA_DATA&&PA_DATA[dept])||(PA_DATA&&PA_DATA['BIOCHEMISTRY'])||{default:{tube:'NA',color:'#6B7280',label:'-'},patterns:[]};
+      var sample = deptData.default;
+      var nm = (t.name||'').toLowerCase();
+      if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw)>=0) sample=p.data; }); });
+      if (sample.tube!=='NA') tubeMap[sample.label]=sample;
+    });
+    var tubeChips = Object.values(tubeMap).map(function(t){
+      return '<span style="font-size:10px;font-family:var(--mono);background:'+t.color+'22;color:'+t.color+';border:1px solid '+t.color+'44;border-radius:10px;padding:2px 7px;display:inline-block;margin-right:4px">'+esc(t.label)+'</span>';
+    }).join('');
+
+    var isPendingToMe = o.fieldTransferPending && o.fieldTransferPending.toUid === (curUser&&curUser.uid);
+    var transferBanner = '';
+    if (isPendingToMe) {
+      transferBanner = '<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:8px 10px;margin-bottom:8px">'
+        +'<div style="font-size:11px;font-weight:600;color:#92400E;margin-bottom:4px">&#8644; Transfer — Tap to accept or reject</div>'
+        +'<div style="display:flex;gap:8px;margin-top:6px">'
+        +'<button class="btn-accept" style="flex:1;padding:7px;font-size:12px" onclick="fieldTransferAction('+fidx+',0)">&#10003; Accept</button>'
+        +'<button class="btn-reject" style="flex:1;padding:7px;font-size:12px" onclick="fieldTransferAction('+fidx+',1)">&#10005; Reject</button>'
+        +'</div></div>';
+    }
+
+    var actions = '';
+    if (!isCollected && !isDelivered && canAct && !isPendingToMe) {
+      actions = '<button class="btn btn-primary" style="flex:1;font-size:13px;padding:10px" onclick="fieldActionIdx('+fidx+','collect')">&#10003; Collected</button>'
+              + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
+    } else if (isCollected && canAct) {
+      actions = '<button class="btn" style="flex:1;font-size:13px;padding:10px;color:var(--accent);border-color:var(--accent)" onclick="fieldActionIdx('+fidx+','deliver')">&#128230; Delivered</button>'
+              + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
+    }
+
+    var cardBg = o.urgent && !isCollected && !isDelivered ? 'background:#FFF5F5;border-color:#FCA5A5' : 'background:var(--surface);border-color:var(--border)';
+
+    return '<div style="'+cardBg+';border:1px solid;border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
+      + '<div style="font-size:16px;font-weight:600">'+esc(o.patientName||'-')+'</div>'
+      + '<span style="font-size:10px;font-family:var(--mono);font-weight:700;color:'+statusColor+';background:'+statusColor+'18;border-radius:10px;padding:3px 8px">'+statusLabel+'</span>'
+      + '</div>'
+      + urgentBanner
+      + transferBanner
+      + '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+' &nbsp;&#128222; <a href="tel:'+esc(o.phone||'')+'" style="color:var(--blue)">'+esc(o.phone||'-')+'</a></div>'
+      + (o.address?'<div style="font-size:12px;color:var(--text2);margin-bottom:4px">&#127968; '+esc(o.address)+mapLink+'</div>':'')
+      + (assignedAgo?'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);margin-bottom:4px">Assigned '+assignedAgo+'</div>':'')
+      + (collectedAgo?'<div style="font-size:10px;font-family:var(--mono);color:var(--blue);margin-bottom:4px">Collected '+collectedAgo+'</div>':'')
+      + '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">'+esc((o.tests||[]).map(function(t){return t.name;}).slice(0,4).join(', '))+((o.tests||[]).length>4?' +'+(o.tests.length-4)+' more':'')+'</div>'
+      + (tubeChips?'<div style="margin-bottom:10px">'+tubeChips+'</div>':'')
+      + (o.collectionCharge>0?'<div style="font-size:11px;font-family:var(--mono);color:var(--blue);margin-bottom:8px">Collection charge: Rs.'+o.collectionCharge+'</div>':'')
+      + (actions?'<div style="display:flex;gap:8px">'+actions+'</div>':'')
+      + '</div>';
+  }).join('');
+}
+
+// ── TIME TRACKING: patch fieldConfirm to save timestamps ─────────────────
+var _origFieldConfirm = fieldConfirm;
+fieldConfirm = function() {
+  if (!fieldPendingAction) return;
+  var action = fieldPendingAction.action;
+  var orderId = fieldPendingAction.orderId;
+  var notes = document.getElementById('field-col-notes').value.trim();
+  var now = new Date();
+  var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  var byName = (curProfile&&curProfile.name)||curUser.email;
+  var update = {
+    fieldStatus: action==='collect' ? 'collected' : 'delivered',
+    fieldUpdatedBy: byName,
+    fieldUpdatedAt: timeStr
+  };
+  if (action === 'collect') update.collectedAt = firebase.firestore.FieldValue.serverTimestamp();
+  if (action === 'deliver') update.deliveredAt = firebase.firestore.FieldValue.serverTimestamp();
+  if (notes) update.fieldNotes = notes;
+  closeFieldModal();
+  db.collection('orders').doc(orderId).update(update)
+    .then(function(){ toast(action==='collect'?'Sample collected ✓':'Delivered ✓','ok'); })
+    .catch(function(){ toast('Update failed — check connection','err'); });
+};
+
+// ── ASSIGN PHLEBOTOMIST: load list when home collection selected ──────────
+var phlebotomistList = [];
+function loadPhlebotomistList() {
+  if (phlebotomistList.length) return; // cached
+  db.collection('staff').where('active','==',true).get().then(function(snap) {
+    phlebotomistList = [];
+    snap.forEach(function(d) {
+      var s = d.data();
+      if (s.role === 'phlebotomist') phlebotomistList.push({uid: d.id, name: s.name});
+    });
+    populatePhlebotomistDropdown();
+  });
+}
+
+function populatePhlebotomistDropdown() {
+  var sel = document.getElementById('pt-assign-phlebo');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Unassigned</option>';
+  phlebotomistList.forEach(function(p) {
+    var opt = document.createElement('option');
+    opt.value = p.uid;
+    opt.dataset.name = p.name;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+}
+
+// ── PATCH toggleHomeCollection to load phlebotomists ─────────────────────
+var _origToggleHome = toggleHomeCollection;
+toggleHomeCollection = function() {
+  _origToggleHome();
+  var src = document.getElementById('pt-source').value;
+  if (src === 'Home Collection' || src === 'Hospital Collection') {
+    loadPhlebotomistList();
+    populatePhlebotomistDropdown();
+  }
+};
+
+// ── PATCH step1Next to save fieldAssignedTo and assignedAt ───────────────
+var _origStep1Next = step1Next;
+step1Next = function() {
+  var sel = document.getElementById('pt-assign-phlebo');
+  if (sel && sel.value) {
+    curOrder.fieldAssignedToUid = sel.value;
+    curOrder.fieldAssignedToName = sel.options[sel.selectedIndex].dataset.name || '';
+    curOrder.fieldAssignedAt = firebase.firestore.FieldValue.serverTimestamp();
+  } else {
+    curOrder.fieldAssignedToUid = null;
+    curOrder.fieldAssignedToName = null;
+    curOrder.fieldAssignedAt = null;
+  }
+  _origStep1Next();
+};
+
+// ── PATCH submitOrder to include fieldAssigned fields ────────────────────
+// Already handled via curOrder since submitOrder reads curOrder.fieldAssigned* implicitly
+// But we need to include them in the order doc — patch submitOrder to add them
+var _origSubmitOrder = submitOrder;
+submitOrder = function() {
+  // We inject fieldAssigned into the order object via a pre-hook on the order variable
+  // Since submitOrder builds 'order' locally, we must patch the Firestore add call
+  // Simplest: add fields to curOrder before submitOrder runs
+  var sel = document.getElementById('pt-assign-phlebo');
+  if (sel && sel.value) {
+    curOrder._fieldAssignedToUid  = sel.value;
+    curOrder._fieldAssignedToName = sel.options[sel.selectedIndex]&&sel.options[sel.selectedIndex].dataset.name||'';
+  }
+  _origSubmitOrder();
+};
+
+// ── PATCH submitOrder internals to write assignment to Firestore ──────────
+// After order is saved we update with assignment data if set
+// Actually we need to inject into the order object BEFORE db.add()
+// Best approach: override db.collection('orders').add in the submitOrder closure — too complex
+// Instead: after save, update doc with fieldAssigned fields
+var _origLoadStats = loadStats;
+// Hook into the then() callback: patch via monkey-patching goTo
+function _onOrderSaved(orderId) {
+  if (curOrder._fieldAssignedToUid) {
+    db.collection('orders').doc(orderId).update({
+      fieldAssignedToUid: curOrder._fieldAssignedToUid,
+      fieldAssignedToName: curOrder._fieldAssignedToName,
+      fieldAssignedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(function(){});
+    curOrder._fieldAssignedToUid = null;
+    curOrder._fieldAssignedToName = null;
+  }
+}
+
+// ── MANAGER ROLE: hide Add Staff button in admin screen ──────────────────
+function applyManagerRestrictions(role) {
+  if (role !== 'manager') return;
+  // Hide add/edit/delete staff buttons — show read-only staff list
+  var addBtn = document.querySelector('#s-admin .topbar button:not(.back-btn)');
+  if (addBtn) addBtn.style.display = 'none';
+  // Hide temp role, temp doctor, doctor upload sections
+  ['temp-role-section','temp-doctor-section','doctor-upload-section'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+}
+
+// ── PHLEBOTOMIST REVIEW ──────────────────────────────────────────────────
+var reviewPeriod = 'week';
+
+function setReviewPeriod(period) {
+  reviewPeriod = period;
+  ['week','month','custom'].forEach(function(id){
+    var btn = document.getElementById('rev-btn-'+id);
+    if (btn) btn.className = 'tog'+(id===period?' on':'');
+  });
+  var customDates = document.getElementById('rev-custom-dates');
+  if (customDates) customDates.style.display = period==='custom' ? 'block' : 'none';
+  if (period !== 'custom') loadReview();
+}
+
+function loadReview() {
+  var today = todayStr();
+  var from, to;
+  if (reviewPeriod === 'week') {
+    var d = new Date(); var mon = new Date(d);
+    mon.setDate(d.getDate()-((d.getDay()+6)%7));
+    from = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
+    to = today;
+    set('review-period-lbl','This Week ('+from+' → '+to+')');
+  } else if (reviewPeriod === 'month') {
+    from = today.slice(0,8)+'01'; to = today;
+    set('review-period-lbl','This Month ('+from+' → '+to+')');
+  } else {
+    from = document.getElementById('rev-from').value;
+    to   = document.getElementById('rev-to').value;
+    if (!from||!to) { toast('Select date range','warn'); return; }
+    set('review-period-lbl',from+' → '+to);
+  }
+  var el = document.getElementById('review-list');
+  if (el) el.innerHTML = '<div class="empty">Loading...</div>';
+  db.collection('orders')
+    .where('date','>=',from).where('date','<=',to)
+    .where('source','in',['Home Collection','Hospital Collection'])
+    .get().then(function(snap) {
+      var byPhlebo = {};
+      snap.forEach(function(d) {
+        var o = d.data();
+        var uid   = o.fieldAssignedToUid || o.createdBy || 'unassigned';
+        var uname = o.fieldAssignedToName || o.createdByName || 'Unassigned';
+        if (!byPhlebo[uid]) byPhlebo[uid] = {name:uname, total:0, collected:0, delivered:0, urgent:0, lateUrgent:0, collectMins:[], deliverMins:[]};
+        var b = byPhlebo[uid]; b.total++;
+        if (o.fieldStatus==='collected'||o.fieldStatus==='delivered') b.collected++;
+        if (o.fieldStatus==='delivered') b.delivered++;
+        if (o.urgent) {
+          b.urgent++;
+          // Check if late (assigned → collected > 30 min)
+          if (o.fieldAssignedAt && o.collectedAt) {
+            var at = o.fieldAssignedAt.toMillis ? o.fieldAssignedAt.toMillis() : 0;
+            var ct = o.collectedAt.toMillis ? o.collectedAt.toMillis() : 0;
+            var mins = (ct-at)/60000;
+            if (mins > URGENT_LATE_MINS) b.lateUrgent++;
+          } else if (!o.collectedAt) {
+            b.lateUrgent++; // never collected = late
+          }
+        }
+        // Collect-to-deliver time
+        if (o.collectedAt && o.deliveredAt) {
+          var cm = (o.deliveredAt.toMillis()-o.collectedAt.toMillis())/60000;
+          b.deliverMins.push(cm);
+        }
+        // Assign-to-collect time
+        if (o.fieldAssignedAt && o.collectedAt) {
+          var am2 = (o.collectedAt.toMillis()-o.fieldAssignedAt.toMillis())/60000;
+          b.collectMins.push(am2);
+        }
+      });
+      renderReview(byPhlebo);
+    });
+}
+
+function avg(arr) {
+  if (!arr.length) return null;
+  return Math.round(arr.reduce(function(s,v){return s+v;},0)/arr.length);
+}
+
+function renderReview(byPhlebo) {
+  var el = document.getElementById('review-list');
+  if (!el) return;
+  var keys = Object.keys(byPhlebo);
+  if (!keys.length) { el.innerHTML='<div class="empty">No home collection orders in this period</div>'; return; }
+  el.innerHTML = keys.map(function(uid) {
+    var b = byPhlebo[uid];
+    var collectAvg = avg(b.collectMins);
+    var deliverAvg = avg(b.deliverMins);
+    var urgentLate = b.lateUrgent;
+    var urgentOnTime = b.urgent - b.lateUrgent;
+    return '<div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">'
+      +'<div style="font-size:15px;font-weight:600;margin-bottom:10px">'+esc(b.name)+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+      +'<div style="background:var(--surface2);border-radius:8px;padding:8px 10px"><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:2px">Assigned</div><div style="font-size:18px;font-family:var(--serif);font-weight:500">'+b.total+'</div></div>'
+      +'<div style="background:var(--surface2);border-radius:8px;padding:8px 10px"><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:2px">Completed</div><div style="font-size:18px;font-family:var(--serif);font-weight:500;color:#059669">'+b.delivered+'</div></div>'
+      +'<div style="background:var(--surface2);border-radius:8px;padding:8px 10px"><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:2px">Avg Collect Time</div><div style="font-size:15px;font-family:var(--mono);font-weight:500">'+(collectAvg!==null?collectAvg+'m':'—')+'</div></div>'
+      +'<div style="background:var(--surface2);border-radius:8px;padding:8px 10px"><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:2px">Avg Deliver Time</div><div style="font-size:15px;font-family:var(--mono);font-weight:500">'+(deliverAvg!==null?deliverAvg+'m':'—')+'</div></div>'
+      +'</div>'
+      +(b.urgent?'<div style="margin-top:10px;font-size:12px">Urgent: '
+        +'<span style="font-family:var(--mono);background:#D1FAE5;color:#065F46;border-radius:10px;padding:2px 8px;margin-right:4px">'+urgentOnTime+' on time</span>'
+        +(urgentLate?'<span style="font-family:var(--mono);background:#FEE2E2;color:#991B1B;border-radius:10px;padding:2px 8px">'+urgentLate+' late</span>':'')
+        +'</div>':'')
+      +'</div>';
+  }).join('');
+}
+
+function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
+
+rset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>OnePLUS LMS v19.3</title>
+<!-- LMS v5.0 | Built 2026-04-10 | Node-verified -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1A4A3A">
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
 
 // LabFlow — OnePLUS Ultrasound & Laboratory, Pitampura
 // Version: 17 | Built: 12 Apr 2026

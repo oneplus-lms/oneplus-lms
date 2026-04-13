@@ -1,15 +1,18 @@
-// LabFlow Service Worker — v18.1
+// LabFlow Service Worker — v18.7
 // Cache name bump forces all clients to fetch fresh assets on next visit
 
 const CACHE_NAME = 'labflow-v18';
 
 const PRECACHE = [
   '/',
-  '/index.html',
-  '/dashboard.html',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
+  '/oneplus-lms/index.html',
+  '/oneplus-lms/dashboard.html',
+  '/oneplus-lms/manifest.json',
+  '/oneplus-lms/icon-192.png',
+  '/oneplus-lms/icon-512.png',
+  '/oneplus-lms/catalogue.json',
+  '/oneplus-lms/panels.json',
+  '/oneplus-lms/preanalytical.json',
 ];
 
 const CDN_CACHE = [

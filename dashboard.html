@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v18.6 — OnePLUS</title>
+<title>LabFlow Dashboard v18.8 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -78,6 +78,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .ai:last-child{border-bottom:none}
 .ad{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0}
 .empty{padding:18px;text-align:center;color:var(--text3);font-size:13px}
+.range-bar{background:var(--surface2);border-bottom:0.5px solid var(--border);padding:8px 28px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rqb{font-size:11px;font-family:var(--mono);padding:5px 12px;border-radius:20px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap}
+.rqb.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.range-sep{color:var(--text3);font-size:12px;margin:0 2px}
+.rdates{display:flex;align-items:center;gap:6px;margin-left:auto}
+.rdates input[type=date]{font-size:11px;font-family:var(--mono);border:1px solid var(--border-strong);border-radius:6px;padding:4px 8px;background:var(--surface);color:var(--text);cursor:pointer}
+.range-summary{display:none;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.range-summary.show{display:flex}
+.rsc{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--rl);padding:11px 15px;flex:1;min-width:120px}
+.rsc .sl{font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.rsc .sv{font-family:var(--serif);font-size:20px;font-weight:500;color:var(--accent)}
+.day-row{display:flex;justify-content:space-between;align-items:center;padding:6px 15px;border-bottom:0.5px solid var(--border);font-size:12px}
+.day-row:last-child{border-bottom:none}
+.day-row:hover{background:var(--surface2)}
+
 </style>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono&family=Fraunces:wght@300;500&display=swap" rel="stylesheet">
 </head>
@@ -96,24 +111,52 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
 <div id="main">
   <div class="topbar">
-    <div><div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v18.6</span></div>
+    <div><div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v18.8</span></div>
     <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div></div>
     <div class="tb-right">
       <div class="live" title="Live"></div>
       <span id="ddate" class="tb-meta"></span>
-      <input type="date" id="dash-date-picker"
-        style="font-size:12px;font-family:var(--mono);border:1px solid var(--border);border-radius:6px;padding:3px 8px;background:var(--surface2);color:var(--text);cursor:pointer"
-        onchange="onDashDateChange(this.value)">
       <span id="drefresh" class="tb-meta"></span>
       <button class="sout" onclick="doSignOut()">Sign out</button>
+    </div>
+  </div>
+
+  <!-- Range bar -->
+  <div class="range-bar">
+    <button class="rqb active" id="rqb-today" onclick="setQuickRange('today')">Today</button>
+    <button class="rqb" id="rqb-yesterday" onclick="setQuickRange('yesterday')">Yesterday</button>
+    <button class="rqb" id="rqb-week" onclick="setQuickRange('week')">This Week</button>
+    <button class="rqb" id="rqb-month" onclick="setQuickRange('month')">This Month</button>
+    <button class="rqb" id="rqb-custom" onclick="setQuickRange('custom')">Custom</button>
+    <div class="rdates">
+      <input type="date" id="range-from" onchange="onCustomRange()">
+      <span class="range-sep">&rarr;</span>
+      <input type="date" id="range-to" onchange="onCustomRange()">
     </div>
   </div>
 
   <div class="content">
     <div id="alerts"></div>
 
+    <!-- Range summary (shown for multi-day views) -->
+    <div class="range-summary" id="range-summary">
+      <div class="rsc"><div class="sl">Total Orders</div><div class="sv" id="rs-orders">—</div></div>
+      <div class="rsc"><div class="sl">Revenue</div><div class="sv" id="rs-rev">—</div></div>
+      <div class="rsc"><div class="sl">Cash</div><div class="sv" id="rs-cash">—</div></div>
+      <div class="rsc"><div class="sl">UPI</div><div class="sv" id="rs-upi">—</div></div>
+      <div class="rsc"><div class="sl">Card</div><div class="sv" id="rs-card">—</div></div>
+      <div class="rsc"><div class="sl">Credit Due</div><div class="sv" id="rs-credit" style="color:var(--amber)">—</div></div>
+      <div class="rsc"><div class="sl">Collection</div><div class="sv" id="rs-coll" style="color:var(--blue)">—</div></div>
+    </div>
+
+    <!-- Day-by-day breakdown (range only) -->
+    <div id="range-days-card" style="display:none;margin-bottom:16px" class="card">
+      <div class="ch"><div class="ct" id="range-days-title">Daily Breakdown</div></div>
+      <div id="range-days-body"></div>
+    </div>
+
     <div class="stats">
-      <div class="sc"><div class="sl">Orders Today</div><div class="sv" id="sord">&#8212;</div><div class="ss" id="sords">Loading</div></div>
+      <div class="sc"><div class="sl" id="stat-orders-label">Orders</div><div class="sv" id="sord">&#8212;</div><div class="ss" id="sords">Loading</div></div>
       <div class="sc red" id="scurg" style="display:none"><div class="sl">&#128680; Urgent</div><div class="sv" id="surg">0</div><div class="ss">Priority processing</div></div>
       <div class="sc"><div class="sl">Revenue</div><div class="sv" id="srev">&#8212;</div><div class="ss" id="srevs">Tests + collection</div></div>
       <div class="sc amber"><div class="sl">Pending Bills</div><div class="sv" id="spend">&#8212;</div><div class="ss" id="spends">Credit due</div></div>
@@ -247,22 +290,182 @@ function td(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1)
 function fmt(n){return 'Rs.'+(n||0).toLocaleString('en-IN');}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-var dashDate = td(); // currently viewed date
+var dashDate = td();
+var dashMode = 'today';  // today | yesterday | week | month | custom
+var dashFrom = td();
+var dashTo   = td();
+var dashViewLabel = 'today';
+var allOrdersRange = []; // for multi-day aggregation
 
 function startDash(){
   dashDate = td();
-  var picker = document.getElementById('dash-date-picker');
-  if (picker) picker.value = dashDate;
-  loadDashDate(dashDate);
+  dashFrom = td(); dashTo = td();
+  var today = td();
+  var rf = document.getElementById('range-from');
+  var rt = document.getElementById('range-to');
+  if (rf) { rf.max = today; rf.value = today; }
+  if (rt) { rt.max = today; rt.value = today; }
+  setQuickRange('today');
 }
 
-function onDashDateChange(val){
-  if (!val) return;
-  dashDate = val;
+function setQuickRange(mode) {
+  dashMode = mode;
+  var today = td();
+  var d = new Date();
+  ['today','yesterday','week','month','custom'].forEach(function(id) {
+    var btn = document.getElementById('rqb-'+id);
+    if (btn) btn.className = 'rqb' + (id === mode ? ' active' : '');
+  });
+  var rf = document.getElementById('range-from');
+  var rt = document.getElementById('range-to');
+  if (mode === 'today') {
+    dashFrom = dashTo = today; dashViewLabel = 'today';
+  } else if (mode === 'yesterday') {
+    var y = new Date(d); y.setDate(y.getDate()-1);
+    dashFrom = dashTo = fmtDate(y); dashViewLabel = 'yesterday';
+  } else if (mode === 'week') {
+    var mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay()+6)%7));
+    dashFrom = fmtDate(mon); dashTo = today; dashViewLabel = 'this week';
+  } else if (mode === 'month') {
+    dashFrom = today.slice(0,8)+'01'; dashTo = today; dashViewLabel = 'this month';
+  } else if (mode === 'custom') {
+    dashFrom = rf ? rf.value || today : today;
+    dashTo   = rt ? rt.value || today : today;
+    dashViewLabel = 'selected range';
+  }
+  if (rf && mode !== 'custom') rf.value = dashFrom;
+  if (rt && mode !== 'custom') rt.value = dashTo;
+  loadRange(dashFrom, dashTo);
+}
+
+function onCustomRange() {
+  var rf = document.getElementById('range-from');
+  var rt = document.getElementById('range-to');
+  if (!rf || !rt || !rf.value || !rt.value) return;
+  if (rf.value > rt.value) { rt.value = rf.value; }
+  dashMode = 'custom';
+  ['today','yesterday','week','month','custom'].forEach(function(id) {
+    var btn = document.getElementById('rqb-'+id);
+    if (btn) btn.className = 'rqb' + (id === 'custom' ? ' active' : '');
+  });
+  dashFrom = rf.value; dashTo = rt.value; dashViewLabel = 'selected range';
+  loadRange(dashFrom, dashTo);
+}
+
+function fmtDate(d) {
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+function isMultiDay() { return dashFrom !== dashTo; }
+
+function loadRange(from, to) {
   if (uO) { uO(); uO=null; }
   if (uH) { uH(); uH=null; }
-  loadDashDate(dashDate);
+  var today = td();
+  var isToday = from === today && to === today;
+  // Update header label
+  var label = isToday ? new Date().toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})+' (Today)'
+    : from === to ? new Date(from+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})
+    : new Date(from+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})
+      +' — '+new Date(to+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  set('ddate', label);
+  set('stat-orders-label', isMultiDay() ? 'Total Orders' : 'Orders');
+  // Range summary visibility
+  var rs = document.getElementById('range-summary');
+  var rdc = document.getElementById('range-days-card');
+  if (rs) rs.className = 'range-summary' + (isMultiDay() ? ' show' : '');
+  if (rdc) rdc.style.display = isMultiDay() ? 'block' : 'none';
+
+  if (!isMultiDay()) {
+    // Single day — use realtime listener
+    dashDate = from;
+    uO = db.collection('orders').where('date','==',from).onSnapshot(function(snap){
+      allOrders=[];
+      snap.forEach(function(doc){allOrders.push(Object.assign({id:doc.id},doc.data()));});
+      allOrders.sort(function(a,b){return(b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0);});
+      renderAll();
+      set('drefresh','Updated '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}));
+    });
+    if (isToday) {
+      uH = db.collection('handovers').where('date','==',from).onSnapshot(function(snap){
+        allHandovers=[];
+        snap.forEach(function(doc){allHandovers.push(Object.assign({id:doc.id},doc.data()));});
+        renderHandovers(); updateCash();
+      });
+    }
+  } else {
+    // Multi-day — one-time fetch
+    set('drefresh','Loading…');
+    db.collection('orders').where('date','>=',from).where('date','<=',to)
+      .get().then(function(snap) {
+        allOrders=[];
+        snap.forEach(function(doc){allOrders.push(Object.assign({id:doc.id},doc.data()));});
+        allOrders.sort(function(a,b){return(b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0);});
+        allHandovers=[];
+        renderAll();
+        set('drefresh',allOrders.length+' orders · '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}));
+      });
+  }
 }
+
+function renderRangeSummary() {
+  if (!isMultiDay()) return;
+  var cash=0,upi=0,card=0,credit=0,coll=0;
+  allOrders.forEach(function(o){
+    var paid=o.paidAmount||0;
+    if(o.payMode==='split'&&o.splitPayments){cash+=(o.splitPayments.cash||0);upi+=(o.splitPayments.upi||0);card+=(o.splitPayments.card||0);}
+    else if(o.payMode==='cash')cash+=paid;
+    else if(o.payMode==='upi')upi+=paid;
+    else if(o.payMode==='card')card+=paid;
+    if(o.payMode==='credit')credit+=(o.totalAmount||0);
+    coll+=(o.collectionCharge||0);
+  });
+  set('rs-orders', allOrders.length);
+  set('rs-rev', fmt(cash+upi+card));
+  set('rs-cash', fmt(cash)); set('rs-upi', fmt(upi)); set('rs-card', fmt(card));
+  set('rs-credit', fmt(credit)); set('rs-coll', fmt(coll));
+
+  // Day-by-day breakdown
+  var byDay = {};
+  allOrders.forEach(function(o){
+    var day = o.date || '';
+    if (!byDay[day]) byDay[day] = {orders:0,rev:0,cash:0,upi:0,card:0,credit:0,coll:0};
+    var b = byDay[day]; b.orders++;
+    var paid = o.paidAmount||0;
+    if(o.payMode==='split'&&o.splitPayments){b.cash+=(o.splitPayments.cash||0);b.upi+=(o.splitPayments.upi||0);b.card+=(o.splitPayments.card||0);}
+    else if(o.payMode==='cash')b.cash+=paid;
+    else if(o.payMode==='upi')b.upi+=paid;
+    else if(o.payMode==='card')b.card+=paid;
+    if(o.payMode==='credit')b.credit+=(o.totalAmount||0);
+    b.coll+=(o.collectionCharge||0);
+    b.rev=b.cash+b.upi+b.card;
+  });
+  var days = Object.keys(byDay).sort().reverse();
+  set('range-days-title', 'Daily Breakdown (' + days.length + ' days)');
+  var el = document.getElementById('range-days-body');
+  if (!el) return;
+  if (!days.length) { el.innerHTML = '<div class="empty">No orders</div>'; return; }
+  el.innerHTML = '<div class="day-row" style="background:var(--surface2);font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">'
+    +'<span style="width:100px">Date</span><span style="width:50px;text-align:right">Orders</span>'
+    +'<span style="width:90px;text-align:right">Revenue</span><span style="width:80px;text-align:right">Cash</span>'
+    +'<span style="width:80px;text-align:right">UPI</span><span style="width:80px;text-align:right">Card</span>'
+    +'<span style="width:80px;text-align:right">Credit</span></div>'
+    + days.map(function(day){
+      var b = byDay[day];
+      var isToday = day === td();
+      var dayLabel = new Date(day+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short'});
+      return '<div class="day-row">'
+        +'<span style="width:100px;font-weight:'+(isToday?'600':'400')+'">'+dayLabel+(isToday?' ★':'')+'</span>'
+        +'<span style="width:50px;text-align:right;font-family:var(--mono)">'+b.orders+'</span>'
+        +'<span style="width:90px;text-align:right;font-family:var(--mono);font-weight:500">'+fmt(b.rev)+'</span>'
+        +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.cash)+'</span>'
+        +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.upi)+'</span>'
+        +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.card)+'</span>'
+        +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--amber)">'+fmt(b.credit)+'</span>'
+        +'</div>';
+    }).join('');
+}
+
 
 function loadDashDate(date){
   var d = new Date(date+'T00:00:00');
@@ -286,7 +489,7 @@ function loadDashDate(date){
   });
 }
 
-function renderAll(){renderStats();filterTable(document.getElementById('sq').value);renderDepts();renderField();renderTransfers();renderActivity();renderAlerts();}
+function renderAll(){renderStats();filterTable(document.getElementById('sq').value);renderDepts();renderField();renderTransfers();renderActivity();renderAlerts();renderRangeSummary();}
 
 function renderStats(){
   var cash=0,upi=0,card=0,credit=0,pend=0,home=0,urg=0,coll=0,amend=0,trans=0;
@@ -307,12 +510,12 @@ function renderStats(){
     if(o.fieldTransferPending)trans++;
   });
   var rev=cash+upi+card;
-  set('sord',allOrders.length);set('sords',allOrders.length+' order'+(allOrders.length!==1?'s':'')+' today');
+  set('sord',allOrders.length);set('sords',allOrders.length+' order'+(allOrders.length!==1?'s':'')+' '+dashViewLabel);
   set('srev',fmt(rev));set('srevs','+ Rs.'+coll.toLocaleString('en-IN')+' collection');
   set('spend',pend);set('spends',fmt(credit)+' due');
   set('shome',home);
   var hcoll=allOrders.filter(function(o){return o.source==='Home Collection'&&o.fieldStatus;}).length;
-  set('shomes',hcoll+' collected / '+home+' total');
+  set('shomes',hcoll+' collected / '+home+' total'); set('sord',allOrders.length);
   set('samend',amend);
   set('rcash',fmt(cash));set('rupi',fmt(upi));set('rcard',fmt(card));set('rcoll',fmt(coll));set('rcredit',fmt(credit));
   document.getElementById('scurg').style.display=urg>0?'block':'none'; set('surg',urg);

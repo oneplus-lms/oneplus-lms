@@ -1,7 +1,7 @@
-// LabFlow Service Worker — v18.7
+// LabFlow Service Worker — v19.2
 // Cache name bump forces all clients to fetch fresh assets on next visit
 
-const CACHE_NAME = 'labflow-v18';
+const CACHE_NAME = 'labflow-v19';
 
 const PRECACHE = [
   '/',
@@ -16,9 +16,9 @@ const PRECACHE = [
 ];
 
 const CDN_CACHE = [
-  'https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js',
-  'https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js',
-  'https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js',
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js',
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',

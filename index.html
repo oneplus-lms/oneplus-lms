@@ -1408,6 +1408,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script>
 if (typeof firebase === 'undefined') {
   document.getElementById('load-txt').textContent = 'Failed to load — check connection and refresh';
@@ -1599,6 +1600,12 @@ function convertEstimateToOrder() {
   _fromEstimate = false;
 
   // Land on step 2 (Select Tests) so tests are immediately visible
+  // Also populate curOrder.tests/testTotal now so submitOrder works
+  // even if user taps Next without modifying tests
+  curOrder.tests = selTests;
+  curOrder.panel = panelToLoad;
+  curOrder.testTotal = testsToLoad.reduce(function(s,t){ return s+(t.rate||0); },0);
+  curOrder.totalAmount = curOrder.testTotal;
   showStep(2);
   renderTests();
   setPanelButtons();
@@ -2035,7 +2042,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.7';
+var APP_VERSION = 'v19.9';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3519,6 +3526,37 @@ function clearPhoto(type) {
     document.getElementById('proof-input').value = '';
   }
 }
+// ── PHOTO UPLOAD TO FIREBASE STORAGE ────────────────────────────────────
+async function uploadOrderPhotos(orderId, rxPhotos, proofB64) {
+  try {
+    var storage = firebase.storage();
+    var updates = {};
+    // Upload rx photos
+    if (rxPhotos && rxPhotos.length) {
+      var urls = [];
+      for (var i = 0; i < rxPhotos.length; i++) {
+        var ref = storage.ref('rx-photos/' + todayStr() + '/' + orderId + '_rx' + i + '.jpg');
+        var snap = await ref.putString(rxPhotos[i], 'data_url');
+        urls.push(await snap.ref.getDownloadURL());
+      }
+      updates.rxPhotos = urls;
+      updates.rxPhoto = urls[0] || '';
+    }
+    // Upload payment proof
+    if (proofB64) {
+      var pref = storage.ref('proof-photos/' + todayStr() + '/' + orderId + '.jpg');
+      var psnap = await pref.putString(proofB64, 'data_url');
+      updates.paymentProof = await psnap.ref.getDownloadURL();
+    }
+    if (Object.keys(updates).length) {
+      await db.collection('orders').doc(orderId).update(updates);
+    }
+  } catch(e) {
+    console.warn('Photo upload failed:', e.message);
+    // Order already saved — photos just won't show
+  }
+}
+
 function submitOrder() {
   var disc=parseFloat(document.getElementById('discount').value||0);
   // Block if discount approval is pending
@@ -3586,13 +3624,24 @@ function submitOrder() {
     order.serialNo = displayDate + ' - ' + serial;
     order.seq = seq;
     registerDoctorFromOrder(order.refBy);
-    return db.collection('orders').add(order);
+    // Strip base64 photos from order doc before saving — upload to Storage instead
+    var photosToUpload = order.rxPhotos || [];
+    var proofToUpload = order.paymentProof || '';
+    order.rxPhotos = [];
+    order.rxPhoto = '';
+    order.paymentProof = '';
+    return db.collection('orders').add(order).then(function(ref) {
+      // Upload photos to Storage in background — don't block order confirmation
+      uploadOrderPhotos(ref.id, photosToUpload, proofToUpload);
+      return ref;
+    });
   }).then(function(ref) {
     lastOrder = {id: ref.id}; Object.assign(lastOrder, order);
     document.getElementById('done-id').textContent = order.patientName + ' — Saved ✓';
     goTo('s-done');
     loadStats();
-  }).catch(function(e) { toast('Save failed - check connection', 'err'); });
+  }).catch(function(e) { toast('Save failed: ' + e.message, 'err'); });
+
 }
 function newOrder() {
   curOrder={}; selTests=[]; curPanel='standard'; payMode='cash'; creditMode=false; splitPay={cash:0,upi:0,card:0}; selDiagnoses=[]; selMeds=[]; rxPhotos=[]; proofPhotoB64=''; discType='amt'; curGPS=null;

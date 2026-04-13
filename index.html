@@ -1636,7 +1636,7 @@ function routeAfterPin(role) {
     var adminBtn = document.getElementById('admin-btn');
     var reviewBtn = document.getElementById('review-btn');
     var fieldBtn = document.getElementById('field-btn');
-    if (adminBtn) adminBtn.style.display = (role==='admin') ? 'block' : 'none';
+    if (adminBtn) adminBtn.style.display = (role==='admin'||role==='pathologist') ? 'block' : 'none';
     if (reviewBtn) reviewBtn.style.display = (role==='admin'||role==='manager') ? 'block' : 'none';
     if (fieldBtn) fieldBtn.style.display = 'block'; // all roles see field tasks
     // Manager sees staff list (read-only) via admin screen but no add/edit buttons
@@ -2024,7 +2024,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.3';
+var APP_VERSION = 'v19.4';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -2386,13 +2386,8 @@ async function checkPin() {
     pinBuf = '';
     renderDots();
     document.getElementById('pin-err').textContent = 'Security upgrade: please set a new PIN below';
-    // Prompt admin to reset via staff modal — or self-reset flow
-    setTimeout(function(){
-      if (confirm('Your PIN needs to be reset for a security upgrade. Reset now?')) {
-        showScreen('s-admin');
-        toast('Edit your staff profile to set a new PIN', 'info');
-      }
-    }, 300);
+    // Self-service PIN reset -- works for all roles
+    setTimeout(function(){ showSelfPinReset(); }, 300);
     return;
   }
   var hashed = await hashPin(pinBuf);
@@ -2437,6 +2432,50 @@ function unlock() {
   routeAfterPin(role);
   applyManagerRestrictions(role);
 }
+
+// ── SELF-SERVICE PIN RESET (all roles) ──────────────────────────────────
+function showSelfPinReset() {
+  var existing = document.getElementById('pin-reset-overlay');
+  if (existing) existing.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'pin-reset-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--accent);z-index:9999;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;padding:40px 28px;overflow-y:auto';
+  overlay.innerHTML =
+    '<div style="font-family:var(--serif);font-size:28px;font-weight:300;color:#fff;margin-bottom:6px">Set New PIN</div>'
+    + '<div style="font-size:13px;color:rgba(255,255,255,0.55);font-family:var(--mono);margin-bottom:32px">Security upgrade &#8212; choose a new 4-digit PIN</div>'
+    + '<div style="font-size:11px;color:rgba(255,255,255,0.5);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">New PIN</div>'
+    + '<input id="prs-pin1" type="password" maxlength="4" inputmode="numeric" placeholder="Enter 4-digit PIN" style="width:100%;padding:12px 14px;border:0.5px solid rgba(255,255,255,0.25);border-radius:10px;background:rgba(255,255,255,0.1);color:#fff;font-size:18px;letter-spacing:6px;font-family:var(--mono);margin-bottom:16px">'
+    + '<div style="font-size:11px;color:rgba(255,255,255,0.5);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Confirm PIN</div>'
+    + '<input id="prs-pin2" type="password" maxlength="4" inputmode="numeric" placeholder="Re-enter PIN" style="width:100%;padding:12px 14px;border:0.5px solid rgba(255,255,255,0.25);border-radius:10px;background:rgba(255,255,255,0.1);color:#fff;font-size:18px;letter-spacing:6px;font-family:var(--mono);margin-bottom:20px">'
+    + '<div id="prs-err" style="color:rgba(255,180,160,1);font-size:13px;font-family:var(--mono);min-height:18px;margin-bottom:14px"></div>'
+    + '<button onclick="saveSelfPin()" style="width:100%;padding:13px;background:#fff;color:var(--accent);border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:12px">Save PIN</button>'
+    + '<button onclick="doSignOut()" style="width:100%;padding:13px;background:transparent;color:rgba(255,255,255,0.5);border:0.5px solid rgba(255,255,255,0.2);border-radius:10px;font-size:13px;cursor:pointer">Sign out instead</button>';
+  document.getElementById('app').appendChild(overlay);
+}
+
+async function saveSelfPin() {
+  var pin1 = (document.getElementById('prs-pin1').value || '').trim();
+  var pin2 = (document.getElementById('prs-pin2').value || '').trim();
+  var errEl = document.getElementById('prs-err');
+  errEl.textContent = '';
+  if (!/^[0-9]{4}$/.test(pin1)) { errEl.textContent = 'PIN must be exactly 4 digits'; return; }
+  if (pin1 !== pin2) { errEl.textContent = 'PINs do not match'; return; }
+  var saveBtn = document.querySelector('#pin-reset-overlay button[onclick="saveSelfPin()"]');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+  try {
+    var pinHash = await hashPin(pin1);
+    await db.collection('staff').doc(curUser.uid).update({ pin: pinHash });
+    curProfile.pin = pinHash;
+    document.getElementById('pin-reset-overlay').remove();
+    toast('PIN updated \u2713 \u2014 enter your new PIN to continue', 'ok');
+    pinBuf = ''; renderDots();
+    document.getElementById('pin-err').textContent = '';
+  } catch(e) {
+    errEl.textContent = 'Save failed: ' + e.message;
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save PIN'; }
+  }
+}
+
 
 // ── DASHBOARD ──
 function loadDash() {

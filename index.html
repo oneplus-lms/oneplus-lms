@@ -1589,21 +1589,28 @@ function convertEstimateToOrder() {
   var phone = document.getElementById('est-phone').value.trim();
   var testsToLoad = estTests.map(function(t){ return Object.assign({},t); });
   var panelToLoad = estPanel;
-  // Flag prevents showScreen from wiping selTests on navigation
+
+  // Navigate to order screen — flag stops showScreen from resetting state
   _fromEstimate = true;
   curOrder = {};
   selTests = testsToLoad;
   curPanel = panelToLoad;
   goTo('s-order');
   _fromEstimate = false;
-  showStep(1);
+
+  // Land on step 2 (Select Tests) so tests are immediately visible
+  showStep(2);
   renderTests();
+  setPanelButtons();
+  updateBillTotal();
+
+  // Pre-fill patient fields so user can review before going back to step 1 if needed
   setTimeout(function(){
     if (name) document.getElementById('pt-name').value = name;
     if (phone) document.getElementById('pt-phone').value = phone;
-    setPanelButtons();
   }, 50);
-  toast('Estimate loaded — ' + testsToLoad.length + ' test' + (testsToLoad.length !== 1 ? 's' : '') + ' copied', 'ok');
+
+  toast('Estimate loaded — ' + testsToLoad.length + ' test' + (testsToLoad.length !== 1 ? 's' : '') + ' copied. Fill patient details to continue.', 'ok');
 }
 
 // Reset estimate when navigating to it
@@ -2028,7 +2035,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.6';
+var APP_VERSION = 'v19.7';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;

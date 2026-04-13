@@ -52,6 +52,8 @@ self.addEventListener('fetch', event => {
   if (url.hostname.includes('firestore.googleapis.com')) return;
   if (url.hostname.includes('identitytoolkit.googleapis.com')) return;
   if (url.hostname.includes('securetoken.googleapis.com')) return;
+  if (url.hostname.includes('storage.googleapis.com')) return;
+  if (url.hostname.includes('firebaseio.com')) return;
 
   const isCDN = CDN_CACHE.some(u => event.request.url.startsWith(u));
 

@@ -1,12 +1,9 @@
-// LabFlow Service Worker — v19.2
-// Cache name bump forces all clients to fetch fresh assets on next visit
-
-const CACHE_NAME = 'labflow-v19';
+// LabFlow Service Worker — v19.18
+const CACHE_NAME = 'labflow-v19.18';
 
 const PRECACHE = [
   '/',
   '/oneplus-lms/index.html',
-  '/oneplus-lms/dashboard.html',
   '/oneplus-lms/manifest.json',
   '/oneplus-lms/icon-192.png',
   '/oneplus-lms/icon-512.png',

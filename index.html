@@ -1613,13 +1613,15 @@ function convertEstimateToOrder() {
 
   // Fill patient fields immediately (synchronous — so submitOrder can read them)
   if (name) document.getElementById('pt-name').value = name;
-  if (phone) document.getElementById('pt-phone').value = phone;
+  if (phone) {
+    document.getElementById('pt-phone').value = phone;
+    scheduleRepeatCheck(); // trigger repeat patient detection
+  }
 
   toast('Estimate loaded — ' + testsToLoad.length + ' test' + (testsToLoad.length !== 1 ? 's' : '') + ' copied. Fill patient details to continue.', 'ok');
 }
 
 // Reset estimate when navigating to it
-var _origGoTo = goTo;
 // Hook goTo for s-estimate reset
 function initEstimateScreen() {
   estPanel='standard'; estTests=[]; estDiscType='amt'; estHits=[];
@@ -2040,7 +2042,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.15';
+var APP_VERSION = 'v19.16';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3583,6 +3585,10 @@ function submitOrder() {
   if (!curOrder.source)      curOrder.source      = document.getElementById('pt-source').value||'Walk-in';
   if (!curOrder.address)     curOrder.address     = (document.getElementById('pt-address').value||'').trim();
   if (!curOrder.history)     curOrder.history     = {};
+  // Validate required fields
+  if (!curOrder.patientName) { toast('Patient name is required', 'warn'); goTo('s-order'); showStep(1); document.getElementById('pt-name').focus(); return; }
+  if (!curOrder.phone || curOrder.phone.length < 6) { toast('Mobile number is required', 'warn'); goTo('s-order'); showStep(1); document.getElementById('pt-phone').focus(); return; }
+  if (!selTests.length && !(curOrder.tests && curOrder.tests.length)) { toast('Select at least one test', 'warn'); return; }
   var disc=parseFloat(document.getElementById('discount').value||0);
   // Block if discount approval is pending
   var total = curOrder.totalAmount || 0;

@@ -218,9 +218,6 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   @page { margin: 10mm; size: A4 portrait; }
 }
 </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="app" onclick="hideSuggest(event)">
@@ -2905,6 +2902,7 @@ async function checkDoctorRegistry() {
 }
 
 function handleDrFile(input) {
+  if (!_xlsxLoaded) { loadXLSX(function(){ handleDrFile(input); }); return; }
   var file = input.files[0];
   if (!file) return;
   var statusEl = document.getElementById('dr-upload-status');
@@ -3356,6 +3354,7 @@ function handleRxFile(input) {
 }
 
 function handleRxPDF(file) {
+  if (!_pdfLibsLoaded) { loadPDFLibs(function(){ handleRxPDF(file); }); return; }
   if (rxPhotos.length >= 4) { toast('Maximum 4 pages already added', 'warn'); return; }
   // Check PDF.js is loaded
   if (typeof pdfjsLib === 'undefined') {
@@ -4164,10 +4163,42 @@ function submitEditOrder() {
 }
 
 
+
+// Lazy-load PDF and XLSX libraries on demand
+var _pdfLibsLoaded = false;
+var _pdfLibsLoading = false;
+var _pdfLibCallbacks = [];
+function loadPDFLibs(cb) {
+  if (_pdfLibsLoaded) { cb(); return; }
+  _pdfLibCallbacks.push(cb);
+  if (_pdfLibsLoading) return;
+  _pdfLibsLoading = true;
+  var s1 = document.createElement('script');
+  s1.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  s1.onload = function() {
+    var s2 = document.createElement('script');
+    s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s2.onload = function() {
+      _pdfLibsLoaded = true; _pdfLibsLoading = false;
+      _pdfLibCallbacks.forEach(function(fn){ fn(); }); _pdfLibCallbacks = [];
+    };
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s1);
+}
+var _xlsxLoaded = false;
+function loadXLSX(cb) {
+  if (_xlsxLoaded) { cb(); return; }
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.onload = function() { _xlsxLoaded = true; cb(); };
+  document.head.appendChild(s);
+}
+
 function downloadTRFpdf() {
+  if (!_pdfLibsLoaded) { loadPDFLibs(function(){ downloadTRFpdf(); }); toast('Loading PDF library...','ok'); return; }
   var o = curDetailOrder || lastOrder;
   if (!o) { toast('No order loaded','warn'); return; }
-  if (typeof window.jspdf === 'undefined') { toast('PDF library loading, try again','warn'); return; }
   var jsPDF = window.jspdf.jsPDF;
   var doc = new jsPDF({unit:'mm', format:'a4'});
   var pw = 210, ph = 297, ml = 15, mr = 15, mt = 15;

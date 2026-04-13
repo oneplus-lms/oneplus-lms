@@ -1761,10 +1761,10 @@ function renderPhleboDash(orders) {
 
     var actions = '';
     if (!isCollected && !isDelivered && canAct && !isPendingToMe) {
-      actions = '<button class="btn btn-primary" style="flex:1;font-size:13px;padding:10px" onclick="fieldActionIdx('+fidx+','collect')">&#10003; Collected</button>'
+      actions = '<button class="btn btn-primary" style="flex:1;font-size:13px;padding:10px" onclick="fieldActionIdx('+fidx+',\'collect\')">&#10003; Collected</button>'
               + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
     } else if (isCollected && canAct) {
-      actions = '<button class="btn" style="flex:1;font-size:13px;padding:10px;color:var(--accent);border-color:var(--accent)" onclick="fieldActionIdx('+fidx+','deliver')">&#128230; Delivered</button>'
+      actions = '<button class="btn" style="flex:1;font-size:13px;padding:10px;color:var(--accent);border-color:var(--accent)" onclick="fieldActionIdx('+fidx+',\'deliver\')">&#128230; Delivered</button>'
               + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
     }
 
@@ -2023,19 +2023,7 @@ function renderReview(byPhlebo) {
 
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
-rset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>OnePLUS LMS v19.3</title>
-<!-- LMS v5.0 | Built 2026-04-10 | Node-verified -->
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#1A4A3A">
-<link rel="manifest" href="manifest.json">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
-
-// LabFlow — OnePLUS Ultrasound & Laboratory, Pitampura
-// Version: 17 | Built: 12 Apr 2026
 var APP_VERSION = 'v19.3';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly

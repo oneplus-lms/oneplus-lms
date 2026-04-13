@@ -762,6 +762,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   <div class="scroll-body" style="padding-top:12px">
     <input type="text" id="orders-search" placeholder="Search patient..." oninput="filterOrders(this.value)" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;margin-bottom:16px">
     <div id="orders-list"><div class="empty">Loading...</div></div>
+    <button id="orders-load-more" onclick="loadOrders(true)" style="display:none;width:100%;padding:11px;margin-top:8px;background:var(--surface);border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;color:var(--accent);cursor:pointer;font-family:var(--mono)">Load more orders</button>
   </div>
 </div>
 
@@ -2024,7 +2025,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.4';
+var APP_VERSION = 'v19.5';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3028,16 +3029,10 @@ var allDoctorsCache = null;
 var doctorCacheLoading = false;
 var doctorPickerTargetId = null;
 
-// Pre-warm doctor cache silently after login — so first search is instant
-function prewarmDoctorCache() {
-  if (allDoctorsCache || doctorCacheLoading) return;
-  doctorCacheLoading = true;
-  db.collection('doctors').orderBy('name').get().then(function(snap) {
-    allDoctorsCache = [];
-    snap.forEach(function(d){ allDoctorsCache.push(d.data()); });
-    doctorCacheLoading = false;
-  }).catch(function(){ doctorCacheLoading = false; });
-}
+// Prewarm disabled — doctor search loads on demand (was fetching 5,914 docs on every login)
+function prewarmDoctorCache() { return; }
+
+var _drSearchTimer = null;
 
 function inlineDoctorSearch(val, inputId, listId) {
   var input = document.getElementById(inputId);
@@ -3049,42 +3044,47 @@ function inlineDoctorSearch(val, inputId, listId) {
     val = corrected;
   }
   var el = document.getElementById(listId);
-  if (!val || val.trim().length < 1) { el.style.display = 'none'; return; }
-  if (allDoctorsCache) {
-    renderInlineList(val, el, inputId, listId);
-  } else if (doctorCacheLoading) {
-    el.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Loading...</div>';
-    el.style.display = 'block';
-    // Poll until cache ready — typically <500ms since prewarm started at login
-    var t = setInterval(function() {
-      if (allDoctorsCache) { clearInterval(t); renderInlineList(val, el, inputId, listId); }
-    }, 200);
-    setTimeout(function(){ clearInterval(t); }, 8000);
-  } else {
-    // Fallback: load now if prewarm somehow missed
-    el.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Loading...</div>';
-    el.style.display = 'block';
-    doctorCacheLoading = true;
-    db.collection('doctors').orderBy('name').get().then(function(snap) {
-      allDoctorsCache = [];
-      snap.forEach(function(d){ allDoctorsCache.push(d.data()); });
-      doctorCacheLoading = false;
-      renderInlineList(val, el, inputId, listId);
-    }).catch(function(){ doctorCacheLoading = false; el.style.display = 'none'; });
-  }
+  if (!val || val.trim().length < 2) { el.style.display = 'none'; return; }
+
+  // Strip Dr prefix for query
+  var q = val.trim();
+  var qClean = q.replace(/^dr\.?\s*/i,'').trim();
+  if (!qClean) { el.style.display = 'none'; return; }
+
+  clearTimeout(_drSearchTimer);
+  _drSearchTimer = setTimeout(function() {
+    var qUpper = qClean.toUpperCase();
+    db.collection('doctors')
+      .orderBy('name')
+      .startAt(qUpper)
+      .endAt(qUpper + '\uf8ff')
+      .limit(15)
+      .get()
+      .then(function(snap) {
+        var results = [];
+        snap.forEach(function(d){ results.push(d.data()); });
+        // Also try lowercase if no results
+        if (!results.length) {
+          return db.collection('doctors')
+            .orderBy('name')
+            .startAt(qClean)
+            .endAt(qClean + '\uf8ff')
+            .limit(15)
+            .get()
+            .then(function(snap2) {
+              snap2.forEach(function(d){ results.push(d.data()); });
+              renderInlineList(val, el, inputId, listId, results);
+            });
+        }
+        renderInlineList(val, el, inputId, listId, results);
+      })
+      .catch(function(){ el.style.display = 'none'; });
+  }, 250);
 }
 
-function renderInlineList(val, el, inputId, listId) {
-  var q = val.toLowerCase().trim();
-  // Search both with and without Dr prefix
-  var qStripped = q.replace(/^dr\.?\s*/i,'').trim();
-  var results = !qStripped ? [] : allDoctorsCache.filter(function(d){
-    if (!d.name) return false;
-    var n = d.name.toLowerCase();
-    var nClean = n.replace(/([a-z])\.([a-z])/g,'$1 $2').replace(/([a-z])\./g,'$1').replace(/\s{2,}/g,' ');
-    return n.indexOf(qStripped) >= 0 || n.indexOf(q) >= 0 || nClean.indexOf(qStripped) >= 0;
-  });
-  if (!results.length) { el.style.display = 'none'; return; }
+function renderInlineList(val, el, inputId, listId, results) {
+  // results passed directly from server query
+  if (!results || !results.length) { el.style.display = 'none'; return; }
   var shown = results.slice(0, 80);
   el.innerHTML = shown.map(function(d) {
     var safe = esc(d.name).replace(/'/g,"&#39;");
@@ -3629,24 +3629,42 @@ function ordersShiftDate(delta) {
   loadOrders();
 }
 
-function loadOrders() {
+var _ordersCursor = null;
+var _ordersAllLoaded = false;
+var _ordersPageSize = 50;
+
+function loadOrders(loadMore) {
   var dateStr = ordersDateStr(ordersDateOffset);
-  document.getElementById('orders-list').innerHTML='<div class="empty">Loading...</div>';
-  document.getElementById('orders-date-lbl').textContent = ordersDateLabel(ordersDateOffset);
-  document.getElementById('orders-date-val').textContent = dateStr;
-  // Hide forward button when on today
-  var nextBtn = document.getElementById('orders-next-btn');
-  if (nextBtn) nextBtn.style.opacity = ordersDateOffset >= 0 ? '0.3' : '1';
-  // Clear search
-  var sq = document.getElementById('orders-search');
-  if (sq) sq.value = '';
-  db.collection('orders').where('date','==',dateStr).get().then(function(snap){
-    allOrders=[];
+  if (!loadMore) {
+    // Fresh load — reset state
+    allOrders = [];
+    _ordersCursor = null;
+    _ordersAllLoaded = false;
+    document.getElementById('orders-list').innerHTML='<div class="empty">Loading...</div>';
+    document.getElementById('orders-date-lbl').textContent = ordersDateLabel(ordersDateOffset);
+    document.getElementById('orders-date-val').textContent = dateStr;
+    var nextBtn = document.getElementById('orders-next-btn');
+    if (nextBtn) nextBtn.style.opacity = ordersDateOffset >= 0 ? '0.3' : '1';
+    var sq = document.getElementById('orders-search');
+    if (sq) sq.value = '';
+  }
+  if (_ordersAllLoaded) return;
+
+  var query = db.collection('orders')
+    .where('date','==',dateStr)
+    .orderBy('createdAt','desc')
+    .limit(_ordersPageSize);
+  if (_ordersCursor) query = query.startAfter(_ordersCursor);
+
+  query.get().then(function(snap){
+    if (snap.empty || snap.docs.length < _ordersPageSize) _ordersAllLoaded = true;
+    if (!snap.empty) _ordersCursor = snap.docs[snap.docs.length - 1];
     snap.forEach(function(d){ allOrders.push(Object.assign({id:d.id},d.data())); });
-    allOrders.sort(function(a,b){ return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0); });
     renderOrders(allOrders);
     var label = ordersDateLabel(ordersDateOffset);
-    document.getElementById('orders-lbl').textContent=allOrders.length+' orders – '+label;
+    document.getElementById('orders-lbl').textContent = allOrders.length + (_ordersAllLoaded ? '' : '+') + ' orders – ' + label;
+    var btn = document.getElementById('orders-load-more');
+    if (btn) btn.style.display = _ordersAllLoaded ? 'none' : 'block';
   }).catch(function(e){
     document.getElementById('orders-list').innerHTML='<div class="empty">Error: '+e.message+'</div>';
   });

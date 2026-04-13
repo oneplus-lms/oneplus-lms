@@ -245,7 +245,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 
     <div id="form-login">
       <div class="auth-field"><label>Email</label><input type="email" id="a-email" placeholder="you@lab.com" autocomplete="email"></div>
-      <div class="auth-field"><label>Password</label><input type="password" id="a-pass" placeholder="Password" autocomplete="current-password"></div>
+      <div class="auth-field"><label>Password</label><div style="position:relative"><input type="password" id="a-pass" placeholder="Password" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding-right:36px"><button type="button" onclick="toggleEye('a-pass',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0;line-height:1">👁</button></div></div>
       <button class="auth-btn" id="login-btn" onclick="doLogin()">Sign In</button>
       <div class="auth-link" onclick="showReset()">Forgot password?</div>
       <div class="auth-err" id="login-err"></div>
@@ -640,7 +640,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <div style="font-size:11px;font-family:var(--mono);color:#92400E;font-weight:600">&#9888; Discount requires Pathologist/Admin PIN</div>
         <div id="disc-approval-sub" style="font-size:12px;color:#B45309;margin-top:2px"></div>
         <div style="display:flex;gap:8px;margin-top:8px">
-          <input type="password" id="disc-pin-input" placeholder="Enter PIN" maxlength="4" inputmode="numeric" style="flex:1;padding:8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:14px;font-family:var(--mono);letter-spacing:4px">
+          <div style="position:relative;flex:1"><input type="password" id="disc-pin-input" placeholder="Enter PIN" maxlength="4" inputmode="numeric" style="width:100%;box-sizing:border-box;padding:8px;padding-right:32px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:14px;font-family:var(--mono);letter-spacing:4px"><button type="button" onclick="toggleEye('disc-pin-input',this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;color:var(--text3);padding:0;line-height:1">👁</button></div>
           <button onclick="submitDiscountPin()" style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:13px;cursor:pointer">Approve</button>
         </div>
         <div id="disc-pin-err" style="font-size:11px;color:#DC2626;margin-top:4px;min-height:14px"></div>
@@ -1328,7 +1328,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
     <div class="field" id="sm-pass-field">
       <label>Password (min 6 chars)</label>
-      <input type="password" id="sm-pass" placeholder="Set login password">
+      <div style="position:relative"><input type="password" id="sm-pass" placeholder="Set login password" style="width:100%;box-sizing:border-box;padding-right:36px"><button type="button" onclick="toggleEye('sm-pass',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0;line-height:1">👁</button></div>
     </div>
     <div class="field">
       <label>Role</label>
@@ -1343,7 +1343,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
     <div class="field">
       <label>PIN (4 digits)</label>
-      <input type="password" id="sm-pin" placeholder="Daily login PIN" maxlength="4" inputmode="numeric">
+      <div style="position:relative"><input type="password" id="sm-pin" placeholder="Daily login PIN" maxlength="4" inputmode="numeric" style="width:100%;box-sizing:border-box;padding-right:36px"><button type="button" onclick="toggleEye('sm-pin',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0;line-height:1">👁</button></div>
     </div>
     <div class="field">
       <label>Default Referring Doctor <span style="font-size:11px;color:var(--text3);font-weight:400">— for Doctor Clinic orders</span></label>
@@ -2169,7 +2169,26 @@ function goTo(id, push) {
     history.pushState({appNav: true}, '', '');
   }
 }
+// ── PIN HASHING (SHA-256 via Web Crypto) ──
+async function hashPin(pin) {
+  var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin));
+  return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+}
+function isHashed(val) { return typeof val === 'string' && val.length === 64; }
+
+function toggleEye(id, btn) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.type = el.type === 'password' ? 'text' : 'password';
+  btn.style.opacity = el.type === 'text' ? '1' : '0.4';
+}
+
 function goBack() {
+  // Guard: warn if leaving s-order with unsaved data
+  var cur = stack[stack.length-1];
+  if (cur === 's-order' && (curOrder.patientName || selTests.length > 0)) {
+    if (!confirm('Discard this order? All entered data will be lost.')) return;
+  }
   if (stack.length > 1) stack.pop();
   var prev = stack[stack.length-1] || 's-dash';
   showScreen(prev);
@@ -2283,13 +2302,15 @@ function doRegister() {
   if (!name||!email||!pass) { err.textContent='Fill all fields'; return; }
   if (!/^[0-9]{4}$/.test(pin)) { err.textContent='PIN must be 4 digits'; return; }
   btn.disabled=true; btn.textContent='Creating...';
+  hashPin(pin).then(function(pinHash){
   auth.createUserWithEmailAndPassword(email, pass).then(function(cred){
     return db.collection('staff').doc(cred.user.uid).set({
-      name:name, email:email, role:selRole, pin:pin, uid:cred.user.uid,
+      name:name, email:email, role:selRole, pin:pinHash, uid:cred.user.uid,
       createdAt:firebase.firestore.FieldValue.serverTimestamp(), active:true
     });
   }).then(function(){ toast('Account created!','ok'); })
   .catch(function(e){ err.textContent=authErr(e.code); btn.disabled=false; btn.textContent='Create Account'; });
+  });
 }
 
 function authErr(code) {
@@ -2357,9 +2378,25 @@ function renderDots() {
     document.getElementById('pd'+i).className='pin-dot'+(i<pinBuf.length?' filled':'');
   }
 }
-function checkPin() {
+async function checkPin() {
   var stored = curProfile && curProfile.pin ? curProfile.pin : '';
-  if (!stored || pinBuf===stored) { unlock(); }
+  if (!stored) { unlock(); return; }
+  // Force reset if PIN is still plain text (not hashed)
+  if (!isHashed(stored)) {
+    pinBuf = '';
+    renderDots();
+    document.getElementById('pin-err').textContent = 'Security upgrade: please set a new PIN below';
+    // Prompt admin to reset via staff modal — or self-reset flow
+    setTimeout(function(){
+      if (confirm('Your PIN needs to be reset for a security upgrade. Reset now?')) {
+        showScreen('s-admin');
+        toast('Edit your staff profile to set a new PIN', 'info');
+      }
+    }, 300);
+    return;
+  }
+  var hashed = await hashPin(pinBuf);
+  if (hashed === stored) { unlock(); }
   else { document.getElementById('pin-err').textContent='Incorrect PIN'; pinBuf=''; renderDots(); }
 }
 function unlock() {
@@ -3898,28 +3935,28 @@ function editRemoveTest(i) {
 }
 
 var editSearchHits = [];
-function submitDiscountPin() {
+async function submitDiscountPin() {
   var pin = document.getElementById('disc-pin-input').value.trim();
   var errEl = document.getElementById('disc-pin-err');
   if (pin.length < 4) { errEl.textContent = 'Enter 4-digit PIN'; return; }
+  var hashed = await hashPin(pin);
 
   // First check if current user is already privileged and PIN matches their own
   var myRole = curProfile && curProfile.role || '';
   var myPin = curProfile && curProfile.pin || '';
-  if ((myRole==='pathologist'||myRole==='admin') && myPin && pin===myPin) {
+  if ((myRole==='pathologist'||myRole==='admin') && myPin && hashed===myPin) {
     discountApproved = true;
     document.getElementById('discount-approval-banner').style.display = 'none';
     toast('Discount approved ✓', 'ok'); return;
   }
 
-  // Otherwise check all staff — fetch all pathologist/admin staff and match PIN client-side
-  // (avoids composite index requirement)
+  // Otherwise check all staff
   errEl.textContent = 'Verifying...';
   db.collection('staff').where('active','==',true).get().then(function(snap) {
     var approved = false;
     snap.forEach(function(d) {
       var s = d.data();
-      if ((s.role==='pathologist'||s.role==='admin') && s.pin===pin) approved = true;
+      if ((s.role==='pathologist'||s.role==='admin') && s.pin===hashed) approved = true;
     });
     if (approved) {
       discountApproved = true;
@@ -4941,12 +4978,15 @@ function hoUpdatePinDots() {
     }
   }
 }
-function hoConfirmExecute() {
+async function hoConfirmExecute() {
   if (hoPinBuf.length < 4) return;
   var storedPin = curProfile && curProfile.pin ? curProfile.pin : '';
-  if (storedPin && hoPinBuf !== storedPin) {
-    document.getElementById('ho-pin-err').textContent = 'Incorrect PIN';
-    hoPinBuf = ''; hoUpdatePinDots(); return;
+  if (storedPin) {
+    var hashed = await hashPin(hoPinBuf);
+    if (hashed !== storedPin) {
+      document.getElementById('ho-pin-err').textContent = 'Incorrect PIN';
+      hoPinBuf = ''; hoUpdatePinDots(); return;
+    }
   }
   // If a transfer PIN override is active, route there instead
   if (_hoExecuteOverride) { _hoExecuteOverride(); return; }
@@ -5780,8 +5820,9 @@ async function saveStaff() {
       if (!pin) { err.textContent = 'PIN is required for new staff'; btn.disabled=false; btn.textContent='Create Account'; return; }
       var cred = await auth.createUserWithEmailAndPassword(email, pass);
       var defDr = (document.getElementById('sm-defdr').value||'').trim();
+      var pinHash = await hashPin(pin);
       await db.collection('staff').doc(cred.user.uid).set({
-        name: name, email: email, role: smRole, pin: pin,
+        name: name, email: email, role: smRole, pin: pinHash,
         uid: cred.user.uid, active: true,
         dashboardAccess: smDashAccess,
         defaultDoctor: defDr,
@@ -5793,7 +5834,7 @@ async function saveStaff() {
       // EDIT EXISTING
       var defDr = (document.getElementById('sm-defdr').value||'').trim();
       var update = { name: name, email: email, role: smRole, dashboardAccess: smDashAccess, defaultDoctor: defDr };
-      if (pin) update.pin = pin;
+      if (pin) update.pin = await hashPin(pin);
 
       // Password change
       if (pass && pass.length >= 6) {

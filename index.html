@@ -2424,7 +2424,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.29';
+var APP_VERSION = 'v19.30';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -5307,6 +5307,28 @@ function submitEditOrder() {
     curDetailOrder.amendments = (curDetailOrder.amendments || []).concat([amendment]);
     renderOrderDetail(curDetailOrder);
     loadStats();
+    // Surface prep warnings if updated tests require special preparation
+    (function() {
+      if (!PA_DATA || !editSelTests || !editSelTests.length) return;
+      var hasFasting = false, medStops = [], timings = [];
+      editSelTests.forEach(function(t) {
+        var dept = t.dept || 'BIOCHEMISTRY';
+        var deptData = (PA_DATA[dept]) || (PA_DATA['BIOCHEMISTRY']) || {default:{},patterns:[]};
+        var pa = Object.assign({}, deptData.default);
+        var nm = (t.name||'').toLowerCase();
+        if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw)>=0) pa=Object.assign({},p.data); }); });
+        pa = mergePA(pa, nm.replace(/[^a-z0-9]/g,'_'));
+        if (pa.fast) hasFasting = true;
+        if (pa.med_avoid && pa.med_avoid.toLowerCase().indexOf('stop')>=0) medStops.push(t.shortCode||t.name);
+        if (pa.timing && pa.timing !== 'Any time' && pa.timing.indexOf('Any')<0) timings.push((t.shortCode||t.name)+': '+pa.timing);
+      });
+      if (!hasFasting && !medStops.length && !timings.length) return;
+      var lines = ['\u26a0 Collection requirements updated:'];
+      if (hasFasting) lines.push('\u2022 Fasting required (8-12h) — confirm with patient');
+      timings.forEach(function(tn){ lines.push('\u2022 ' + tn); });
+      if (medStops.length) lines.push('\u2022 Check medication stops: ' + medStops.join(', '));
+      setTimeout(function(){ alert(lines.join('\n')); }, 400);
+    })();
   }).catch(function(e) { toast('Save failed: ' + e.message, 'err'); });
 }
 

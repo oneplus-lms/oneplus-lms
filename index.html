@@ -752,6 +752,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="done-title">Order Saved</div>
     <div class="done-sub" id="done-id">Synced to Firebase</div>
     <div id="done-instructions" style="width:100%;max-width:320px"></div>
+    <div id="done-prep-wa" style="display:none;width:100%;max-width:260px;margin-bottom:0"></div>
     <button class="btn btn-primary" style="max-width:260px" onclick="goTo('s-dash')">Back to Dashboard</button>
     <div style="height:8px"></div>
     <button class="btn" style="max-width:260px;color:var(--accent);border-color:var(--accent)" onclick="openTRF()">&#128196; PDF / Share TRF</button>
@@ -2424,7 +2425,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.32';
+var APP_VERSION = 'v19.34';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -2492,6 +2493,8 @@ var FB_CONFIG = {
 firebase.initializeApp(FB_CONFIG);
 var auth = firebase.auth();
 var db = firebase.firestore();
+// Explicit LOCAL persistence — required for Safari/iOS ITP compatibility
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
 
 // Enable offline persistence — queues writes locally, syncs on reconnect
 db.enablePersistence({ synchronizeTabs: true })
@@ -4614,6 +4617,18 @@ function submitOrder() {
     logActivity('order_create', 'Order: ' + order.patientName + ' · Rs.' + (order.netAmount||0).toLocaleString('en-IN'));
     var instrEl = document.getElementById('done-instructions');
     if (instrEl) instrEl.innerHTML = buildPatientInstructions(order.tests || selTests || []);
+    // Show WA prep button if patient has a phone number
+    var prepWaEl = document.getElementById('done-prep-wa');
+    if (prepWaEl) {
+      var waNum = buildPatientWANumber(order.phone);
+      prepWaEl.style.display = 'block';
+      prepWaEl.innerHTML = '<button onclick="sharePrepWA()" '
+        + 'style="width:100%;padding:11px;background:#25D366;color:#fff;border:none;'
+        + 'border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;'
+        + 'display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px">'
+        + '&#128172; ' + (waNum ? 'Send Prep Instructions to Patient' : 'Share Prep Instructions')
+        + '</button>';
+    }
     goTo('s-done');
     loadStats();
   }).catch(function(e) { toast('Save failed: ' + e.message, 'err'); });
@@ -6973,6 +6988,55 @@ function shareTRFWA() {
 function shareTRFWAGeneric() {
   if (!lastOrder) return;
   window.open('https://wa.me/?text=' + encodeURIComponent(buildTRFWAText(lastOrder)), '_blank');
+}
+
+function buildPrepWAText(order) {
+  if (!PA_DATA || !order || !order.tests || !order.tests.length) return '';
+  var lines = [];
+  lines.push('*OnePLUS Ultrasound Lab — Sample Collection Instructions*');
+  lines.push('Patient: ' + (order.patientName||'Patient'));
+  lines.push('Tests: ' + (order.tests||[]).map(function(t){return t.shortCode||t.name;}).join(', '));
+  lines.push('');
+  // Collect unique prep requirements across all tests
+  var hasFasting = false, timings = [], medAvoids = [], dietAvoids = [], preps = [];
+  var seenTubes = {};
+  order.tests.forEach(function(t) {
+    var dept = t.dept || 'BIOCHEMISTRY';
+    var deptData = (PA_DATA[dept]) || (PA_DATA['BIOCHEMISTRY']) || {default:{},patterns:[]};
+    var pa = Object.assign({}, deptData.default);
+    var nm = (t.name||'').toLowerCase();
+    if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw)>=0) pa=Object.assign({},p.data); }); });
+    pa = mergePA(pa, nm.replace(/[^a-z0-9]/g,'_'));
+    if (pa.fast) hasFasting = true;
+    if (pa.timing && pa.timing !== 'Any time' && pa.timing.indexOf('Any')<0) {
+      var tn = (t.shortCode||t.name) + ': ' + pa.timing;
+      if (timings.indexOf(tn)<0) timings.push(tn);
+    }
+    if (pa.med_avoid && medAvoids.indexOf(pa.med_avoid)<0) medAvoids.push(pa.med_avoid);
+    if (pa.diet_avoid && dietAvoids.indexOf(pa.diet_avoid)<0) dietAvoids.push(pa.diet_avoid);
+    if (pa.prep && pa.prep !== 'No special preparation needed.' && preps.indexOf(pa.prep)<0) preps.push((t.shortCode||t.name)+': '+pa.prep);
+  });
+  if (hasFasting) lines.push('⚡ *Fasting required: 8-12 hours*');
+  if (timings.length) { lines.push('*Timing:*'); timings.forEach(function(t){ lines.push('• '+t); }); }
+  if (medAvoids.length) { lines.push(''); lines.push('*🚫 Stop before test:*'); medAvoids.forEach(function(m){ lines.push('• '+m); }); }
+  if (dietAvoids.length) { lines.push(''); lines.push('*🥗 Dietary restriction:*'); dietAvoids.forEach(function(d){ lines.push('• '+d); }); }
+  if (preps.length) { lines.push(''); lines.push('*Collection notes:*'); preps.forEach(function(p){ lines.push('• '+p); }); }
+  lines.push('');
+  lines.push('OnePLUS Ultrasound Lab, 47 Harsh Vihar, Pitampura');
+  lines.push('011-4248 0101');
+  return lines.join('\n');
+}
+
+function sharePrepWA() {
+  if (!lastOrder) return;
+  var text = buildPrepWAText(lastOrder);
+  if (!text) { toast('No preparation instructions for this order', 'ok'); return; }
+  var waNum = buildPatientWANumber(lastOrder.phone);
+  if (waNum) {
+    window.open('https://wa.me/' + waNum + '?text=' + encodeURIComponent(text), '_blank');
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  }
 }
 
 // ── CLINICAL HISTORY ──

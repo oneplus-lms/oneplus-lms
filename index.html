@@ -297,8 +297,8 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
     <div class="quick-actions">
       <button class="qa-btn" onclick="goTo('s-order')"><div class="qa-icon">&#129514;</div><div class="qa-label">New Order</div><div class="qa-sub">Register patient</div></button>
+      <button class="qa-btn" onclick="goTo('s-orders')"><div class="qa-icon">&#128203;</div><div class="qa-label">All Orders / TRF</div><div class="qa-sub">View, print TRF</div></button>
       <button class="qa-btn" onclick="goTo('s-estimate')"><div class="qa-icon">&#128179;</div><div class="qa-label">Estimate</div><div class="qa-sub">Quote &amp; convert</div></button>
-      <button class="qa-btn" onclick="goTo('s-orders')"><div class="qa-icon">&#128203;</div><div class="qa-label">All Orders</div><div class="qa-sub">View &amp; billing</div></button>
       <button class="qa-btn" onclick="goTo('s-ho')"><div class="qa-icon">&#128176;</div><div class="qa-label">Cash Handover</div><div class="qa-sub">EOD settlement</div></button>
       <button class="qa-btn" onclick="goTo('s-eod')"><div class="qa-icon">&#128202;</div><div class="qa-label">EOD Report</div><div class="qa-sub">WhatsApp summary</div></button>
       <button class="qa-btn" onclick="goTo('s-preanalytical')"><div class="qa-icon">&#128300;</div><div class="qa-label">Pre-Analytical</div><div class="qa-sub">Sample guide & rejections</div></button>
@@ -308,6 +308,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <button class="qa-btn" id="review-btn" style="display:none" onclick="goTo('s-review')"><div class="qa-icon">&#128101;</div><div class="qa-label">Phlebo Review</div><div class="qa-sub">Performance stats</div></button>
     </div>
     <div class="card"><div class="card-title">Recent Orders</div><div id="dash-recent"><div class="empty">No orders yet today</div></div></div>
+    <div class="card" id="dash-dues-card" style="display:none"><div class="card-title" style="color:#D97706">&#128176; Pending Dues</div><div id="dash-dues"><div class="empty">No pending dues</div></div></div>
   </div>
 </div>
 
@@ -1347,7 +1348,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
     <div class="field" id="sm-pass-field">
       <label>Password (min 6 chars)</label>
-      <div style="position:relative"><input type="password" id="sm-pass" placeholder="Set login password" style="width:100%;box-sizing:border-box;padding-right:36px"><button type="button" onclick="toggleEye('sm-pass',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0;line-height:1">👁</button></div>
+      <div style="position:relative"><input type="password" id="sm-pass" placeholder="Set login password" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding-right:36px"><button type="button" onclick="toggleEye('sm-pass',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0;line-height:1">👁</button></div>
     </div>
     <div class="field" id="sm-admin-pass-field">
       <label>Your Password <span style="font-size:10px;color:var(--text3)">(to stay signed in)</span></label>
@@ -1366,7 +1367,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
     <div class="field">
       <label>PIN (4 digits)</label>
-      <div style="position:relative"><input type="password" id="sm-pin" placeholder="Daily login PIN" maxlength="4" inputmode="numeric" style="width:100%;box-sizing:border-box;padding-right:36px"><button type="button" onclick="toggleEye('sm-pin',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0;line-height:1">👁</button></div>
+      <div style="position:relative"><input type="password" id="sm-pin" placeholder="Daily login PIN" maxlength="4" inputmode="numeric" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding-right:36px"><button type="button" onclick="toggleEye('sm-pin',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0;line-height:1">👁</button></div>
     </div>
     <div class="field">
       <label>Default Referring Doctor <span style="font-size:11px;color:var(--text3);font-weight:400">— for Doctor Clinic orders</span></label>
@@ -1424,6 +1425,25 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 
 <!-- TOAST -->
 <div id="toast"></div>
+
+<!-- COLLECT DUE PAYMENT MODAL -->
+<div id="collect-due-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:800;align-items:flex-end;justify-content:center" onclick="if(event.target===this)closeCollectDue()">
+  <div style="background:var(--surface);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:24px 20px 40px;width:100%;max-width:430px">
+    <div style="font-size:16px;font-weight:600;margin-bottom:4px">Collect Due Payment</div>
+    <div style="font-size:12px;color:var(--text3);font-family:var(--mono);margin-bottom:16px" id="cdue-sub"></div>
+    <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Payment Mode</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px">
+      <button type="button" id="cdue-cash" class="pay-mode-btn on" onclick="setCduePay('cash')">Cash</button>
+      <button type="button" id="cdue-upi"  class="pay-mode-btn" onclick="setCduePay('upi')">UPI</button>
+      <button type="button" id="cdue-card" class="pay-mode-btn" onclick="setCduePay('card')">Card</button>
+    </div>
+    <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Amount Received</div>
+    <input type="number" id="cdue-amt" inputmode="numeric" style="width:100%;padding:10px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:16px;margin-bottom:6px">
+    <div id="cdue-err" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:12px"></div>
+    <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="submitCollectDue()">&#10003; Confirm Payment Received</button>
+    <button class="btn" style="width:100%" onclick="closeCollectDue()">Cancel</button>
+  </div>
+</div>
 </div>
 
 <!-- Firebase SDKs -->
@@ -2632,6 +2652,7 @@ function loadDash() {
   updateConnectivityUI();
   loadStats();
   loadRecent();
+  loadDues();
 }
 function loadStats() {
   var today = todayStr();
@@ -2653,15 +2674,44 @@ function loadRecent() {
     var el=document.getElementById('dash-recent');
     if (snap.empty) { el.innerHTML='<div class="empty">No orders yet today</div>'; return; }
     var rows=[];
-    snap.forEach(function(d){ rows.push(d.data()); });
+    snap.forEach(function(d){ rows.push(Object.assign({id:d.id},d.data())); });
     rows.sort(function(a,b){ return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0); });
     el.innerHTML = rows.slice(0,5).map(function(o){
-      return '<div class="row"><div><div style="font-size:13px;font-weight:500">'+esc(o.patientName)+'</div><div style="font-size:11px;color:var(--text3)">'+esc((o.tests||[]).map(function(t){return t.name;}).join(', '))+'</div></div><div style="text-align:right"><div style="font-size:13px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div><div style="font-size:10px;color:var(--text3)">'+esc(o.payMode||'')+'</div></div></div>';
+      return '<div class="row" style="cursor:pointer" onclick="openOrderDetail(\''+o.id+'\')">'
+        +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+esc(o.patientName)+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">'+esc((o.tests||[]).slice(0,3).map(function(t){return t.shortCode||t.name;}).join(', '))+((o.tests||[]).length>3?' +'+((o.tests||[]).length-3)+' more':'')+'</div></div>'
+        +'<div style="font-size:11px;font-family:var(--mono);color:var(--accent);flex-shrink:0;margin-left:8px">TRF ›</div>'
+        +'</div>';
     }).join('');
   }).catch(function(){});
 }
 
-// ── TEST CATALOGUE ──
+function loadDues() {
+  var myUid = curUser && curUser.uid;
+  var role = curProfile && curProfile.role || '';
+  var canSeeAll = role==='admin'||role==='manager'||role==='pathologist';
+  var query = canSeeAll
+    ? db.collection('orders').where('date','==',todayStr()).where('status','==','pending')
+    : db.collection('orders').where('date','==',todayStr()).where('status','==','pending').where('createdBy','==',myUid);
+  query.get().then(function(snap) {
+    var card = document.getElementById('dash-dues-card');
+    var el = document.getElementById('dash-dues');
+    if (snap.empty) { card.style.display='none'; return; }
+    card.style.display='block';
+    var rows = [];
+    snap.forEach(function(d){ rows.push(Object.assign({id:d.id},d.data())); });
+    el.innerHTML = rows.map(function(o){
+      var due = o.dueAmount > 0 ? o.dueAmount : (o.netAmount||o.totalAmount||0);
+      return '<div class="row" style="cursor:pointer" onclick="openOrderDetail(\''+o.id+'\')">'
+        +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+esc(o.patientName)+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">'+esc(o.phone||'-')+'</div></div>'
+        +'<div style="text-align:right;flex-shrink:0;margin-left:8px">'
+        +'<div style="font-size:13px;font-weight:600;color:#D97706">Rs.'+due.toLocaleString('en-IN')+'</div>'
+        +'<div style="font-size:10px;color:var(--text3)">Tap to collect</div></div>'
+        +'</div>';
+    }).join('');
+  }).catch(function(){});
+}
 var CATALOGUE = [];
 var PANELS = {};
 var PANEL_NAMES = {standard:'Standard',jk:'Dr J K Gupta',du:'DU Panel',sh:'Dr Shalini Gupta'};
@@ -4046,6 +4096,15 @@ function renderOrderDetail(o) {
         if (canEdit) return '<button class="btn" style="width:100%;margin-bottom:10px;border-color:var(--accent);color:var(--accent)" onclick="openEditModal()">&#9998; Edit Order</button>';
         return ''; // lab sees no edit button
       })()
+    + (function(){
+        var role = curProfile && curProfile.role || '';
+        var isOwner = o.createdBy === (curUser && curUser.uid);
+        var hasDue = (o.dueAmount > 0) || o.payMode === 'credit';
+        var canCollect = hasDue && (isOwner || role==='admin' || role==='pathologist' || role==='manager');
+        if (!canCollect) return '';
+        var dueAmt = o.dueAmount > 0 ? o.dueAmount : (o.netAmount || o.totalAmount || 0);
+        return '<button class="btn" style="width:100%;margin-bottom:10px;border-color:#D97706;color:#D97706;font-weight:500" onclick="openCollectDue(\''+o.id+'\','+dueAmt+')">&#128176; Collect Due Payment — Rs.'+dueAmt.toLocaleString('en-IN')+'</button>';
+      })()
     + '<button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="openDetailTRF()">&#128221; View / Print TRF</button>'
     + '<button class="btn" style="width:100%;margin-bottom:10px" onclick="downloadTRFpdf()">&#128196; Download PDF</button>'
     + (function(){        var num = curDetailOrder && buildPatientWANumber(curDetailOrder.phone);        if (num) return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'          + '<button class="btn" onclick="shareDetailWA()">&#128172; WA Patient</button>'          + '<button class="btn" onclick="shareDetailWAGeneric()">&#128172; Any contact</button>'          + '</div>';        return '<button class="btn" style="width:100%;" onclick="shareDetailWA()">&#128172; Share via WhatsApp</button>';      })();
@@ -4667,6 +4726,87 @@ function downloadTRFpdf() {
   toast('PDF downloaded','ok');
 }
 
+
+// ── COLLECT DUE PAYMENT ──
+var _cDueOrderId = null;
+var _cDueMax = 0;
+var _cDuePayMode = 'cash';
+
+function openCollectDue(orderId, dueAmt) {
+  _cDueOrderId = orderId;
+  _cDueMax = dueAmt;
+  _cDuePayMode = 'cash';
+  document.getElementById('cdue-sub').textContent = 'Due amount: Rs.' + dueAmt.toLocaleString('en-IN');
+  document.getElementById('cdue-amt').value = dueAmt;
+  document.getElementById('cdue-err').textContent = '';
+  setCduePay('cash');
+  var bg = document.getElementById('collect-due-bg');
+  bg.style.display = 'flex';
+}
+
+function closeCollectDue() {
+  document.getElementById('collect-due-bg').style.display = 'none';
+  _cDueOrderId = null;
+}
+
+function setCduePay(mode) {
+  _cDuePayMode = mode;
+  ['cash','upi','card'].forEach(function(m) {
+    var btn = document.getElementById('cdue-'+m);
+    if (btn) btn.className = 'pay-mode-btn' + (m===mode?' on':'');
+  });
+}
+
+async function submitCollectDue() {
+  var amt = parseFloat(document.getElementById('cdue-amt').value) || 0;
+  var errEl = document.getElementById('cdue-err');
+  errEl.textContent = '';
+  if (!_cDueOrderId) return;
+  if (amt <= 0) { errEl.textContent = 'Enter amount received'; return; }
+  if (amt > _cDueMax + 0.5) { errEl.textContent = 'Amount exceeds due: Rs.' + _cDueMax.toLocaleString('en-IN'); return; }
+
+  var btn = document.querySelector('#collect-due-bg .btn-primary');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  try {
+    var snap = await db.collection('orders').doc(_cDueOrderId).get();
+    var o = snap.data();
+    var oldPaid = o.paidAmount || 0;
+    var newPaid = oldPaid + amt;
+    var newDue = Math.max(0, (o.dueAmount || 0) - amt);
+    var newStatus = newDue <= 0 ? 'paid' : 'pending';
+    var byName = (curProfile && curProfile.name) || (curUser && curUser.email) || '';
+    var now = new Date();
+    var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+
+    var update = {
+      paidAmount: newPaid,
+      dueAmount: newDue,
+      status: newStatus,
+      payMode: newDue <= 0 ? _cDuePayMode : 'credit',
+      dueCollectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      dueCollectedBy: curUser && curUser.uid,
+      dueCollectedByName: byName,
+      dueCollectedMode: _cDuePayMode,
+      dueCollectedAmt: amt
+    };
+    await db.collection('orders').doc(_cDueOrderId).update(update);
+    toast('Payment of Rs.' + amt.toLocaleString('en-IN') + ' recorded ✓', 'ok');
+    closeCollectDue();
+    // Refresh order detail
+    if (curDetailOrder && curDetailOrder.id === _cDueOrderId) {
+      Object.assign(curDetailOrder, update);
+      curDetailOrder.dueAmount = newDue;
+      curDetailOrder.paidAmount = newPaid;
+      curDetailOrder.status = newStatus;
+      renderOrderDetail(curDetailOrder);
+    }
+    loadStats();
+  } catch(e) {
+    errEl.textContent = 'Save failed: ' + e.message;
+    btn.disabled = false; btn.textContent = '✓ Confirm Payment Received';
+  }
+}
 
 function openDetailTRF() {
   if (!curDetailOrder) return;

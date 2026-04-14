@@ -2424,7 +2424,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.30';
+var APP_VERSION = 'v19.32';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -5224,6 +5224,10 @@ function submitEditOrder() {
   var ref = document.getElementById('edit-ref').value.trim();
   var notes = document.getElementById('edit-notes').value.trim();
   var disc = parseFloat(document.getElementById('edit-discount').value || 0);
+  // Payment: preserve what was already collected — only update if user changed the fields
+  var existingPaid    = o.paidAmount || 0;
+  var existingPayMode = o.payMode || 'cash';
+  var existingSplit   = o.splitPayments || null;
   var paid, finalPayMode, splitPayments;
   if (editCreditMode) {
     paid = 0; finalPayMode = 'credit'; splitPayments = null;
@@ -5231,11 +5235,23 @@ function submitEditOrder() {
     var pCash = Math.max(0, parseFloat(document.getElementById('epm-amt-cash').value)||0);
     var pUpi  = Math.max(0, parseFloat(document.getElementById('epm-amt-upi').value)||0);
     var pCard = Math.max(0, parseFloat(document.getElementById('epm-amt-card').value)||0);
-    paid = pCash + pUpi + pCard;
-    var modes = [];
-    if (pCash>0) modes.push('cash'); if (pUpi>0) modes.push('upi'); if (pCard>0) modes.push('card');
-    finalPayMode = modes.length===1 ? modes[0] : (modes.length>1 ? 'split' : 'cash');
-    splitPayments = modes.length>1 ? {cash:pCash, upi:pUpi, card:pCard} : null;
+    var enteredPaid = pCash + pUpi + pCard;
+    // If user left payment fields at existing values (didn't change payment), preserve original
+    var paymentUnchanged = Math.abs(enteredPaid - existingPaid) < 0.5
+      && existingPayMode !== 'credit';
+    if (paymentUnchanged) {
+      // Preserve existing payment — user only edited tests/name/etc
+      paid = existingPaid;
+      finalPayMode = existingPayMode;
+      splitPayments = existingSplit;
+    } else {
+      // User explicitly changed payment fields
+      paid = enteredPaid;
+      var modes = [];
+      if (pCash>0) modes.push('cash'); if (pUpi>0) modes.push('upi'); if (pCard>0) modes.push('card');
+      finalPayMode = modes.length===1 ? modes[0] : (modes.length>1 ? 'split' : 'cash');
+      splitPayments = modes.length>1 ? {cash:pCash, upi:pUpi, card:pCard} : null;
+    }
   }
   var total = editSelTests.reduce(function(s, t) { return s + (t.rate || 0); }, 0);
 
@@ -5244,8 +5260,8 @@ function submitEditOrder() {
   if (name !== o.patientName) changes.push('Name: ' + o.patientName + ' → ' + name);
   if (phone !== (o.phone||'')) changes.push('Phone changed');
   if (ref !== (o.refBy||'')) changes.push('Ref: ' + (o.refBy||'-') + ' → ' + ref);
-  if (editPayMode !== o.payMode) changes.push('Payment: ' + o.payMode + ' → ' + finalPayMode);
-  if (paid !== (o.paidAmount||0)) changes.push('Paid: Rs.' + o.paidAmount + ' → Rs.' + paid);
+  if (finalPayMode !== o.payMode) changes.push('Payment: ' + o.payMode + ' → ' + finalPayMode);
+  if (Math.abs(paid - (o.paidAmount||0)) >= 1) changes.push('Paid: Rs.' + (o.paidAmount||0) + ' → Rs.' + paid);
   if (disc !== (o.discount||0)) changes.push('Discount: Rs.' + (o.discount||0) + ' → Rs.' + disc);
   var oldTestNames = (o.tests||[]).map(function(t){return t.name;}).sort().join(',');
   var newTestNames = editSelTests.map(function(t){return t.name;}).sort().join(',');
@@ -5275,31 +5291,13 @@ function submitEditOrder() {
   db.collection('orders').doc(o.id).update(updatedData).then(function() {
     logActivity('order_edit', 'Edited: ' + name + ' (' + changes.join(', ') + ')');
     closeEditModal();
-    // Calculate payment difference
-    var oldPaid = o.paidAmount || 0;
+    // Show appropriate toast based on resulting balance
     var newNet = Math.max(0, total - disc);
-    var diff = Math.round((newNet - oldPaid) * 100) / 100;
-    if (Math.abs(diff) >= 1) {
-      var msg = diff > 0
-        ? 'Additional payment of Rs.' + diff.toLocaleString('en-IN') + ' is due from patient'
-        : 'Refund of Rs.' + Math.abs(diff).toLocaleString('en-IN') + ' is due to patient';
-      var action = diff > 0 ? 'Collect additional payment' : 'Initiate refund handover';
-      if (confirm(msg + '\n\n' + action + '?')) {
-        if (diff < 0) {
-          // Go to handover screen in refund mode
-          goTo('s-ho');
-          setTimeout(function() {
-            document.getElementById('ho-amt').value = Math.abs(diff);
-            document.getElementById('ho-notes').value = 'Refund — ' + (o.patientName||'') + ' (order #' + o.id.slice(-6).toUpperCase() + ')';
-            setHOMode('refund');
-          }, 300);
-        } else {
-          // Additional payment — update order with new paidAmount
-          db.collection('orders').doc(o.id).update({ paidAmount: oldPaid + diff, dueAmount: 0, hasDue: false, status: 'paid' })
-            .then(function(){ toast('Additional payment recorded ✓', 'ok'); })
-            .catch(function(e){ toast('Update failed: ' + e.message, 'err'); });
-        }
-      }
+    var newDue = newNet - paid;
+    if (newDue > 0.5) {
+      toast('Order updated — Rs.' + Math.round(newDue).toLocaleString('en-IN') + ' due. Use Collect Payment to collect.', 'ok');
+    } else if (newDue < -0.5) {
+      toast('Order updated — refund of Rs.' + Math.abs(Math.round(newDue)).toLocaleString('en-IN') + ' due to patient.', 'ok');
     } else {
       toast('Order updated ✓', 'ok');
     }

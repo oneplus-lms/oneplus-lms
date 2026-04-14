@@ -6218,6 +6218,9 @@ function toggleDashAccess() {
     .then(function() {
       toast('Dashboard access ' + (smDashAccess ? 'granted ✓' : 'revoked'), smDashAccess ? 'ok' : 'warn');
       btn.disabled = false;
+      // Clear PIN field — browser autofill may have injected text
+      var pinEl = document.getElementById('sm-pin');
+      if (pinEl) pinEl.value = '';
       var hint = document.getElementById('dash-toggle-hint');
       if (hint) { hint.style.display = 'block'; setTimeout(function(){ hint.style.display='none'; }, 3000); }
       loadAdminStaff();
@@ -6280,7 +6283,7 @@ async function editStaff(id) {
     document.getElementById('sm-name').value = s.name || '';
     document.getElementById('sm-email').value = s.email || '';
     document.getElementById('sm-pass').value = '';
-    document.getElementById('sm-pin').value = s.pin || '';
+    document.getElementById('sm-pin').value = ''; // never show stored hash
     var defdr = document.getElementById('sm-defdr'); if(defdr) defdr.value = s.defaultDoctor || '';
     document.getElementById('sm-err').textContent = '';
     document.getElementById('sm-pass-field').style.display = 'block';

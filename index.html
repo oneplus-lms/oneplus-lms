@@ -751,6 +751,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="done-ring">&#10003;</div>
     <div class="done-title">Order Saved</div>
     <div class="done-sub" id="done-id">Synced to Firebase</div>
+    <div id="done-instructions" style="width:100%;max-width:320px"></div>
     <button class="btn btn-primary" style="max-width:260px" onclick="goTo('s-dash')">Back to Dashboard</button>
     <div style="height:8px"></div>
     <button class="btn" style="max-width:260px;color:var(--accent);border-color:var(--accent)" onclick="openTRF()">&#128196; PDF / Share TRF</button>
@@ -1869,7 +1870,7 @@ function startPhleboDash() {
 // Citrate (Blue) → Blood culture → SST/Red → Heparin → EDTA (Lavender) → Grey → Other
 var TUBE_DRAW_ORDER = ['B','Sw','R','H','L','G','U','S','T','Sp','NA'];
 
-function buildCollectionGuide(tests) {
+function buildCollectionGuide(tests, isPending) {
   if (!PA_DATA || !tests || !tests.length) return '';
 
   // 1. Resolve PA data for each test
@@ -1968,9 +1969,9 @@ function buildCollectionGuide(tests) {
     + '<button onclick="toggleCollectionGuide(\'' + guideId + '\')" '
     + 'style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;cursor:pointer;padding:4px 0;font-size:12px;font-weight:600;color:var(--text2)">'
     + '<span>&#129514; Collection Guide ('+tubes.length+' tube'+(tubes.length>1?'s':'')+')</span>'
-    + '<span id="'+guideId+'-chevron">&#9662;</span>'
+    + '<span id="'+guideId+'-chevron">'+(isPending?'&#9652;':'&#9662;')+'</span>'
     + '</button>'
-    + '<div id="'+guideId+'" style="display:none;margin-top:6px">'
+    + '<div id="'+guideId+'" style="display:'+(isPending?'block':'none')+';margin-top:6px">'
     + warnings
     + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Draw order &#8595;</div>'
     + tubeRows
@@ -2049,7 +2050,8 @@ function renderPhleboDash(orders) {
     if (o.gps) mapLink = '<a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="font-size:11px;color:#1D4ED8">&#128205; GPS Location</a>';
     else if (o.mapsLink) mapLink = '<a href="'+o.mapsLink+'" target="_blank" style="font-size:11px;color:#1D4ED8">&#128205; Open in Maps</a>';
 
-    var collectionGuide = buildCollectionGuide(o.tests||[]);
+    var _isPending = !isCollected && !isDelivered;
+    var collectionGuide = buildCollectionGuide(o.tests||[], _isPending);
 
     var isPendingToMe = o.fieldTransferPending && o.fieldTransferPending.toUid === (curUser&&curUser.uid);
     var transferBanner = '';
@@ -2422,7 +2424,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.28';
+var APP_VERSION = 'v19.29';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3160,6 +3162,69 @@ function paeApplyAll(suggested) {
   var map = { prep:'pae-prep', med_avoid:'pae-med-avoid', med_note:'pae-med-note', diet_avoid:'pae-diet-avoid', diet_note:'pae-diet-note' };
   Object.keys(map).forEach(function(k) { if (suggested[k] && suggested[k] !== 'None') document.getElementById(map[k]).value = suggested[k]; });
   toast('All fields applied — review and save', 'ok');
+}
+// ─────────────────────────────────────────────────────────────────────────
+
+
+// ── PATIENT INSTRUCTION SUMMARY (s-done screen) ──────────────────────────
+function buildPatientInstructions(tests) {
+  if (!PA_DATA || !tests || !tests.length) return '';
+  var hasFasting = false, hasIce = false, hasLight = false;
+  var medAvoids = [], dietAvoids = [], timingNotes = [];
+  var tubeCount = {};
+
+  tests.forEach(function(t) {
+    var dept = t.dept || 'BIOCHEMISTRY';
+    var deptData = (PA_DATA[dept]) || (PA_DATA['BIOCHEMISTRY']) || {default:{},patterns:[]};
+    var pa = Object.assign({}, deptData.default);
+    var nm = (t.name||'').toLowerCase();
+    if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw)>=0) pa=Object.assign({},p.data); }); });
+    var key = nm.replace(/[^a-z0-9]/g,'_');
+    pa = mergePA(pa, key);
+    if (!pa || pa.tube === 'NA') return;
+    if (pa.fast) hasFasting = true;
+    var prepL = (pa.prep||'').toLowerCase();
+    if (prepL.indexOf('ice')>=0||prepL.indexOf('chilled')>=0) hasIce = true;
+    if (prepL.indexOf('light')>=0) hasLight = true;
+    if (pa.med_avoid && pa.med_avoid.toLowerCase().indexOf('stop')>=0) {
+      var s = pa.med_avoid.split('.')[0];
+      if (medAvoids.indexOf(s)<0) medAvoids.push(s);
+    }
+    if (pa.diet_avoid) { if (dietAvoids.indexOf(pa.diet_avoid)<0) dietAvoids.push(pa.diet_avoid); }
+    if (pa.timing && pa.timing !== 'Any time' && pa.timing.indexOf('Any')<0) {
+      var tn = (t.shortCode||t.name) + ': ' + pa.timing;
+      if (timingNotes.indexOf(tn)<0) timingNotes.push(tn);
+    }
+    if (pa.tube && pa.tube !== 'NA') tubeCount[pa.tube] = (tubeCount[pa.tube]||0)+1;
+  });
+
+  var tubeTotal = Object.keys(tubeCount).length;
+  var html = '<div id="patient-instructions" style="margin-top:16px;max-width:320px;width:100%">';
+
+  // Ready to collect?
+  if (!hasFasting && !medAvoids.length && !timingNotes.length) {
+    html += '<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;padding:12px 14px;margin-bottom:8px;text-align:left">'
+      + '<div style="font-size:13px;font-weight:600;color:#14532D;margin-bottom:2px">&#10003; Ready for Collection</div>'
+      + '<div style="font-size:12px;color:#166534">No special preparation needed. Collect now.</div>'
+      + '</div>';
+  } else {
+    html += '<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:12px 14px;margin-bottom:8px;text-align:left">'
+      + '<div style="font-size:13px;font-weight:600;color:#92400E;margin-bottom:6px">&#9888; Check Before Collection</div>';
+    if (hasFasting) html += '<div style="font-size:12px;color:#991B1B;font-weight:600;margin-bottom:4px">&#9889; Patient must be fasting (8-12h). Confirm before drawing.</div>';
+    if (timingNotes.length) timingNotes.forEach(function(n){ html += '<div style="font-size:12px;color:#92400E;margin-bottom:3px">&#8986; '+esc(n)+'</div>'; });
+    if (medAvoids.length) html += '<div style="font-size:12px;color:#7C3AED;margin-bottom:3px">&#128683; '+esc(medAvoids[0])+'</div>';
+    if (dietAvoids.length) html += '<div style="font-size:12px;color:#713F12;margin-bottom:3px">&#127828; '+esc(dietAvoids[0].split('.')[0])+'</div>';
+    html += '</div>';
+  }
+
+  // Tubes summary
+  if (tubeTotal > 0) {
+    html += '<div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-align:left;margin-bottom:4px">'
+      + tubeTotal + ' tube type'+(tubeTotal>1?'s':'')+' · ' + tests.length + ' test'+(tests.length>1?'s':'')+' booked</div>';
+  }
+
+  html += '</div>';
+  return html;
 }
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -4547,6 +4612,8 @@ function submitOrder() {
     lastOrder = {id: ref.id}; Object.assign(lastOrder, order);
     document.getElementById('done-id').textContent = order.patientName + ' — Saved ✓';
     logActivity('order_create', 'Order: ' + order.patientName + ' · Rs.' + (order.netAmount||0).toLocaleString('en-IN'));
+    var instrEl = document.getElementById('done-instructions');
+    if (instrEl) instrEl.innerHTML = buildPatientInstructions(order.tests || selTests || []);
     goTo('s-done');
     loadStats();
   }).catch(function(e) { toast('Save failed: ' + e.message, 'err'); });
@@ -4744,6 +4811,11 @@ function renderOrderDetail(o) {
     + testRows
     + '<div style="display:flex;justify-content:space-between;padding-top:10px;font-size:13px;font-weight:500">'    + '<span>Total</span><span style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.' + (o.paidAmount||0).toLocaleString('en-IN') + '</span></div>'    + (function(){        var pmLine = '';        if (o.splitPayments) {          var parts = [];          if (o.splitPayments.cash > 0) parts.push('Cash Rs.'+o.splitPayments.cash.toLocaleString('en-IN'));          if (o.splitPayments.upi > 0)  parts.push('UPI Rs.'+o.splitPayments.upi.toLocaleString('en-IN'));          if (o.splitPayments.card > 0) parts.push('Card Rs.'+o.splitPayments.card.toLocaleString('en-IN'));          pmLine = parts.join(' + ');        } else { pmLine = esc(o.payMode||'cash').toUpperCase(); }        var dueStr = (o.dueAmount > 0) ? ' &nbsp;<span style="color:#EF4444">Due Rs.'+o.dueAmount.toLocaleString('en-IN')+'</span>' : '';        var discStr = (o.discount > 0) ? ' · Discount Rs.'+o.discount : '';        return '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+pmLine+discStr+dueStr+'</div>';      })()
     + '</div>'
+
+    // Collection guide card
+    + (function(){ var cg = buildCollectionGuide(o.tests||[]); return cg ? '<div class="card" style="margin-bottom:12px">'
+      + '<div class="card-title">&#129514; Collection Guide</div>'
+      + cg + '</div>' : ''; })()
 
     // Audit timeline card
     + '<div class="card" style="margin-bottom:12px">'
@@ -5709,26 +5781,7 @@ function renderFieldTasks(orders) {
     var isCollected = o.fieldStatus === 'collected';
     var isDelivered = o.fieldStatus === 'delivered';
 
-    // Get tube requirements
-    var tubeMap = {};
-    (o.tests||[]).forEach(function(t) {
-      var dept = t.dept || 'BIOCHEMISTRY';
-      var deptData = (PA_DATA && PA_DATA[dept]) || (PA_DATA && PA_DATA['BIOCHEMISTRY']) || {default:{tube:'NA',color:'#6B7280',label:'-',vol:'-',sample:'-',timing:'-',fast:false,prep:'-'},patterns:[]};
-      var sample = deptData.default;
-      var name = (t.name||'').toLowerCase();
-      if (deptData.patterns) {
-        deptData.patterns.forEach(function(p) {
-          p.match.forEach(function(kw) { if (name.indexOf(kw.toLowerCase()) >= 0) sample = p.data; });
-        });
-      }
-      if (sample.tube !== 'NA') {
-        var displayLabel = sample.label
-          .replace(/\s*\+\s*Slides?/i,'').replace(/\s*\+\s*Fixative/i,'')
-          .replace(/\s*\(Cell-free DNA\)/i,'').trim();
-        tubeMap[displayLabel] = Object.assign({}, sample, {label: displayLabel});
-      }
-    });
-    var tubes = Object.values(tubeMap);
+    var fieldGuide = buildCollectionGuide(o.tests||[]);
 
     var statusBadge = isDelivered
       ? '<span class="badge badge-green">Delivered</span>'
@@ -5803,7 +5856,7 @@ function renderFieldTasks(orders) {
       + (o.address?'<div class="field-task-address">'+esc(o.address)+'</div>':'')
       + mapLink
       + '<div class="field-task-tests">'+esc((o.tests||[]).map(function(t){return t.name;}).slice(0,4).join(', '))+((o.tests||[]).length>4?' +'+((o.tests||[]).length-4)+' more':'')+'</div>'
-      + (tubeChips?'<div class="field-task-tubes">'+tubeChips+'</div>':'')
+      + (fieldGuide||'')
       + transferChain
       + (o.fieldNotes?'<div style="font-size:11px;color:var(--text2);background:var(--surface2);padding:4px 8px;border-radius:6px;margin-bottom:6px">'+esc(o.fieldNotes)+'</div>':'')
       + (actions?'<div class="field-task-actions">'+actions+'</div>':'')

@@ -2043,7 +2043,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.18';
+var APP_VERSION = 'v19.19';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3646,6 +3646,7 @@ function submitOrder() {
     createdBy: curUser.uid, createdByName: (curProfile&&curProfile.name) || curUser.email,
     status: creditMode ? 'pending' : 'paid',
     urgent: isUrgent || false,
+    labStatus: 'registered',
     fieldAssignedToUid:  curOrder._fieldAssignedToUid  || null,
     fieldAssignedToName: curOrder._fieldAssignedToName || null,
     fieldAssignedAt: curOrder._fieldAssignedToUid ? firebase.firestore.FieldValue.serverTimestamp() : null
@@ -3893,6 +3894,20 @@ function renderOrderDetail(o) {
 
     // Action buttons
     + (function(){
+        var ls = o.labStatus || 'registered';
+        var labRole = curProfile && curProfile.role || '';
+        var canUpdateLab = labRole==='lab'||labRole==='pathologist'||labRole==='admin';
+        if (!canUpdateLab) return '';
+        var steps = ['registered','collected','processing','reported'];
+        var labels = {registered:'Registered',collected:'Sample Collected',processing:'Processing',reported:'Reported'};
+        var colors = {registered:'var(--text3)',collected:'var(--blue,#1D4ED8)',processing:'var(--gold)',reported:'var(--accent)'};
+        var btns = steps.map(function(s){
+          var active = ls === s;
+          return '<button onclick="updateLabStatus(\''+o.id+'\',\''+s+'\')" style="flex:1;padding:7px 4px;font-size:11px;border-radius:6px;border:1.5px solid '+(active?colors[s]:'var(--border-strong)')+';background:'+(active?colors[s]:'var(--surface)')+';color:'+(active?'#fff':'var(--text2)')+';cursor:pointer;font-weight:'+(active?'600':'400')+'">'+labels[s]+'</button>';
+        }).join('');
+        return '<div style="margin-bottom:10px"><div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Lab Status</div><div style="display:flex;gap:4px">'+btns+'</div></div>';
+      })()
+    + (function(){
         var role = curProfile && curProfile.role || '';
         var isOwner = o.createdBy === (curUser && curUser.uid);
         var canEdit = role==='pathologist'||role==='admin';
@@ -3902,6 +3917,17 @@ function renderOrderDetail(o) {
     + '<button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="openDetailTRF()">&#128221; View / Print TRF</button>'
     + '<button class="btn" style="width:100%;margin-bottom:10px" onclick="downloadTRFpdf()">&#128196; Download PDF</button>'
     + (function(){        var num = curDetailOrder && buildPatientWANumber(curDetailOrder.phone);        if (num) return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'          + '<button class="btn" onclick="shareDetailWA()">&#128172; WA Patient</button>'          + '<button class="btn" onclick="shareDetailWAGeneric()">&#128172; Any contact</button>'          + '</div>';        return '<button class="btn" style="width:100%;" onclick="shareDetailWA()">&#128172; Share via WhatsApp</button>';      })();
+}
+
+
+function updateLabStatus(orderId, status) {
+  db.collection('orders').doc(orderId).update({ labStatus: status })
+    .then(function() {
+      if (curDetailOrder) curDetailOrder.labStatus = status;
+      renderOrderDetail(curDetailOrder);
+      toast('Status updated: ' + status, 'ok');
+    })
+    .catch(function(e) { toast('Update failed: ' + e.message, 'err'); });
 }
 
 function buildAuditTrail(o) {

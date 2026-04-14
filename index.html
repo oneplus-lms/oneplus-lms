@@ -1335,6 +1335,12 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       </div>
       <div id="dues-tracking-list"><div class="empty">Select a date range to view dues</div></div>
     </div>
+    <!-- hasDue Migration -->
+    <div class="card" style="border-color:#7C3AED">
+      <div class="card-title" style="color:#7C3AED">&#9881;&#65039; Data Migration</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">One-time backfill: sets <code>hasDue</code> on all existing orders. Run once after deploying this update. Safe to re-run.</div>
+      <button class="btn" style="background:#7C3AED;color:#fff;font-size:12px;padding:7px 14px;width:auto" onclick="runHasDueMigration()">&#9654; Run hasDue Migration</button>
+    </div>
     <div style="height:16px"></div>
     <div class="card">
       <div class="card-title">Doctor Registry</div>
@@ -1947,7 +1953,7 @@ fieldConfirm = function() {
   if (action==='collect' && _fieldGPS) { update.gps=_fieldGPS; _fieldGPS=null; }
   if (action==='collect' && _fieldPayMode && _fieldPayMode!=='skip') {
     var _amt=parseFloat(document.getElementById('field-pay-amt').value)||fieldPendingAction.dueAmount||0;
-    update.paidAmount=_amt; update.dueAmount=0; update.status='paid';
+    update.paidAmount=_amt; update.dueAmount=0; update.hasDue=false; update.status='paid';
     update.payMode=_fieldPayMode; update.collectedByPhlebo=byName;
     _fieldPayMode=null;
   }
@@ -2227,7 +2233,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.22';
+var APP_VERSION = 'v19.23';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -2736,8 +2742,8 @@ function loadDues() {
   var d = new Date(); d.setDate(d.getDate()-90);
   var fromDate = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   var q = canSeeAll
-    ? db.collection('orders').where('status','==','pending').where('date','>=',fromDate)
-    : db.collection('orders').where('status','==','pending').where('date','>=',fromDate).where('createdBy','==',myUid);
+    ? db.collection('orders').where('hasDue','==',true).where('date','>=',fromDate)
+    : db.collection('orders').where('hasDue','==',true).where('date','>=',fromDate).where('createdBy','==',myUid);
   q.get().then(function(snap) {
     var card = document.getElementById('dash-dues-card');
     var countEl = document.getElementById('dash-dues-count');
@@ -2773,7 +2779,7 @@ function checkDuesReminder() {
   var d = new Date(); d.setDate(d.getDate()-90);
   var fromDate = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   db.collection('orders')
-    .where('status','==','pending')
+    .where('hasDue','==',true)
     .where('date','>=',fromDate)
     .where('createdBy','==',myUid)
     .get().then(function(snap) {
@@ -3973,6 +3979,7 @@ function submitOrder() {
     date: todayStr(), createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     createdBy: curUser.uid, createdByName: (curProfile&&curProfile.name) || curUser.email,
     status: creditMode ? 'pending' : 'paid',
+    hasDue: (creditMode || dueAmt > 0) ? true : false,
     urgent: isUrgent || false,
     labStatus: 'registered',
     fieldAssignedToUid:  curOrder._fieldAssignedToUid  || null,
@@ -4657,6 +4664,7 @@ function submitEditOrder() {
     tests: editSelTests, totalAmount: total, discount: disc,
     netAmount: Math.max(0, total - disc), paidAmount: paid,
     dueAmount: Math.max(0, total - disc) - paid,
+    hasDue: (Math.max(0, total - disc) - paid) > 0,
     payMode: finalPayMode, splitPayments: splitPayments, status: editCreditMode ? 'pending' : 'paid',
     lastEditedBy: amendment.byName, lastEditedAt: amendment.at,
     amendments: firebase.firestore.FieldValue.arrayUnion(amendment)
@@ -4684,7 +4692,7 @@ function submitEditOrder() {
           }, 300);
         } else {
           // Additional payment — update order with new paidAmount
-          db.collection('orders').doc(o.id).update({ paidAmount: oldPaid + diff, dueAmount: 0, status: 'paid' })
+          db.collection('orders').doc(o.id).update({ paidAmount: oldPaid + diff, dueAmount: 0, hasDue: false, status: 'paid' })
             .then(function(){ toast('Additional payment recorded ✓', 'ok'); })
             .catch(function(e){ toast('Update failed: ' + e.message, 'err'); });
         }
@@ -4903,7 +4911,7 @@ function loadDuesTracking() {
   if (diffDays < 0) { el.innerHTML = '<div class="empty">From date must be before To date</div>'; return; }
   el.innerHTML = '<div class="empty">Loading...</div>';
   db.collection('orders')
-    .where('status','==','pending')
+    .where('hasDue','==',true)
     .where('date','>=',fromVal)
     .where('date','<=',toVal)
     .get().then(function(snap) {
@@ -4951,6 +4959,63 @@ function closeDuesTrackingAndOpen(orderId) {
   goTo('s-order-detail');
   openOrderDetail(orderId);
 }
+
+// ── ONE-TIME hasDue MIGRATION ─────────────────────────────────────────────
+// Backfills hasDue on all existing orders that predate the hasDue field.
+// Safe to run multiple times — skips orders that already have hasDue set.
+// Runs in batches of 400 to stay within Firestore batch write limits (500).
+async function runHasDueMigration() {
+  var role = curProfile && curProfile.role;
+  if (role !== 'admin' && role !== 'pathologist') {
+    toast('Admin or Pathologist access required', 'warn'); return;
+  }
+  if (!confirm('This will backfill hasDue on all orders. Run migration?')) return;
+  toast('Migration started — do not close the app…', 'ok');
+
+  var BATCH_SIZE = 400;
+  var fixed = 0, skipped = 0, errors = 0;
+
+  // Helper: process one Firestore page of results
+  async function processBatch(snap) {
+    if (snap.empty) return;
+    var batch = db.batch();
+    var batchCount = 0;
+    snap.forEach(function(doc) {
+      var o = doc.data();
+      // Skip if hasDue is already set (not undefined)
+      if (typeof o.hasDue !== 'undefined') { skipped++; return; }
+      var due = typeof o.dueAmount === 'number' ? o.dueAmount : 0;
+      var shouldHaveDue = due > 0;
+      batch.update(doc.ref, { hasDue: shouldHaveDue });
+      batchCount++;
+      fixed++;
+    });
+    if (batchCount > 0) await batch.commit();
+  }
+
+  try {
+    // Page through ALL orders (no status filter — catches every order)
+    var lastDoc = null;
+    var pagesDone = 0;
+    while (true) {
+      var q = db.collection('orders').orderBy('createdAt','asc').limit(BATCH_SIZE);
+      if (lastDoc) q = q.startAfter(lastDoc);
+      var snap = await q.get();
+      if (snap.empty) break;
+      await processBatch(snap);
+      lastDoc = snap.docs[snap.docs.length - 1];
+      pagesDone++;
+      if (snap.size < BATCH_SIZE) break; // last page
+    }
+    toast('Migration done ✓ — ' + fixed + ' updated, ' + skipped + ' already set', 'ok');
+    console.log('[hasDue migration] pages=' + pagesDone + ', fixed=' + fixed + ', skipped=' + skipped);
+  } catch(e) {
+    toast('Migration error: ' + e.message, 'err');
+    console.error('[hasDue migration] error:', e);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────
+
 
 function toggleReminderSuppression(orderId, suppress) {
   suppress = (suppress === 'true' || suppress === true);
@@ -5017,6 +5082,7 @@ async function submitCollectDue() {
       paidAmount: newPaid,
       dueAmount: newDue,
       status: newStatus,
+      hasDue: newDue > 0,
       payMode: newDue <= 0 ? _cDuePayMode : 'credit',
       dueCollectedAt: firebase.firestore.FieldValue.serverTimestamp(),
       dueCollectedBy: curUser && curUser.uid,

@@ -197,6 +197,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 .loading-overlay{position:fixed;inset:0;background:rgba(244,241,236,0.95);z-index:900;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px}
 .loading-spinner{width:36px;height:36px;border:3px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse-dues{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(1.4)}}
 /* TOAST */
 #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:#1C1810;color:#fff;padding:10px 18px;border-radius:30px;font-size:13px;font-family:var(--mono);opacity:0;transition:all 0.25s;z-index:500;white-space:nowrap;pointer-events:none}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -308,7 +309,17 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <button class="qa-btn" id="review-btn" style="display:none" onclick="goTo('s-review')"><div class="qa-icon">&#128101;</div><div class="qa-label">Phlebo Review</div><div class="qa-sub">Performance stats</div></button>
     </div>
     <div class="card"><div class="card-title">Recent Orders</div><div id="dash-recent"><div class="empty">No orders yet today</div></div></div>
-    <div class="card" id="dash-dues-card" style="display:none"><div class="card-title" style="color:#D97706">&#128176; Pending Dues</div><div id="dash-dues"><div class="empty">No pending dues</div></div></div>
+    <div class="card" id="dash-dues-card" style="display:none;cursor:pointer;border-color:#D97706" onclick="toggleDuesList()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div id="dues-pulse" style="width:10px;height:10px;border-radius:50%;background:#D97706;animation:pulse-dues 1.2s infinite"></div>
+          <div style="font-size:13px;font-weight:600;color:#D97706">Pending Dues</div>
+          <div id="dash-dues-count" style="font-size:11px;font-family:var(--mono);background:#D97706;color:#fff;padding:1px 7px;border-radius:10px"></div>
+        </div>
+        <div id="dues-chevron" style="font-size:14px;color:#D97706;transition:transform 0.2s">▾</div>
+      </div>
+      <div id="dash-dues" style="display:none;margin-top:10px"></div>
+    </div>
   </div>
 </div>
 
@@ -1314,6 +1325,17 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 
     <!-- Doctor Registry Upload — Admin only -->
     <div style="height:16px"></div>
+    <!-- Dues Tracking -->
+    <div class="card">
+      <div class="card-title" style="color:#D97706">&#128176; Dues Tracking</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <input type="date" id="dues-track-from" style="flex:1;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface)">
+        <input type="date" id="dues-track-to" style="flex:1;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface)">
+        <button class="btn btn-primary" style="padding:7px 12px;width:auto;font-size:12px" onclick="loadDuesTracking()">Go</button>
+      </div>
+      <div id="dues-tracking-list"><div class="empty">Select a date range to view dues</div></div>
+    </div>
+    <div style="height:16px"></div>
     <div class="card">
       <div class="card-title">Doctor Registry</div>
       <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Upload the cleaned doctor list to Firestore. Run only once. Check status first.</div>
@@ -1370,6 +1392,10 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <div style="position:relative"><input type="password" id="sm-pin" placeholder="Daily login PIN" maxlength="4" inputmode="numeric" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding-right:36px"><button type="button" onclick="toggleEye('sm-pin',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0;line-height:1">👁</button></div>
     </div>
     <div class="field">
+      <label>WhatsApp Number <span style="font-size:11px;color:var(--text3);font-weight:400">— for due payment reminders</span></label>
+      <input type="tel" id="sm-phone" placeholder="10-digit mobile number" maxlength="10" inputmode="numeric" autocomplete="off">
+    </div>
+    <div class="field">
       <label>Default Referring Doctor <span style="font-size:11px;color:var(--text3);font-weight:400">— for Doctor Clinic orders</span></label>
       <input type="text" id="sm-defdr" placeholder="Dr. Name (e.g. Dr. Sharma)" autocomplete="off">
     </div>
@@ -1424,6 +1450,22 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 </div>
 
 <!-- TOAST -->
+<!-- DUES REMINDER MODAL -->
+<div id="dues-reminder-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:900;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--surface);border-radius:var(--radius-lg);padding:20px;width:100%;max-width:390px;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <div style="width:10px;height:10px;border-radius:50%;background:#D97706;animation:pulse-dues 1.2s infinite;flex-shrink:0"></div>
+      <div style="font-size:16px;font-weight:600;color:#D97706">Pending Dues Alert</div>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px" id="dues-reminder-sub"></div>
+    <div id="dues-reminder-list" style="margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" id="dues-wa-btn" onclick="sendDuesWhatsApp()">&#128172; Send WhatsApp</button>
+      <button class="btn" style="flex:1" onclick="closeDuesReminder()">Dismiss</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <!-- COLLECT DUE PAYMENT MODAL -->
@@ -2653,6 +2695,7 @@ function loadDash() {
   loadStats();
   loadRecent();
   loadDues();
+  checkDuesReminder();
 }
 function loadStats() {
   var today = todayStr();
@@ -2690,28 +2733,132 @@ function loadDues() {
   var myUid = curUser && curUser.uid;
   var role = curProfile && curProfile.role || '';
   var canSeeAll = role==='admin'||role==='manager'||role==='pathologist';
-  var query = canSeeAll
-    ? db.collection('orders').where('date','==',todayStr()).where('status','==','pending')
-    : db.collection('orders').where('date','==',todayStr()).where('status','==','pending').where('createdBy','==',myUid);
-  query.get().then(function(snap) {
+  var d = new Date(); d.setDate(d.getDate()-90);
+  var fromDate = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  var q = canSeeAll
+    ? db.collection('orders').where('status','==','pending').where('date','>=',fromDate)
+    : db.collection('orders').where('status','==','pending').where('date','>=',fromDate).where('createdBy','==',myUid);
+  q.get().then(function(snap) {
     var card = document.getElementById('dash-dues-card');
-    var el = document.getElementById('dash-dues');
+    var countEl = document.getElementById('dash-dues-count');
+    var listEl = document.getElementById('dash-dues');
     if (snap.empty) { card.style.display='none'; return; }
-    card.style.display='block';
     var rows = [];
-    snap.forEach(function(d){ rows.push(Object.assign({id:d.id},d.data())); });
-    el.innerHTML = rows.map(function(o){
-      var due = o.dueAmount > 0 ? o.dueAmount : (o.netAmount||o.totalAmount||0);
+    snap.forEach(function(d){ var o=Object.assign({id:d.id},d.data()); if(!o.reminderSuppressed) rows.push(o); });
+    if (!rows.length) { card.style.display='none'; return; }
+    rows.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+    card.style.display='block';
+    countEl.textContent = rows.length;
+    listEl.innerHTML = rows.map(function(o){
+      var due = o.dueAmount>0 ? o.dueAmount : (o.netAmount||o.totalAmount||0);
+      var daysAgo = Math.floor((Date.now()-new Date(o.date).getTime())/86400000);
+      var age = daysAgo===0?'Today':daysAgo===1?'Yesterday':daysAgo+'d ago';
       return '<div class="row" style="cursor:pointer" onclick="openOrderDetail(\''+o.id+'\')">'
         +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+esc(o.patientName)+'</div>'
-        +'<div style="font-size:11px;color:var(--text3)">'+esc(o.phone||'-')+'</div></div>'
+        +'<div style="font-size:11px;color:var(--text3)">'+esc(o.createdByName||'-')+' · '+age+'</div></div>'
         +'<div style="text-align:right;flex-shrink:0;margin-left:8px">'
         +'<div style="font-size:13px;font-weight:600;color:#D97706">Rs.'+due.toLocaleString('en-IN')+'</div>'
-        +'<div style="font-size:10px;color:var(--text3)">Tap to collect</div></div>'
+        +'<div style="font-size:10px;color:var(--accent)">Tap to collect ›</div></div>'
         +'</div>';
     }).join('');
   }).catch(function(){});
 }
+
+// ── DUES REMINDER ──
+var _pendingDuesForReminder = [];
+
+function checkDuesReminder() {
+  var myUid = curUser && curUser.uid;
+  if (!myUid) return;
+  var d = new Date(); d.setDate(d.getDate()-90);
+  var fromDate = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  db.collection('orders')
+    .where('status','==','pending')
+    .where('date','>=',fromDate)
+    .where('createdBy','==',myUid)
+    .get().then(function(snap) {
+      if (snap.empty) return;
+      var dues = [];
+      snap.forEach(function(d){
+        var o = Object.assign({id:d.id},d.data());
+        if (!o.reminderSuppressed) dues.push(o);
+      });
+      if (!dues.length) return;
+      dues.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+      _pendingDuesForReminder = dues;
+      showDuesReminderModal(dues);
+      // 9 AM WhatsApp trigger
+      var now = new Date();
+      var h = now.getHours(), m = now.getMinutes();
+      if (h === 9 && m < 30) {
+        // Within 9:00–9:30 AM window — auto-open WA if staff has a phone number
+        var staffPhone = curProfile && curProfile.phone;
+        if (staffPhone) {
+          setTimeout(function(){ sendDuesWhatsApp(); }, 2000);
+        }
+      }
+    }).catch(function(){});
+}
+
+function showDuesReminderModal(dues) {
+  var total = dues.reduce(function(s,o){ return s+(o.dueAmount>0?o.dueAmount:(o.netAmount||o.totalAmount||0)); },0);
+  document.getElementById('dues-reminder-sub').textContent =
+    dues.length + ' pending due' + (dues.length>1?'s':'') + ' — Total Rs.' + total.toLocaleString('en-IN');
+  document.getElementById('dues-reminder-list').innerHTML = dues.map(function(o){
+    var due = o.dueAmount>0?o.dueAmount:(o.netAmount||o.totalAmount||0);
+    var daysAgo = Math.floor((Date.now()-new Date(o.date).getTime())/86400000);
+    var age = daysAgo===0?'Today':daysAgo===1?'Yesterday':daysAgo+'d ago';
+    return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--border);cursor:pointer" onclick="closeDuesReminder();openOrderDetail(\''+o.id+'\')">'
+      +'<div><div style="font-size:13px;font-weight:500">'+esc(o.patientName)+'</div>'
+      +'<div style="font-size:11px;color:var(--text3)">'+age+' · '+esc(o.phone||'-')+'</div></div>'
+      +'<div style="font-size:13px;font-weight:600;color:#D97706">Rs.'+due.toLocaleString('en-IN')+'</div>'
+      +'</div>';
+  }).join('');
+  // Hide WA button if no staff phone
+  var staffPhone = curProfile && curProfile.phone;
+  document.getElementById('dues-wa-btn').style.display = staffPhone ? 'block' : 'none';
+  document.getElementById('dues-reminder-bg').style.display = 'flex';
+}
+
+function closeDuesReminder() {
+  document.getElementById('dues-reminder-bg').style.display = 'none';
+}
+
+function sendDuesWhatsApp() {
+  var staffPhone = curProfile && curProfile.phone;
+  if (!staffPhone) { toast('No WhatsApp number set for your profile', 'warn'); return; }
+  var name = (curProfile&&curProfile.name)||'Staff';
+  var role = (curProfile&&curProfile.role||'').toUpperCase();
+  var now = new Date();
+  var dateStr = now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear();
+  var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  var dues = _pendingDuesForReminder;
+  var total = dues.reduce(function(s,o){ return s+(o.dueAmount>0?o.dueAmount:(o.netAmount||o.totalAmount||0)); },0);
+  var lines = dues.map(function(o,i){
+    var due = o.dueAmount>0?o.dueAmount:(o.netAmount||o.totalAmount||0);
+    var daysAgo = Math.floor((Date.now()-new Date(o.date).getTime())/86400000);
+    var age = daysAgo===0?'today':daysAgo===1?'yesterday':daysAgo+' days ago';
+    return (i+1)+'. '+o.patientName+' — Rs.'+due.toLocaleString('en-IN')+' (booked '+age+')';
+  }).join('\n');
+  var msg = '📋 *OnePLUS Lab — Pending Dues Reminder*\n'
+    +'Staff: '+name+' ('+role+')\n'
+    +'Date: '+dateStr+', '+timeStr+'\n\n'
+    +lines+'\n\n'
+    +'*Total pending: Rs.'+total.toLocaleString('en-IN')+'*\n'
+    +'Please collect and update in the app.\n'
+    +'OnePLUS Ultrasound Lab, Pitampura | 011-4248 0101';
+  window.open('https://wa.me/91'+staffPhone+'?text='+encodeURIComponent(msg),'_blank');
+  closeDuesReminder();
+}
+
+function toggleDuesList() {
+  var listEl = document.getElementById('dash-dues');
+  var chevron = document.getElementById('dues-chevron');
+  var open = listEl.style.display === 'block';
+  listEl.style.display = open ? 'none' : 'block';
+  chevron.style.transform = open ? '' : 'rotate(180deg)';
+}
+
 var CATALOGUE = [];
 var PANELS = {};
 var PANEL_NAMES = {standard:'Standard',jk:'Dr J K Gupta',du:'DU Panel',sh:'Dr Shalini Gupta'};
@@ -3945,6 +4092,13 @@ function loadOrders(loadMore) {
     if (snap.empty || snap.docs.length < _ordersPageSize) _ordersAllLoaded = true;
     if (!snap.empty) _ordersCursor = snap.docs[snap.docs.length - 1];
     snap.forEach(function(d){ allOrders.push(Object.assign({id:d.id},d.data())); });
+    // Re-sort after every page: createdAt desc, fallback to seq desc
+    allOrders.sort(function(a,b){
+      var ta = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+      var tb = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+      if (tb !== ta) return tb - ta;
+      return (b.seq||0) - (a.seq||0);
+    });
     renderOrders(allOrders);
     var label = ordersDateLabel(ordersDateOffset);
     document.getElementById('orders-lbl').textContent = allOrders.length + (_ordersAllLoaded ? '' : '+') + ' orders – ' + label;
@@ -4103,7 +4257,13 @@ function renderOrderDetail(o) {
         var canCollect = hasDue && (isOwner || role==='admin' || role==='pathologist' || role==='manager');
         if (!canCollect) return '';
         var dueAmt = o.dueAmount > 0 ? o.dueAmount : (o.netAmount || o.totalAmount || 0);
-        return '<button class="btn" style="width:100%;margin-bottom:10px;border-color:#D97706;color:#D97706;font-weight:500" onclick="openCollectDue(\''+o.id+'\','+dueAmt+')">&#128176; Collect Due Payment — Rs.'+dueAmt.toLocaleString('en-IN')+'</button>';
+        return '<button class="btn" style="width:100%;margin-bottom:10px;border-color:#D97706;color:#D97706;font-weight:500" onclick="openCollectDue(\''+o.id+'\','+dueAmt+')">&#128176; Collect Due Payment — Rs.'+dueAmt.toLocaleString('en-IN')+'</button>'
+          + (function(){
+              var role2 = curProfile && curProfile.role || '';
+              if (role2!=='admin' && role2!=='pathologist') return '';
+              var suppressed = o.reminderSuppressed || false;
+              return '<button class="btn" style="width:100%;margin-bottom:10px;font-size:12px;color:'+(suppressed?'var(--red)':'var(--text3)')+'" onclick="toggleReminderSuppression(\''+o.id+'\','+(suppressed?'false':'true')+')">&#128277; Reminder: '+(suppressed?'OFF — tap to re-enable':'ON — tap to suppress')+'</button>';
+            })();
       })()
     + '<button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="openDetailTRF()">&#128221; View / Print TRF</button>'
     + '<button class="btn" style="width:100%;margin-bottom:10px" onclick="downloadTRFpdf()">&#128196; Download PDF</button>'
@@ -4731,6 +4891,80 @@ function downloadTRFpdf() {
 var _cDueOrderId = null;
 var _cDueMax = 0;
 var _cDuePayMode = 'cash';
+
+function loadDuesTracking() {
+  var fromVal = document.getElementById('dues-track-from').value;
+  var toVal = document.getElementById('dues-track-to').value;
+  var el = document.getElementById('dues-tracking-list');
+  if (!fromVal || !toVal) { el.innerHTML = '<div class="empty">Select both dates</div>'; return; }
+  // Enforce 90 day max
+  var diffDays = Math.floor((new Date(toVal)-new Date(fromVal))/86400000);
+  if (diffDays > 90) { el.innerHTML = '<div class="empty">Max range is 90 days</div>'; return; }
+  if (diffDays < 0) { el.innerHTML = '<div class="empty">From date must be before To date</div>'; return; }
+  el.innerHTML = '<div class="empty">Loading...</div>';
+  db.collection('orders')
+    .where('status','==','pending')
+    .where('date','>=',fromVal)
+    .where('date','<=',toVal)
+    .get().then(function(snap) {
+      if (snap.empty) { el.innerHTML = '<div class="empty">No pending dues in this range</div>'; return; }
+      // Group by staff
+      var byStaff = {};
+      snap.forEach(function(d) {
+        var o = Object.assign({id:d.id},d.data());
+        var uid = o.createdBy || 'unknown';
+        var uname = o.createdByName || 'Unknown';
+        if (!byStaff[uid]) byStaff[uid] = {name:uname, orders:[], total:0};
+        var due = o.dueAmount>0?o.dueAmount:(o.netAmount||o.totalAmount||0);
+        byStaff[uid].orders.push(o);
+        byStaff[uid].total += due;
+      });
+      var grandTotal = Object.values(byStaff).reduce(function(s,g){ return s+g.total; },0);
+      var html = '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-strong);margin-bottom:8px">'
+        +'<div style="font-size:12px;font-family:var(--mono);color:var(--text3)">'+snap.size+' orders · '+Object.keys(byStaff).length+' staff</div>'
+        +'<div style="font-size:14px;font-weight:600;color:#D97706">Rs.'+grandTotal.toLocaleString('en-IN')+' total</div>'
+        +'</div>';
+      Object.values(byStaff).sort(function(a,b){ return b.total-a.total; }).forEach(function(g) {
+        html += '<div style="margin-bottom:12px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+          +'<div style="font-size:13px;font-weight:600">'+esc(g.name)+'</div>'
+          +'<div style="font-size:13px;font-weight:600;color:#D97706">Rs.'+g.total.toLocaleString('en-IN')+'</div>'
+          +'</div>';
+        g.orders.forEach(function(o) {
+          var due = o.dueAmount>0?o.dueAmount:(o.netAmount||o.totalAmount||0);
+          var suppressed = o.reminderSuppressed || false;
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--surface2);border-radius:6px;margin-bottom:4px;cursor:pointer" onclick="closeDuesTrackingAndOpen(\''+o.id+'\')">'
+            +'<div><div style="font-size:12px;font-weight:500">'+esc(o.patientName)+'</div>'
+            +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(o.date||'')+(suppressed?' · 🔕 Suppressed':'')+'</div></div>'
+            +'<div style="text-align:right">'
+            +'<div style="font-size:12px;font-weight:500;color:#D97706">Rs.'+due.toLocaleString('en-IN')+'</div>'
+            +'<div style="font-size:10px;color:var(--accent)">View ›</div>'
+            +'</div></div>';
+        });
+        html += '</div>';
+      });
+      el.innerHTML = html;
+    }).catch(function(e){ el.innerHTML = '<div class="empty">Error: '+e.message+'</div>'; });
+}
+
+function closeDuesTrackingAndOpen(orderId) {
+  goTo('s-order-detail');
+  openOrderDetail(orderId);
+}
+
+function toggleReminderSuppression(orderId, suppress) {
+  suppress = (suppress === 'true' || suppress === true);
+  db.collection('orders').doc(orderId).update({ reminderSuppressed: suppress })
+    .then(function() {
+      toast('Reminder ' + (suppress ? 'suppressed ✓' : 're-enabled ✓'), 'ok');
+      if (curDetailOrder && curDetailOrder.id === orderId) {
+        curDetailOrder.reminderSuppressed = suppress;
+        renderOrderDetail(curDetailOrder);
+      }
+      loadDues();
+    })
+    .catch(function(e){ toast('Error: ' + e.message, 'err'); });
+}
 
 function openCollectDue(orderId, dueAmt) {
   _cDueOrderId = orderId;
@@ -6146,6 +6380,14 @@ async function loadAdminScreen() {
   await loadAdminStaff();
   await loadTempRoles();
   await loadTempDoctor();
+  // Set default dues tracking date range: last 30 days
+  var toDate = new Date();
+  var fromDate = new Date(); fromDate.setDate(fromDate.getDate()-30);
+  var fmt = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+  var fromEl = document.getElementById('dues-track-from');
+  var toEl = document.getElementById('dues-track-to');
+  if (fromEl) { fromEl.value = fmt(fromDate); fromEl.min = fmt(new Date(Date.now()-90*86400000)); fromEl.max = fmt(toDate); }
+  if (toEl) { toEl.value = fmt(toDate); toEl.max = fmt(toDate); }
   // Populate temp doctor dropdowns from staff list
   var staffSnap = await db.collection('staff').where('active','==',true).get();
   var staffSel = document.getElementById('tempdr-staff');
@@ -6256,6 +6498,7 @@ function showAddStaff() {
   document.getElementById('sm-pass').value = '';
   document.getElementById('sm-pin').value = '';
   var defdr = document.getElementById('sm-defdr'); if(defdr) defdr.value = '';
+  var smph = document.getElementById('sm-phone'); if(smph) smph.value = '';
   document.getElementById('sm-err').textContent = '';
   document.getElementById('sm-pass-field').style.display = 'block';
   var _apf=document.getElementById('sm-admin-pass-field'); if(_apf){_apf.style.display='block'; var _api=document.getElementById('sm-admin-pass'); if(_api) _api.value='';}
@@ -6285,6 +6528,7 @@ async function editStaff(id) {
     document.getElementById('sm-pass').value = '';
     document.getElementById('sm-pin').value = ''; // never show stored hash
     var defdr = document.getElementById('sm-defdr'); if(defdr) defdr.value = s.defaultDoctor || '';
+    var smph = document.getElementById('sm-phone'); if(smph) smph.value = s.phone || '';
     document.getElementById('sm-err').textContent = '';
     document.getElementById('sm-pass-field').style.display = 'block';
     var _apf2=document.getElementById('sm-admin-pass-field'); if(_apf2){_apf2.style.display='none'; var _api2=document.getElementById('sm-admin-pass'); if(_api2) _api2.value='';}
@@ -6339,10 +6583,11 @@ async function saveStaff() {
       var _adminPass2 = document.getElementById('sm-admin-pass') ? document.getElementById('sm-admin-pass').value : '';
       var cred = await auth.createUserWithEmailAndPassword(email, pass);
       var defDr = (document.getElementById('sm-defdr').value||'').trim();
+      var staffPhone = (document.getElementById('sm-phone').value||'').trim();
       var pinHash = await hashPin(pin);
       await db.collection('staff').doc(cred.user.uid).set({
         name: name, email: email, role: smRole, pin: pinHash,
-        uid: cred.user.uid, active: true,
+        uid: cred.user.uid, active: true, phone: staffPhone,
         dashboardAccess: smDashAccess,
         defaultDoctor: defDr,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -6354,7 +6599,8 @@ async function saveStaff() {
     } else {
       // EDIT EXISTING
       var defDr = (document.getElementById('sm-defdr').value||'').trim();
-      var update = { name: name, email: email, role: smRole, dashboardAccess: smDashAccess, defaultDoctor: defDr };
+      var staffPhone = (document.getElementById('sm-phone').value||'').trim();
+      var update = { name: name, email: email, role: smRole, dashboardAccess: smDashAccess, defaultDoctor: defDr, phone: staffPhone };
       if (pin) update.pin = await hashPin(pin);
 
       // Password change

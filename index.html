@@ -301,7 +301,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <button class="qa-btn" onclick="goTo('s-orders')"><div class="qa-icon">&#128203;</div><div class="qa-label">All Orders / TRF</div><div class="qa-sub">View, print TRF</div></button>
       <button class="qa-btn" onclick="goTo('s-estimate')"><div class="qa-icon">&#128179;</div><div class="qa-label">Estimate</div><div class="qa-sub">Quote &amp; convert</div></button>
       <button class="qa-btn" onclick="goTo('s-ho')"><div class="qa-icon">&#128176;</div><div class="qa-label">Cash Handover</div><div class="qa-sub">EOD settlement</div></button>
-      <button class="qa-btn" onclick="goTo('s-eod')"><div class="qa-icon">&#128202;</div><div class="qa-label">EOD Report</div><div class="qa-sub">WhatsApp summary</div></button>
+      <button class="qa-btn" id="eod-btn" style="display:none" onclick="goTo('s-eod')"><div class="qa-icon">&#128202;</div><div class="qa-label">EOD Report</div><div class="qa-sub">WhatsApp summary</div></button>
       <button class="qa-btn" onclick="goTo('s-preanalytical')"><div class="qa-icon">&#128300;</div><div class="qa-label">Pre-Analytical</div><div class="qa-sub">Sample guide & rejections</div></button>
       <button class="qa-btn" id="field-btn" style="display:none" onclick="goTo('s-field')"><div class="qa-icon">&#128664;</div><div class="qa-label">Field Tasks</div><div class="qa-sub">Home collection list</div></button>
       <button class="qa-btn" id="assign-btn" style="display:none" onclick="goTo('s-assign')"><div class="qa-icon">&#128203;</div><div class="qa-label">Assign Tasks</div><div class="qa-sub">Allocate phlebotomists</div></button>
@@ -777,7 +777,25 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <button onclick="ordersShiftDate(1)" id="orders-next-btn" style="width:32px;height:32px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">&#8594;</button>
   </div>
   <div class="scroll-body" style="padding-top:12px">
-    <input type="text" id="orders-search" placeholder="Search name, mobile, doctor..." oninput="filterOrders(this.value)" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;margin-bottom:16px">
+    <input type="text" id="orders-search" placeholder="Search name, mobile, doctor..." oninput="filterOrders(this.value)" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;margin-bottom:10px">
+    <!-- Payment status filter chips -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <button id="pf-all"     class="tog on"  onclick="setPayFilter('all')"     style="font-size:11px;padding:5px 10px">All</button>
+      <button id="pf-paid"    class="tog"     onclick="setPayFilter('paid')"    style="font-size:11px;padding:5px 10px">&#10003; Paid</button>
+      <button id="pf-partial" class="tog"     onclick="setPayFilter('partial')" style="font-size:11px;padding:5px 10px">&#9680; Partial</button>
+      <button id="pf-credit"  class="tog"     onclick="setPayFilter('credit')"  style="font-size:11px;padding:5px 10px">&#128218; Credit</button>
+      <button id="pf-due"     class="tog"     onclick="setPayFilter('due')"     style="font-size:11px;padding:5px 10px">&#9888; Due</button>
+    </div>
+    <!-- Revenue breakdown strip -->
+    <div id="orders-revenue" style="display:none;background:var(--surface2);border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:10px;font-size:11px;font-family:var(--mono)">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;text-align:center">
+        <div><div style="color:var(--text3);font-size:9px;text-transform:uppercase">Cash</div><div id="or-cash" style="font-weight:600;color:var(--green,#059669)">-</div></div>
+        <div><div style="color:var(--text3);font-size:9px;text-transform:uppercase">UPI</div><div id="or-upi" style="font-weight:600;color:#1D4ED8">-</div></div>
+        <div><div style="color:var(--text3);font-size:9px;text-transform:uppercase">Card</div><div id="or-card" style="font-weight:600;color:#7C3AED">-</div></div>
+        <div><div style="color:var(--text3);font-size:9px;text-transform:uppercase">Credit</div><div id="or-credit" style="font-weight:600;color:#D97706">-</div></div>
+        <div><div style="color:var(--text3);font-size:9px;text-transform:uppercase">Total</div><div id="or-total" style="font-weight:600;color:var(--accent)">-</div></div>
+      </div>
+    </div>
     <div id="orders-list"><div class="empty">Loading...</div></div>
     <button id="orders-load-more" onclick="loadOrders(true)" style="display:none;width:100%;padding:11px;margin-top:8px;background:var(--surface);border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;color:var(--accent);cursor:pointer;font-family:var(--mono)">Load more orders</button>
   </div>
@@ -1074,6 +1092,22 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <button class="btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="shareWAAdmin()">&#128172; Send to Admin</button>
       <div style="height:8px"></div>
       <button class="btn" onclick="saveEOD()">Save EOD Report</button>
+      <div style="height:16px"></div>
+      <div style="border-top:0.5px solid var(--border);padding-top:12px">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Auto-Send Settings</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <label style="font-size:13px;color:var(--text2);flex:1">Auto-send EOD to Admin at:</label>
+          <input type="time" id="eod-auto-time" value="22:00"
+            style="padding:6px 10px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text);width:110px"
+            onchange="saveEODAutoTime(this.value)">
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <label style="font-size:13px;color:var(--text2);flex:1">Auto-send enabled:</label>
+          <input type="checkbox" id="eod-auto-enabled" onchange="saveEODAutoEnabled(this.checked)"
+            style="width:18px;height:18px;cursor:pointer">
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px">When enabled, EOD report auto-sends to Admin WhatsApp at the set time on login. Fires once per day.</div>
+      </div>
     </div>
 
     <!-- Collection Charges tab -->
@@ -1826,8 +1860,9 @@ function routeAfterPin(role) {
     var fieldBtn = document.getElementById('field-btn');
     if (adminBtn) adminBtn.style.display = (role==='admin'||role==='pathologist') ? 'block' : 'none';
     var assignBtn=document.getElementById('assign-btn'); if(assignBtn) assignBtn.style.display=(role==='admin'||role==='pathologist'||role==='manager')?'block':'none';
-    if (reviewBtn) reviewBtn.style.display = (role==='admin'||role==='manager') ? 'block' : 'none';
+    if (reviewBtn) reviewBtn.style.display = (role==='admin'||role==='manager'||role==='pathologist') ? 'block' : 'none';
     if (fieldBtn) fieldBtn.style.display = 'block'; // all roles see field tasks
+    var eodBtn=document.getElementById('eod-btn'); if(eodBtn) eodBtn.style.display=(role==='admin'||role==='manager'||role==='pathologist')?'block':'none';
     // Manager sees staff list (read-only) via admin screen but no add/edit buttons
   }
 }
@@ -2426,7 +2461,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.38';
+var APP_VERSION = 'v19.41';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -2554,14 +2589,29 @@ function showScreen(id) {
   if (id === 's-orders') { ordersDateOffset=0; loadOrders(); }
   if (id === 's-order-detail') {} // loaded by openOrderDetail()
   if (id === 's-ho') loadHO();
-  if (id === 's-eod') loadEOD();
+  if (id === 's-eod') {
+    var _eodRole = curProfile && curProfile.role || '';
+    if (_eodRole !== 'admin' && _eodRole !== 'manager' && _eodRole !== 'pathologist') {
+      toast('EOD Report is restricted to Admin, Manager and Pathologist', 'warn');
+      goBack(); return;
+    }
+    loadEOD();
+    loadEODAutoSettings();
+  }
   if (id === 's-admin') loadAdminScreen();
   if (id === 's-field') loadField();
   if (id === 's-order' && !_fromEstimate) { curOrder={}; selTests=[]; curPanel='standard'; showStep(1); renderTests(); setPanelButtons(); }
   if (id === 's-estimate') { initEstimateScreen(); }
   if (id === 's-review') { loadReview(); }
   if (id === 's-assign') { loadAssignScreen(); }
-  if (id === 's-activity') { initActivityScreen(); }
+  if (id === 's-activity') {
+    var _actRole = curProfile && curProfile.role || '';
+    if (_actRole !== 'admin' && _actRole !== 'pathologist') {
+      toast('Activity Log is restricted to Admin and Pathologist', 'warn');
+      goBack(); return;
+    }
+    initActivityScreen();
+  }
   if (id === 's-pa-editor') { initPAEditor(); }
   if (id === 's-phlebo') { startPhleboDash(); }
 }
@@ -2904,6 +2954,7 @@ function loadDash() {
   loadRecent();
   loadDues();
   checkDuesReminder();
+  checkEODAutoSend();
 }
 function loadStats() {
   var today = todayStr();
@@ -4696,6 +4747,13 @@ function loadOrders(loadMore) {
     allOrders = [];
     _ordersCursor = null;
     _ordersAllLoaded = false;
+    _ordersPayFilter = 'all';
+    ['all','paid','partial','credit','due'].forEach(function(id) {
+      var btn = document.getElementById('pf-'+id);
+      if (btn) btn.className = 'tog' + (id === 'all' ? ' on' : '');
+    });
+    var revEl = document.getElementById('orders-revenue');
+    if (revEl) revEl.style.display = 'none';
     document.getElementById('orders-list').innerHTML='<div class="empty">Loading...</div>';
     document.getElementById('orders-date-lbl').textContent = ordersDateLabel(ordersDateOffset);
     document.getElementById('orders-date-val').textContent = dateStr;
@@ -4724,6 +4782,7 @@ function loadOrders(loadMore) {
       return (b.seq||0) - (a.seq||0);
     });
     renderOrders(allOrders);
+    updateOrdersRevenue();
     var label = ordersDateLabel(ordersDateOffset);
     document.getElementById('orders-lbl').textContent = allOrders.length + (_ordersAllLoaded ? '' : '+') + ' orders – ' + label;
     var btn = document.getElementById('orders-load-more');
@@ -4732,15 +4791,72 @@ function loadOrders(loadMore) {
     document.getElementById('orders-list').innerHTML='<div class="empty">Error: '+e.message+'</div>';
   });
 }
-function filterOrders(q) {
-  if (!q) { renderOrders(allOrders); return; }
+var _ordersPayFilter = 'all';
+
+function setPayFilter(f) {
+  _ordersPayFilter = f;
+  ['all','paid','partial','credit','due'].forEach(function(id) {
+    var btn = document.getElementById('pf-'+id);
+    if (btn) btn.className = 'tog' + (id === f ? ' on' : '');
+  });
+  applyOrdersFilter();
+}
+
+function applyOrdersFilter() {
+  var q = (document.getElementById('orders-search') && document.getElementById('orders-search').value) || '';
   var lq = q.toLowerCase();
-  renderOrders(allOrders.filter(function(o) {
-    if (o.patientName && o.patientName.toLowerCase().indexOf(lq) >= 0) return true;
-    if (o.phone && o.phone.indexOf(q) >= 0) return true;
-    if (o.refBy && o.refBy.toLowerCase().indexOf(lq) >= 0) return true;
-    return false;
-  }));
+  var filtered = allOrders.filter(function(o) {
+    // Text search
+    if (q) {
+      var matchText = (o.patientName && o.patientName.toLowerCase().indexOf(lq) >= 0)
+        || (o.phone && o.phone.indexOf(q) >= 0)
+        || (o.refBy && o.refBy.toLowerCase().indexOf(lq) >= 0);
+      if (!matchText) return false;
+    }
+    // Payment filter
+    if (_ordersPayFilter === 'all') return true;
+    var due = o.dueAmount || 0;
+    var isCredit = o.payMode === 'credit' && o.status === 'pending';
+    var isPartial = !isCredit && due > 0 && (o.paidAmount || 0) > 0;
+    var isDue = due > 0; // covers both credit and partial
+    var isPaid = o.status === 'paid' && due <= 0;
+    if (_ordersPayFilter === 'paid')    return isPaid;
+    if (_ordersPayFilter === 'partial') return isPartial;
+    if (_ordersPayFilter === 'credit')  return isCredit;
+    if (_ordersPayFilter === 'due')     return isDue;
+    return true;
+  });
+  renderOrders(filtered);
+  updateOrdersRevenue();
+}
+
+function filterOrders(q) {
+  applyOrdersFilter();
+}
+
+function updateOrdersRevenue() {
+  var revEl = document.getElementById('orders-revenue');
+  if (!revEl || !allOrders.length) { if(revEl) revEl.style.display='none'; return; }
+  var cash=0, upi=0, card=0, credit=0, total=0;
+  allOrders.forEach(function(o) {
+    var paid = o.paidAmount || 0;
+    total += paid;
+    if (o.payMode === 'split' && o.splitPayments) {
+      cash += o.splitPayments.cash || 0;
+      upi  += o.splitPayments.upi  || 0;
+      card += o.splitPayments.card || 0;
+    } else if (o.payMode === 'cash')   { cash += paid; }
+    else if (o.payMode === 'upi')    { upi  += paid; }
+    else if (o.payMode === 'card')   { card += paid; }
+    else if (o.payMode === 'credit') { credit += (o.netAmount || o.totalAmount || 0); }
+  });
+  var fmt = function(n) { return 'Rs.' + Math.round(n).toLocaleString('en-IN'); };
+  document.getElementById('or-cash').textContent   = fmt(cash);
+  document.getElementById('or-upi').textContent    = fmt(upi);
+  document.getElementById('or-card').textContent   = fmt(card);
+  document.getElementById('or-credit').textContent = fmt(credit);
+  document.getElementById('or-total').textContent  = fmt(total);
+  revEl.style.display = 'block';
 }
 function renderOrders(orders) {
   var el=document.getElementById('orders-list');
@@ -4767,7 +4883,8 @@ function renderOrders(orders) {
       +'<span>&#128100; '+esc(o.createdByName||'-')+'</span>'
       +(o.gps?'<span style="color:#1D4ED8">&#128205; GPS</span>':'')
       +'</div>'
-      +'<div class="order-footer">'      +'<span class="badge '+(o.status==='paid'?'badge-green':'badge-gold')+'">'+(o.status||'paid').toUpperCase()+'</span>'      +(function(){          if(o.payMode==='split'&&o.splitPayments){            var p=[];if(o.splitPayments.cash>0)p.push('Cash');if(o.splitPayments.upi>0)p.push('UPI');if(o.splitPayments.card>0)p.push('Card');            return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+p.join('+')+'</span>';          }          if(o.payMode&&o.payMode!=='cash')return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+o.payMode.toUpperCase()+'</span>';          return '';        })()      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'      +'</div>'
+      +'<div class="order-footer">'      +'<span class="badge '+(o.status==='paid'&&(o.dueAmount||0)>0?'badge-gold':o.status==='paid'?'badge-green':'badge-gold')+'">'
+        +(o.status==='paid'&&(o.dueAmount||0)>0?'PARTIAL':((o.status||'paid').toUpperCase()))+'</span>'      +(function(){          if(o.payMode==='split'&&o.splitPayments){            var p=[];if(o.splitPayments.cash>0)p.push('Cash');if(o.splitPayments.upi>0)p.push('UPI');if(o.splitPayments.card>0)p.push('Card');            return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+p.join('+')+'</span>';          }          if(o.payMode&&o.payMode!=='cash')return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+o.payMode.toUpperCase()+'</span>';          return '';        })()      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'      +'</div>'
       +'</div>';
   }).join('');
 }
@@ -4907,6 +5024,10 @@ function renderOrderDetail(o) {
 
 
 function updateLabStatus(orderId, status) {
+  var _lsRole = curProfile && curProfile.role || '';
+  if (_lsRole !== 'lab' && _lsRole !== 'pathologist' && _lsRole !== 'admin') {
+    toast('Lab status update is restricted to Lab Tech, Pathologist and Admin', 'warn'); return;
+  }
   db.collection('orders').doc(orderId).update({ labStatus: status })
     .then(function() {
       if (curDetailOrder) curDetailOrder.labStatus = status;
@@ -5539,8 +5660,16 @@ function downloadTRFpdf() {
   }
 
   var filename = 'TRF_'+(o.patientName||'patient').replace(/\s+/g,'_')+'_'+(o.date||'').replace(/\//g,'-')+'.pdf';
-  doc.save(filename);
-  toast('PDF downloaded','ok');
+  // iOS Safari does not support the download attribute — open blob URL in new tab instead
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  if (isIOS) {
+    var blobUrl = doc.output('bloburl');
+    window.open(blobUrl, '_blank');
+    toast('PDF opened — use Share to save', 'ok');
+  } else {
+    doc.save(filename);
+    toast('PDF downloaded', 'ok');
+  }
 }
 
 
@@ -6599,6 +6728,114 @@ function loadCollectionCharges(period) {
       list.innerHTML = '<div class="empty">Error: ' + esc(e.message) + '</div>';
     });
 }
+
+
+// ── EOD AUTO-SEND ─────────────────────────────────────────────────────────
+var EOD_AUTO_SEND_KEY = 'eod_auto_enabled';
+var EOD_AUTO_TIME_KEY = 'eod_auto_time';
+var EOD_AUTO_SENT_KEY = 'eod_auto_sent_date'; // localStorage key — date string
+
+function saveEODAutoEnabled(val) {
+  localStorage.setItem(EOD_AUTO_SEND_KEY, val ? '1' : '0');
+  toast(val ? 'Auto-send enabled ✓' : 'Auto-send disabled', 'ok');
+}
+
+function saveEODAutoTime(val) {
+  localStorage.setItem(EOD_AUTO_TIME_KEY, val);
+  toast('Auto-send time set to ' + val, 'ok');
+}
+
+function loadEODAutoSettings() {
+  var enabled = localStorage.getItem(EOD_AUTO_SEND_KEY) === '1';
+  var time = localStorage.getItem(EOD_AUTO_TIME_KEY) || '22:00';
+  var enabledEl = document.getElementById('eod-auto-enabled');
+  var timeEl = document.getElementById('eod-auto-time');
+  if (enabledEl) enabledEl.checked = enabled;
+  if (timeEl) timeEl.value = time;
+}
+
+function checkEODAutoSend() {
+  // Only admin/manager/pathologist trigger auto-send
+  var role = curProfile && curProfile.role || '';
+  if (role !== 'admin' && role !== 'manager' && role !== 'pathologist') return;
+
+  var enabled = localStorage.getItem(EOD_AUTO_SEND_KEY) === '1';
+  if (!enabled) return;
+
+  // Check if already sent today
+  var today = todayStr();
+  var lastSent = localStorage.getItem(EOD_AUTO_SENT_KEY);
+  if (lastSent === today) return; // already sent today
+
+  // Check if current time is within 30 min window of configured time
+  var configTime = localStorage.getItem(EOD_AUTO_TIME_KEY) || '22:00';
+  var parts = configTime.split(':');
+  var configH = parseInt(parts[0], 10);
+  var configM = parseInt(parts[1], 10);
+  var now = new Date();
+  var nowH = now.getHours();
+  var nowM = now.getMinutes();
+  var nowMins = nowH * 60 + nowM;
+  var configMins = configH * 60 + configM;
+
+  // Fire if within a 30-minute window after configured time
+  if (nowMins >= configMins && nowMins < configMins + 30) {
+    // Mark sent first to prevent double-fire
+    localStorage.setItem(EOD_AUTO_SENT_KEY, today);
+    // Load EOD data then auto-send
+    autoSendEOD();
+  }
+}
+
+function autoSendEOD() {
+  var today = todayStr();
+  db.collection('orders').where('date', '==', today).get().then(function(snap) {
+    var cash=0, upi=0, card=0, credit=0, total=0, coll=0;
+    snap.forEach(function(doc) {
+      var o = doc.data();
+      var paid = o.paidAmount || 0;
+      total += paid;
+      if (o.source !== 'Walk-in') coll += (o.collectionCharge || 0);
+      if (o.payMode === 'split' && o.splitPayments) {
+        cash += (o.splitPayments.cash || 0);
+        upi  += (o.splitPayments.upi  || 0);
+        card += (o.splitPayments.card || 0);
+      } else if (o.payMode === 'cash')   { cash += paid; }
+        else if (o.payMode === 'upi')    { upi  += paid; }
+        else if (o.payMode === 'card')   { card += paid; }
+        else if (o.payMode === 'credit') { credit += (o.netAmount || o.totalAmount || 0); }
+    });
+    var fmt = function(n) { return 'Rs.' + n.toLocaleString('en-IN'); };
+    var d = new Date();
+    var dateStr = d.toLocaleDateString('en-IN', {weekday:'short', day:'2-digit', month:'short', year:'numeric'});
+    var lines = [
+      'OnePLUS Ultrasound Lab - AUTO EOD Report',
+      'Date: ' + dateStr,
+      '',
+      'Total Orders: ' + snap.size,
+      'Cash: ' + fmt(cash),
+      'UPI: ' + fmt(upi),
+      'Card: ' + fmt(card),
+      'Credit: ' + fmt(credit),
+      'Collection Charges: ' + fmt(coll),
+      '------------------------',
+      'Total Revenue: ' + fmt(total + coll),
+      '',
+      'Auto-generated by LabFlow',
+      'OnePLUS Ultrasound Lab Management System'
+    ];
+    var text = lines.join('\n');
+    var ADMIN_WA = '919312218812';
+    window.open('https://wa.me/' + ADMIN_WA + '?text=' + encodeURIComponent(text), '_blank');
+    toast('EOD auto-sent to Admin ✓', 'ok');
+    logActivity('eod_save', 'EOD auto-sent to Admin at ' + new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'}));
+  }).catch(function(e) {
+    console.warn('EOD auto-send failed:', e.message);
+    // Clear sent flag so it retries on next login today
+    localStorage.removeItem(EOD_AUTO_SENT_KEY);
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────
 
 function loadEOD() {
   var today=todayStr();

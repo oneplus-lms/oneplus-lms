@@ -1,5 +1,5 @@
-// LabFlow Service Worker — v19.34
-const CACHE_NAME = 'labflow-v19.34';
+// LabFlow Service Worker — v19.38
+const CACHE_NAME = 'labflow-v19.38';
 
 const PRECACHE = [
   '/oneplus-lms/index.html',

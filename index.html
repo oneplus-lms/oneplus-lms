@@ -755,7 +755,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div id="done-prep-wa" style="display:none;width:100%;max-width:260px;margin-bottom:0"></div>
     <button class="btn btn-primary" style="max-width:260px" onclick="goTo('s-dash')">Back to Dashboard</button>
     <div style="height:8px"></div>
-    <button class="btn" style="max-width:260px;color:var(--accent);border-color:var(--accent)" onclick="openTRF()">&#128196; PDF / Share TRF</button>
+    <button class="btn" id="done-trf-btn" style="max-width:260px;color:var(--accent);border-color:var(--accent)" onclick="openTRFFromDone()">&#128196; PDF / Share TRF</button>
     <div style="height:8px"></div>
     <button class="btn" style="max-width:260px" onclick="newOrder()">+ New Order</button>
   </div>
@@ -1224,9 +1224,10 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div style="padding:12px 16px">
       <div id="phlebo-task-list"><div class="empty">Loading your tasks...</div></div>
     </div>
-    <div style="padding:0 16px 20px;display:flex;gap:8px">
+    <div style="padding:0 16px 20px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" style="flex:1;font-size:12px" onclick="goTo('s-order')">+ New Order</button>
       <button class="btn" style="flex:1;font-size:12px" onclick="goTo('s-field')">All Field Tasks</button>
+      <button class="btn" style="flex:1;font-size:12px;color:var(--accent);border-color:var(--accent)" onclick="goTo('s-ho')">&#128176; Cash Handover</button>
     </div>
   </div>
 </div>
@@ -1458,7 +1459,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <div style="position:relative"><input type="password" id="sm-pass" placeholder="Set login password" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding-right:36px"><button type="button" onclick="toggleEye('sm-pass',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3);padding:0;line-height:1">👁</button></div>
     </div>
     <div class="field" id="sm-admin-pass-field">
-      <label>Your Password <span style="font-size:10px;color:var(--text3)">(to stay signed in)</span></label>
+      <label>Your Admin Password <span style="font-size:10px;color:var(--text3)">(re-enter yours so you stay logged in after creating their account)</span></label>
       <input type="password" id="sm-admin-pass" placeholder="Your own login password">
     </div>
     <div class="field">
@@ -2425,7 +2426,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.34';
+var APP_VERSION = 'v19.38';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -2739,7 +2740,7 @@ function authErr(code) {
 function doSignOut() {
   logActivity('logout', 'Signed out');
   auth.signOut().then(function(){
-    curUser=null; curProfile=null; pinBuf='';
+    curUser=null; curProfile=null; pinBuf=''; lastOrder=null;
     stack=[];
     goTo('s-auth', false); stack=['s-auth'];
   });
@@ -2840,6 +2841,7 @@ function unlock() {
       curProfile.effectiveDoctor = curProfile.defaultDoctor || '';
     });
   var role = curProfile && curProfile.role || '';
+  lastOrder = null; // clear any stale order from previous user/session
   routeAfterPin(role);
   applyManagerRestrictions(role);
   logActivity('login', 'Logged in');
@@ -4613,6 +4615,9 @@ function submitOrder() {
     });
   }).then(function(ref) {
     lastOrder = {id: ref.id}; Object.assign(lastOrder, order);
+    // Pin order ID to TRF button — iOS-safe, survives JS state restoration
+    var _trfBtn = document.getElementById('done-trf-btn');
+    if (_trfBtn) _trfBtn.dataset.orderId = ref.id;
     document.getElementById('done-id').textContent = order.patientName + ' — Saved ✓';
     logActivity('order_create', 'Order: ' + order.patientName + ' · Rs.' + (order.netAmount||0).toLocaleString('en-IN'));
     var instrEl = document.getElementById('done-instructions');
@@ -6845,6 +6850,27 @@ function checkPAFlags(tests) {
 
 // ── TRF ──
 var lastOrder = null;
+
+// iOS-safe TRF open from s-done — fetches from Firestore using pinned order ID
+// Never trusts lastOrder global which iOS Safari can restore from stale JS heap
+function openTRFFromDone() {
+  var btn = document.getElementById('done-trf-btn');
+  var orderId = btn && btn.dataset.orderId;
+  if (!orderId) {
+    // Fallback to lastOrder if no pinned ID (e.g. estimate conversion path)
+    if (lastOrder) { openTRF(); return; }
+    toast('Order not found — please go back and try again', 'warn'); return;
+  }
+  // If lastOrder matches the pinned ID, use it directly (no extra Firestore read)
+  if (lastOrder && lastOrder.id === orderId) { openTRF(); return; }
+  // Mismatch — iOS restored stale state. Fetch fresh from Firestore.
+  toast('Loading order...', 'ok');
+  db.collection('orders').doc(orderId).get().then(function(snap) {
+    if (!snap.exists) { toast('Order not found', 'err'); return; }
+    lastOrder = Object.assign({ id: snap.id }, snap.data());
+    openTRF();
+  }).catch(function(e) { toast('Failed to load: ' + e.message, 'err'); });
+}
 
 function openTRF() {
   if (!lastOrder) { toast('No order to print','warn'); return; }

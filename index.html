@@ -1851,6 +1851,19 @@ function routeAfterPin(role) {
     if (adminBtnP) adminBtnP.style.display = 'none';
     if (reviewBtnP) reviewBtnP.style.display = 'none';
     goTo('s-phlebo'); startPhleboDash();
+  } else if (role === 'senior_lab') {
+    goTo('s-dash', false); stack=['s-dash'];
+    loadDash();
+    // senior_lab: show field tasks, hide admin/review/eod
+    var slField = document.getElementById('field-btn');
+    var slAdmin = document.getElementById('admin-btn');
+    var slReview = document.getElementById('review-btn');
+    var slEod = document.getElementById('eod-btn');
+    if (slField)  slField.style.display  = 'block';
+    if (slAdmin)  slAdmin.style.display  = 'none';
+    if (slReview) slReview.style.display = 'none';
+    if (slEod)    slEod.style.display    = 'none';
+    startSeniorLabDash();
   } else {
     goTo('s-dash', false); stack=['s-dash'];
     loadDash();
@@ -1866,6 +1879,148 @@ function routeAfterPin(role) {
     // Manager sees staff list (read-only) via admin screen but no add/edit buttons
   }
 }
+
+
+// ── SENIOR LAB TECH DASHBOARD ─────────────────────────────────────────────
+var seniorLabUnsub = null;
+
+function startSeniorLabDash() {
+  if (seniorLabUnsub) { seniorLabUnsub(); seniorLabUnsub = null; }
+  var today = todayStr();
+
+  // Replace Handovers tile label with Reported
+  var hoTile = document.getElementById('st-ho');
+  var hoLabel = hoTile && hoTile.parentElement && hoTile.parentElement.querySelector('.stat-label');
+  if (hoLabel) hoLabel.textContent = 'Reported today';
+
+  // Inject sample monitoring section into dash after Recent Orders card
+  var dashEl = document.getElementById('s-dash');
+  if (dashEl && !document.getElementById('sl-sample-section')) {
+    var recentCard = document.querySelector('#s-dash .card');
+    if (recentCard) {
+      var sampleSection = document.createElement('div');
+      sampleSection.id = 'sl-sample-section';
+      sampleSection.style.cssText = 'margin-top:0';
+      sampleSection.innerHTML = [
+        _slCard('registered', '&#128229;', 'Registered',     '#8B1A1A', '#F5E4E4'),
+        _slCard('collected',  '&#128300;', 'Sample Collected','#1D4ED8', '#EFF6FF'),
+        _slCard('processing', '&#9881;',   'Processing',      '#8B6914', '#F5EDD0'),
+        _slCard('reported',   '&#10003;',  'Reported',        '#1A4A3A', '#E4EDE9'),
+      ].join('');
+      recentCard.parentNode.insertBefore(sampleSection, recentCard.nextSibling);
+    }
+  }
+
+  // Real-time listener — onSnapshot fires immediately and on every change
+  seniorLabUnsub = db.collection('orders')
+    .where('date', '==', today)
+    .onSnapshot(function(snap) {
+      var buckets = { registered: [], collected: [], processing: [], reported: [] };
+      snap.forEach(function(d) {
+        var o = Object.assign({ id: d.id }, d.data());
+        var s = o.labStatus || 'registered';
+        if (buckets[s]) buckets[s].push(o);
+      });
+
+      // Update Reported count in stat tile
+      var hoEl = document.getElementById('st-ho');
+      if (hoEl) hoEl.textContent = buckets.reported.length;
+
+      // Urgent banner
+      _slUpdateUrgent(snap);
+
+      // Update each sample card
+      Object.keys(buckets).forEach(function(status) {
+        _slUpdateCard(status, buckets[status]);
+      });
+    }, function(e) {
+      console.warn('seniorLabDash error:', e.message);
+    });
+}
+
+function _slCard(status, icon, label, color, bg) {
+  return '<div class="card" id="sl-card-' + status + '" style="margin-bottom:10px;border-color:' + color + '20;cursor:pointer" onclick="_slToggle(\'' + status + '\')">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center">'
+    + '<div style="display:flex;align-items:center;gap:8px">'
+    + '<span style="font-size:16px">' + icon + '</span>'
+    + '<span style="font-size:13px;font-weight:600;color:' + color + '">' + label + '</span>'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:8px">'
+    + '<span id="sl-count-' + status + '" style="font-size:18px;font-weight:700;font-family:var(--mono);color:' + color + '">0</span>'
+    + '<span style="font-size:12px;color:var(--text3)">▾</span>'
+    + '</div></div>'
+    + '<div id="sl-list-' + status + '" style="display:none;margin-top:10px;border-top:0.5px solid var(--border);padding-top:8px"></div>'
+    + '</div>';
+}
+
+function _slToggle(status) {
+  var listEl = document.getElementById('sl-list-' + status);
+  if (!listEl) return;
+  listEl.style.display = listEl.style.display === 'none' ? 'block' : 'none';
+}
+
+function _slUpdateCard(status, orders) {
+  var countEl = document.getElementById('sl-count-' + status);
+  if (countEl) countEl.textContent = orders.length;
+  var listEl = document.getElementById('sl-list-' + status);
+  if (!listEl) return;
+  if (!orders.length) {
+    listEl.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px 0">None</div>';
+    return;
+  }
+  // Sort urgent first, then by createdAt
+  orders.sort(function(a, b) {
+    if (a.urgent && !b.urgent) return -1;
+    if (!a.urgent && b.urgent) return 1;
+    var ta = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+    var tb = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+    return ta - tb; // oldest first — waiting longest
+  });
+  listEl.innerHTML = orders.map(function(o) {
+    var mins = o.createdAt && o.createdAt.toMillis
+      ? Math.floor((Date.now() - o.createdAt.toMillis()) / 60000) : null;
+    var timeStr = mins !== null
+      ? (mins < 60 ? mins + 'm ago' : Math.floor(mins/60) + 'h ' + (mins%60) + 'm ago')
+      : '';
+    var urgentBadge = o.urgent
+      ? '<span style="font-size:9px;background:#EF4444;color:#fff;padding:1px 5px;border-radius:8px;margin-left:4px;font-family:var(--mono)">URGENT</span>'
+      : '';
+    var tests = (o.tests||[]).slice(0,3).map(function(t){ return t.shortCode||t.name; }).join(', ')
+      + ((o.tests||[]).length > 3 ? ' +' + ((o.tests||[]).length-3) : '');
+    return '<div style="padding:6px 0;border-bottom:0.5px solid var(--border);cursor:pointer" onclick="openOrderDetail(\'' + o.id + '\')">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline">'
+      + '<span style="font-size:13px;font-weight:500">' + esc(o.patientName||'-') + urgentBadge + '</span>'
+      + '<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">' + timeStr + '</span>'
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--text3);margin-top:1px">' + esc(tests) + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function _slUpdateUrgent(snap) {
+  var section = document.getElementById('sl-sample-section');
+  if (!section) return;
+  var urgentPending = [];
+  snap.forEach(function(d) {
+    var o = d.data();
+    if (o.urgent && o.labStatus !== 'reported') urgentPending.push(o.patientName||'Patient');
+  });
+  var existing = document.getElementById('sl-urgent-banner');
+  if (urgentPending.length) {
+    if (!existing) {
+      var banner = document.createElement('div');
+      banner.id = 'sl-urgent-banner';
+      banner.style.cssText = 'background:#EF4444;border-radius:var(--radius);padding:10px 14px;color:#fff;'
+        + 'font-weight:700;font-size:12px;margin-bottom:10px;animation:pulse-dues 1.2s infinite;letter-spacing:0.04em';
+      section.insertBefore(banner, section.firstChild);
+      existing = banner;
+    }
+    existing.textContent = '🚨 URGENT: ' + urgentPending.join(', ');
+  } else if (existing) {
+    existing.remove();
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────
 
 // ── PHLEBOTOMIST DASHBOARD ────────────────────────────────────────────────
 var phleboDashUnsub = null;
@@ -2461,7 +2616,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.43';
+var APP_VERSION = 'v19.45';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -2795,6 +2950,7 @@ function doSignOut() {
   logActivity('logout', 'Signed out');
   // Teardown timers and listeners before signout
   clearTimeout(_inactivityTimer); _inactivityTimer = null;
+  if (seniorLabUnsub)     { seniorLabUnsub();     seniorLabUnsub = null; }
   if (hoUnsubscribe)      { hoUnsubscribe();      hoUnsubscribe = null; }
   if (fieldUnsubscribe)   { fieldUnsubscribe();   fieldUnsubscribe = null; }
   if (phleboDashUnsub)    { phleboDashUnsub();    phleboDashUnsub = null; }
@@ -3449,7 +3605,7 @@ function loadActivityLog() {
 function loadDues() {
   var myUid = curUser && curUser.uid;
   var role = curProfile && curProfile.role || '';
-  var canSeeAll = role==='admin'||role==='manager'||role==='pathologist';
+  var canSeeAll = role==='admin'||role==='manager'||role==='pathologist'||role==='senior_lab';
   var d = new Date(); d.setDate(d.getDate()-90);
   var fromDate = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   var q = canSeeAll
@@ -4827,7 +4983,10 @@ function loadOrders(loadMore) {
 
   var _ordRole = curProfile && curProfile.role || '';
   var _ordUid  = curUser && curUser.uid;
-  var query = _ordRole === 'phlebotomist'
+  var isPhlebo = _ordRole === 'phlebotomist';
+  // Phlebo query requires composite index: orders(createdBy ASC + createdAt DESC)
+  // If index missing Firestore throws — catch and prompt admin
+  var query = isPhlebo
     ? db.collection('orders').where('date','==',dateStr).where('createdBy','==',_ordUid).orderBy('createdAt','desc').limit(_ordersPageSize)
     : db.collection('orders').where('date','==',dateStr).orderBy('createdAt','desc').limit(_ordersPageSize);
   if (_ordersCursor) query = query.startAfter(_ordersCursor);
@@ -4850,7 +5009,13 @@ function loadOrders(loadMore) {
     var btn = document.getElementById('orders-load-more');
     if (btn) btn.style.display = _ordersAllLoaded ? 'none' : 'block';
   }).catch(function(e){
-    document.getElementById('orders-list').innerHTML='<div class="empty">Error: '+e.message+'</div>';
+    var msg = e.message || '';
+    // Index missing — Firestore error contains 'index' in message
+    if (msg.toLowerCase().indexOf('index') >= 0) {
+      document.getElementById('orders-list').innerHTML='<div class="empty">Index building — please wait 2 minutes and try again. (Admin: create Firestore index for orders/createdBy+createdAt)</div>';
+    } else {
+      document.getElementById('orders-list').innerHTML='<div class="empty">Error: '+e.message+'</div>';
+    }
   });
 }
 var _ordersPayFilter = 'all';
@@ -5046,7 +5211,7 @@ function renderOrderDetail(o) {
     + (function(){
         var ls = o.labStatus || 'registered';
         var labRole = curProfile && curProfile.role || '';
-        var canUpdateLab = labRole==='lab'||labRole==='pathologist'||labRole==='admin';
+        var canUpdateLab = labRole==='lab'||labRole==='senior_lab'||labRole==='pathologist'||labRole==='admin';
         if (!canUpdateLab) return '';
         var steps = ['registered','collected','processing','reported'];
         var labels = {registered:'Registered',collected:'Sample Collected',processing:'Processing',reported:'Reported'};
@@ -5087,7 +5252,7 @@ function renderOrderDetail(o) {
 
 function updateLabStatus(orderId, status) {
   var _lsRole = curProfile && curProfile.role || '';
-  if (_lsRole !== 'lab' && _lsRole !== 'pathologist' && _lsRole !== 'admin') {
+  if (_lsRole !== 'lab' && _lsRole !== 'senior_lab' && _lsRole !== 'pathologist' && _lsRole !== 'admin') {
     toast('Lab status update is restricted to Lab Tech, Pathologist and Admin', 'warn'); return;
   }
   db.collection('orders').doc(orderId).update({ labStatus: status })
@@ -7011,6 +7176,12 @@ function getErrors(test) {
 function searchPA(q) {
   var el = document.getElementById('pa-results');
   if (!q || q.length < 2) { el.innerHTML = '<div class="empty" style="padding:20px">Search a test to see sample requirements</div>'; return; }
+  // Wait for catalogue to load if not ready yet
+  if (!_dataLoaded) {
+    el.innerHTML = '<div class="empty" style="padding:20px">Loading test data...</div>';
+    onDataReady(function() { searchPA(q); });
+    return;
+  }
   var lq = q.toLowerCase();
   paSearchHits = CATALOGUE.filter(function(t){
     return t.name.toLowerCase().indexOf(lq) >= 0 || (t.short && t.short.toLowerCase().indexOf(lq) >= 0);
@@ -7502,7 +7673,7 @@ async function loadAdminStaff() {
     snap.forEach(function(d) {
       var s = d.data();
       var initials = (s.name||'?').split(' ').map(function(w){ return w[0]; }).join('').slice(0,2).toUpperCase();
-      var roleColor = {admin:'var(--accent)',pathologist:'var(--blue)',lab:'var(--gold)',reception:'var(--text2)',phlebotomist:'#059669'}[s.role] || 'var(--text2)';
+      var roleColor = {admin:'var(--accent)',pathologist:'var(--blue)',lab:'var(--gold)',senior_lab:'#D97706',reception:'var(--text2)',phlebotomist:'#059669'}[s.role] || 'var(--text2)';
       html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--border)">'
         + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0">' + initials + '</div>'
         + '<div style="flex:1;min-width:0">'
@@ -7583,7 +7754,7 @@ function showAddStaff() {
   document.getElementById('sm-delete-row').style.display = 'none';
   var rb = document.getElementById('sm-reset-btn'); if(rb) rb.style.display='none';
   document.getElementById('sm-save-btn').textContent = 'Create Account';
-  ['reception','lab','admin','pathologist','phlebotomist'].forEach(function(r){
+  ['reception','lab','admin','pathologist','phlebotomist','manager','senior_lab'].forEach(function(r){
     document.getElementById('smr-'+r).className = 'tog';
   });
   setDashAccessUI(false);
@@ -7612,7 +7783,7 @@ async function editStaff(id) {
     document.getElementById('sm-reactivate-btn').style.display = s.active===false ? 'block' : 'none';
     document.getElementById('sm-delete-row').style.display = s.active===false ? 'block' : 'none';
     document.getElementById('sm-save-btn').textContent = 'Save Changes';
-    ['reception','lab','admin','pathologist','phlebotomist','manager'].forEach(function(r){
+    ['reception','lab','admin','pathologist','phlebotomist','manager','senior_lab'].forEach(function(r){
       document.getElementById('smr-'+r).className = 'tog' + (r===smRole?' on':'');
     });
     setDashAccessUI(s.dashboardAccess || false);

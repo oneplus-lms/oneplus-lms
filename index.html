@@ -2643,7 +2643,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.47';
+var APP_VERSION = 'v19.48';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4257,40 +4257,36 @@ var _drEditCurrent = null; // current doctor object
 
 function drEditorSearch(q) {
   var el = document.getElementById('dr-editor-results');
-  drEditorCancel(); // clear any open edit form
+  drEditorCancel();
   if (!q || q.trim().length < 2) { el.innerHTML = ''; return; }
   var lq = q.toLowerCase().trim();
 
-  // Search Firestore directly — editor needs live data, not cache
-  db.collection('doctors')
-    .orderBy('name')
-    .startAt(q.charAt(0).toUpperCase())
-    .limit(200)
-    .get().then(function(snap) {
-      var results = [];
-      snap.forEach(function(d) {
-        var name = (d.data().name || '').toLowerCase();
-        if (name.indexOf(lq) >= 0) {
-          results.push({ id: d.id, data: d.data() });
-        }
+  // Use allDoctorsCache if available — already has all 5,914 doctors
+  if (allDoctorsCache && allDoctorsCache.length > 0) {
+    var results = allDoctorsCache
+      .filter(function(d) { return d.name && d.name.toLowerCase().indexOf(lq) >= 0; })
+      .slice(0, 10)
+      .map(function(d) {
+        var docId = (d.name||'').replace(/[^a-zA-Z0-9\s\(\)]/g,'').replace(/\s+/g,'-').toLowerCase().slice(0,100);
+        return { id: docId, data: d };
       });
-      // Also search case-insensitively across full name
-      if (results.length === 0) {
-        // Broader search
-        db.collection('doctors').limit(300).get().then(function(s2) {
-          var r2 = [];
-          s2.forEach(function(d) {
-            var name = (d.data().name || '').toLowerCase();
-            if (name.indexOf(lq) >= 0) r2.push({ id: d.id, data: d.data() });
-          });
-          _drRenderResults(r2.slice(0, 10), el);
-        });
-        return;
-      }
-      _drRenderResults(results.slice(0, 10), el);
-    }).catch(function(e) {
-      el.innerHTML = '<div class="empty">Search error: ' + esc(e.message) + '</div>';
-    });
+    _drRenderResults(results, el);
+    return;
+  }
+
+  // Cache not loaded — fetch all doctors once into editor cache
+  el.innerHTML = '<div class="empty" style="padding:8px 0">Loading...</div>';
+  db.collection('doctors').get().then(function(snap) {
+    var all = [];
+    snap.forEach(function(d) { all.push({ id: d.id, data: d.data() }); });
+    // Filter for query
+    var results = all.filter(function(r) {
+      return r.data.name && r.data.name.toLowerCase().indexOf(lq) >= 0;
+    }).slice(0, 10);
+    _drRenderResults(results, el);
+  }).catch(function(e) {
+    el.innerHTML = '<div class="empty">Search error: ' + esc(e.message) + '</div>';
+  });
 }
 
 function _drRenderResults(results, el) {

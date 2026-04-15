@@ -777,7 +777,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <button onclick="ordersShiftDate(1)" id="orders-next-btn" style="width:32px;height:32px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">&#8594;</button>
   </div>
   <div class="scroll-body" style="padding-top:12px">
-    <input type="text" id="orders-search" placeholder="Search patient..." oninput="filterOrders(this.value)" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;margin-bottom:16px">
+    <input type="text" id="orders-search" placeholder="Search name, mobile, doctor..." oninput="filterOrders(this.value)" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px;margin-bottom:16px">
     <div id="orders-list"><div class="empty">Loading...</div></div>
     <button id="orders-load-more" onclick="loadOrders(true)" style="display:none;width:100%;padding:11px;margin-top:8px;background:var(--surface);border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;color:var(--accent);cursor:pointer;font-family:var(--mono)">Load more orders</button>
   </div>
@@ -4734,7 +4734,13 @@ function loadOrders(loadMore) {
 }
 function filterOrders(q) {
   if (!q) { renderOrders(allOrders); return; }
-  renderOrders(allOrders.filter(function(o){ return o.patientName&&o.patientName.toLowerCase().indexOf(q.toLowerCase())>=0; }));
+  var lq = q.toLowerCase();
+  renderOrders(allOrders.filter(function(o) {
+    if (o.patientName && o.patientName.toLowerCase().indexOf(lq) >= 0) return true;
+    if (o.phone && o.phone.indexOf(q) >= 0) return true;
+    if (o.refBy && o.refBy.toLowerCase().indexOf(lq) >= 0) return true;
+    return false;
+  }));
 }
 function renderOrders(orders) {
   var el=document.getElementById('orders-list');

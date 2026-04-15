@@ -1470,6 +1470,33 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <button class="btn btn-danger" style="width:100%;background:transparent;color:var(--red);border-color:var(--red)" onclick="clearDoctorRegistry()">Clear Registry</button>
       </div>
     </div>
+    <!-- Doctor Editor -->
+    <div class="card" style="margin-top:12px">
+      <div class="card-title">&#9998; Doctor Editor</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Search, rename or deactivate a doctor entry.</div>
+      <div style="position:relative;margin-bottom:10px">
+        <input type="text" id="dr-edit-search" placeholder="Type doctor name to search..." autocomplete="off"
+          style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)"
+          oninput="drEditorSearch(this.value)">
+      </div>
+      <div id="dr-editor-results" style="margin-bottom:8px"></div>
+      <!-- Edit form — hidden until a doctor is selected -->
+      <div id="dr-edit-form" style="display:none;border-top:0.5px solid var(--border);padding-top:12px;margin-top:4px">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em">Editing</div>
+        <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:10px" id="dr-edit-original"></div>
+        <div class="field">
+          <label>Corrected Name</label>
+          <input type="text" id="dr-edit-name" placeholder="Enter correct name"
+            style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)">
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px" id="dr-edit-meta"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1;font-size:13px" onclick="drEditorSave()">&#10003; Save Name</button>
+          <button class="btn" style="flex:1;font-size:13px;color:var(--red);border-color:var(--red)" onclick="drEditorDeactivate()">&#10005; Deactivate</button>
+        </div>
+        <button class="btn" style="width:100%;margin-top:8px;font-size:12px" onclick="drEditorCancel()">Cancel</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2616,7 +2643,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.45';
+var APP_VERSION = 'v19.47';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4200,9 +4227,10 @@ async function uploadDoctors(doctors) {
   for (var i = 0; i < total; i += BATCH) {
     var chunk = doctors.slice(i, i + BATCH);
     var batch = db.batch();
+    var _batchTs = firebase.firestore.FieldValue.serverTimestamp();
     chunk.forEach(function(d) {
       var docId = d.name.replace(/[^a-zA-Z0-9\s\(\)]/g,'').replace(/\s+/g,'-').toLowerCase().slice(0,100);
-      batch.set(db.collection('doctors').doc(docId), d, {merge:true});
+      batch.set(db.collection('doctors').doc(docId), Object.assign({}, d, {updatedAt: _batchTs}), {merge:true});
     });
     try {
       await batch.commit();
@@ -4221,6 +4249,159 @@ async function uploadDoctors(doctors) {
   allDoctorsCache = null; // invalidate picker cache
   toast('Doctor registry uploaded ✓ — ' + uploaded + ' doctors', 'ok');
 }
+
+
+// ── DOCTOR EDITOR ─────────────────────────────────────────────────────────
+var _drEditDocId   = null; // Firestore doc ID of selected doctor
+var _drEditCurrent = null; // current doctor object
+
+function drEditorSearch(q) {
+  var el = document.getElementById('dr-editor-results');
+  drEditorCancel(); // clear any open edit form
+  if (!q || q.trim().length < 2) { el.innerHTML = ''; return; }
+  var lq = q.toLowerCase().trim();
+
+  // Search Firestore directly — editor needs live data, not cache
+  db.collection('doctors')
+    .orderBy('name')
+    .startAt(q.charAt(0).toUpperCase())
+    .limit(200)
+    .get().then(function(snap) {
+      var results = [];
+      snap.forEach(function(d) {
+        var name = (d.data().name || '').toLowerCase();
+        if (name.indexOf(lq) >= 0) {
+          results.push({ id: d.id, data: d.data() });
+        }
+      });
+      // Also search case-insensitively across full name
+      if (results.length === 0) {
+        // Broader search
+        db.collection('doctors').limit(300).get().then(function(s2) {
+          var r2 = [];
+          s2.forEach(function(d) {
+            var name = (d.data().name || '').toLowerCase();
+            if (name.indexOf(lq) >= 0) r2.push({ id: d.id, data: d.data() });
+          });
+          _drRenderResults(r2.slice(0, 10), el);
+        });
+        return;
+      }
+      _drRenderResults(results.slice(0, 10), el);
+    }).catch(function(e) {
+      el.innerHTML = '<div class="empty">Search error: ' + esc(e.message) + '</div>';
+    });
+}
+
+function _drRenderResults(results, el) {
+  if (!results.length) {
+    el.innerHTML = '<div class="empty" style="padding:8px 0">No doctors found</div>';
+    return;
+  }
+  // Store for index lookup — avoids quote issues in onclick
+  _drEditorResults = results;
+  el.innerHTML = results.map(function(r, ri) {
+    var d = r.data;
+    var inactive = d.active === false;
+    return '<div data-dridx="' + ri + '" onclick="_drEditorSelectIdx(this)" '
+      + 'style="padding:9px 10px;cursor:pointer;border:0.5px solid var(--border);border-radius:var(--radius);'
+      + 'margin-bottom:6px;background:var(--surface);opacity:' + (inactive ? '0.5' : '1') + '">'
+      + '<div style="font-size:13px;font-weight:500;color:' + (inactive ? 'var(--text3)' : 'var(--text)') + '">'
+      + esc(d.name || '-')
+      + (inactive ? ' <span style="font-size:10px;font-family:var(--mono);color:var(--red)">[INACTIVE]</span>' : '')
+      + '</div>'
+      + (d.specialization ? '<div style="font-size:11px;color:var(--text3)">' + esc(d.specialization) + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+
+var _drEditorResults = []; // last search results for index-based selection
+
+function _drEditorSelectIdx(el) {
+  var idx = parseInt(el.getAttribute('data-dridx'), 10);
+  var r = _drEditorResults[idx];
+  if (r) _drEditorSelect(r.id);
+}
+
+function _drEditorSelect(docId) {
+  db.collection('doctors').doc(docId).get().then(function(snap) {
+    if (!snap.exists) { toast('Doctor not found', 'err'); return; }
+    _drEditDocId   = docId;
+    _drEditCurrent = snap.data();
+    var d = _drEditCurrent;
+
+    document.getElementById('dr-edit-original').textContent = d.name || '-';
+    document.getElementById('dr-edit-name').value = d.name || '';
+    document.getElementById('dr-edit-meta').textContent =
+      'ID: ' + (d.doctor_id || docId) +
+      (d.mobile ? ' · Mobile: ' + d.mobile : '') +
+      (d.active === false ? ' · INACTIVE' : ' · Active');
+    document.getElementById('dr-editor-results').innerHTML = '';
+    document.getElementById('dr-edit-form').style.display = 'block';
+  }).catch(function(e) { toast('Load error: ' + e.message, 'err'); });
+}
+
+function drEditorSave() {
+  var newName = (document.getElementById('dr-edit-name').value || '').trim();
+  if (!newName || newName.length < 2) { toast('Name cannot be empty', 'warn'); return; }
+  if (!_drEditDocId) return;
+
+  var ts = firebase.firestore.FieldValue.serverTimestamp();
+
+  // Strategy: deactivate old doc, create new doc with correct name
+  // This handles doc ID mismatch (old ID was based on wrong name)
+  var oldDocId = _drEditDocId;
+  var newDocId = newName.replace(/[^a-zA-Z0-9\s\(\)]/g,'').replace(/\s+/g,'-').toLowerCase().slice(0,100);
+
+  var batch = db.batch();
+
+  // Deactivate old if ID will change
+  if (oldDocId !== newDocId) {
+    batch.update(db.collection('doctors').doc(oldDocId), {
+      active: false, updatedAt: ts, mergedInto: newDocId
+    });
+  }
+
+  // Set new (or update same) doc with correct name
+  batch.set(db.collection('doctors').doc(newDocId), Object.assign(
+    {}, _drEditCurrent,
+    { name: newName, active: true, updatedAt: ts, source: _drEditCurrent.source || 'manual' }
+  ), { merge: true });
+
+  batch.commit().then(function() {
+    toast('Doctor updated ✓', 'ok');
+    // Invalidate cache so new name appears immediately
+    allDoctorsCache = null;
+    localStorage.removeItem(DOCTOR_SYNC_KEY);
+    drEditorCancel();
+    document.getElementById('dr-edit-search').value = '';
+  }).catch(function(e) { toast('Save failed: ' + e.message, 'err'); });
+}
+
+function drEditorDeactivate() {
+  if (!_drEditDocId || !_drEditCurrent) return;
+  var name = _drEditCurrent.name || _drEditDocId;
+  if (!confirm('Deactivate "' + name + '"? It will no longer appear in doctor search. Orders using this name are unaffected.')) return;
+
+  db.collection('doctors').doc(_drEditDocId).update({
+    active: false,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function() {
+    toast('Doctor deactivated ✓', 'ok');
+    allDoctorsCache = null;
+    localStorage.removeItem(DOCTOR_SYNC_KEY);
+    drEditorCancel();
+    document.getElementById('dr-edit-search').value = '';
+  }).catch(function(e) { toast('Deactivate failed: ' + e.message, 'err'); });
+}
+
+function drEditorCancel() {
+  _drEditDocId   = null;
+  _drEditCurrent = null;
+  document.getElementById('dr-edit-form').style.display  = 'none';
+  document.getElementById('dr-editor-results').innerHTML = '';
+}
+// ─────────────────────────────────────────────────────────────────────────
 
 async function clearDoctorRegistry() {
   if (!confirm('Delete ALL doctors from registry? This cannot be undone.')) return;
@@ -4244,9 +4425,68 @@ var doctorPickerTargetId = null;
 var allDoctorsCache = null;
 var doctorCacheLoading = false;
 var doctorPickerTargetId = null;
+var DOCTOR_SYNC_KEY = 'doctor_last_sync'; // localStorage key — ISO timestamp
 
-// Prewarm disabled — doctor search loads on demand (was fetching 5,914 docs on every login)
-function prewarmDoctorCache() { return; }
+function prewarmDoctorCache() {
+  if (allDoctorsCache || doctorCacheLoading) return;
+  doctorCacheLoading = true;
+  var base = '/oneplus-lms/';
+  // Tier 1: load bundled doctors.json (cached by SW — works offline)
+  fetch(base + 'doctors.json')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      allDoctorsCache = Array.isArray(data) ? data : (data.doctors || []);
+      doctorCacheLoading = false;
+      console.log('Doctors loaded from JSON: ' + allDoctorsCache.length);
+      // Tier 2: delta sync from Firestore — only new/changed since last sync
+      _doctorDeltaSync();
+    })
+    .catch(function(e) {
+      // doctors.json not yet available — fall back to full Firestore fetch
+      console.warn('doctors.json not found, falling back to Firestore:', e.message);
+      _doctorFullFetch();
+    });
+}
+
+function _doctorDeltaSync() {
+  // Only run when online
+  if (!navigator.onLine) return;
+  var lastSync = localStorage.getItem(DOCTOR_SYNC_KEY);
+  var query = lastSync
+    ? db.collection('doctors').where('updatedAt', '>', new Date(lastSync))
+    : db.collection('doctors').orderBy('updatedAt', 'desc').limit(100);
+  query.get().then(function(snap) {
+    if (snap.empty) { localStorage.setItem(DOCTOR_SYNC_KEY, new Date().toISOString()); return; }
+    var updated = 0;
+    snap.forEach(function(d) {
+      var doc = d.data();
+      if (!doc.name) return;
+      // Merge into cache — replace existing or add new
+      var idx = allDoctorsCache.findIndex(function(x) { return x.name === doc.name; });
+      if (idx >= 0) { allDoctorsCache[idx] = doc; } else { allDoctorsCache.push(doc); }
+      updated++;
+    });
+    if (updated > 0) console.log('Doctor delta sync: ' + updated + ' updated');
+    localStorage.setItem(DOCTOR_SYNC_KEY, new Date().toISOString());
+  }).catch(function(e) {
+    console.warn('Doctor delta sync failed:', e.message);
+  });
+}
+
+function _doctorFullFetch() {
+  // Fallback: fetch all from Firestore (used when doctors.json not yet deployed)
+  db.collection('doctors').orderBy('name').get().then(function(snap) {
+    allDoctorsCache = [];
+    snap.forEach(function(d) { allDoctorsCache.push(d.data()); });
+    doctorCacheLoading = false;
+    localStorage.setItem(DOCTOR_SYNC_KEY, new Date().toISOString());
+    console.log('Doctors loaded from Firestore: ' + allDoctorsCache.length);
+  }).catch(function(e) {
+    console.warn('Doctor full fetch failed:', e.message);
+    doctorCacheLoading = false;
+    allDoctorsCache = [];
+  });
+}
 
 var _drSearchTimer = null;
 
@@ -4272,20 +4512,18 @@ function inlineDoctorSearch(val, inputId, listId) {
     }, 200);
     setTimeout(function(){ clearInterval(t); }, 8000);
   } else {
-    // Load on first use — avoids fetching at login
+    // Cache not loaded yet — trigger prewarm and show loading state
     el.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Loading doctors...</div>';
     el.style.display = 'block';
-    doctorCacheLoading = true;
-    db.collection('doctors').orderBy('name').get().then(function(snap) {
-      allDoctorsCache = [];
-      snap.forEach(function(d){ allDoctorsCache.push(d.data()); });
-      doctorCacheLoading = false;
-      renderInlineList(val, el, inputId, listId);
-    }).catch(function(e) {
-      console.warn('Doctor load error:', e.message);
-      doctorCacheLoading = false;
-      el.style.display = 'none';
-    });
+    prewarmDoctorCache();
+    // Poll until cache is ready
+    var t = setInterval(function() {
+      if (allDoctorsCache && !doctorCacheLoading) {
+        clearInterval(t);
+        renderInlineList(val, el, inputId, listId);
+      }
+    }, 200);
+    setTimeout(function(){ clearInterval(t); }, 10000);
   }
 }
 
@@ -4294,6 +4532,7 @@ function renderInlineList(val, el, inputId, listId) {
   var qStripped = q.replace(/^dr\.?\s*/i,'').trim();
   var results = !qStripped ? [] : allDoctorsCache.filter(function(d) {
     if (!d.name) return false;
+    if (d.active === false) return false; // exclude deactivated
     var n = d.name.toLowerCase();
     var nClean = n.replace(/([a-z])\.([a-z])/g,'$1 $2').replace(/([a-z])\./g,'$1').replace(/\s{2,}/g,' ');
     return n.indexOf(qStripped) >= 0 || n.indexOf(q) >= 0 || nClean.indexOf(qStripped) >= 0;
@@ -4339,7 +4578,8 @@ function hideDrList(listId) {
 function addDoctorToRegistry(name) {
   if (!name || name.length < 3) return;
   var docId = name.replace(/[^a-zA-Z0-9\s\(\)]/g,'').replace(/\s+/g,'-').toLowerCase().slice(0,100);
-  db.collection('doctors').doc(docId).set({name:name,source:'manual',active:true},{merge:true})
+  var _drNow = firebase.firestore.FieldValue.serverTimestamp();
+  db.collection('doctors').doc(docId).set({name:name,source:'manual',active:true,updatedAt:_drNow},{merge:true})
     .then(function(){
     // Update cache in-place instead of nuking it
     if (allDoctorsCache) { var exists=allDoctorsCache.some(function(d){return d.name===name;}); if(!exists) allDoctorsCache.push({name:name,source:'manual',active:true}); }

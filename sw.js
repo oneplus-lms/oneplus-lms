@@ -1,16 +1,30 @@
-// LabFlow Service Worker — v19.45
-const CACHE_NAME = 'labflow-v19.45';
+// LabFlow Service Worker — v19.47
+const CACHE_NAME = 'labflow-v19.47';
 
 const PRECACHE = [
   '/oneplus-lms/index.html',
   '/oneplus-lms/manifest.json',
   '/oneplus-lms/icon-192.png',
   '/oneplus-lms/icon-512.png',
+  '/oneplus-lms/doctors.json',
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(cache => {
+      // Cache core files — doctors.json may not exist yet, don't fail if missing
+      return cache.addAll([
+        '/oneplus-lms/index.html',
+        '/oneplus-lms/manifest.json',
+        '/oneplus-lms/icon-192.png',
+        '/oneplus-lms/icon-512.png',
+      ]).then(() => {
+        // Cache doctors.json separately — optional, won't block install
+        return cache.add('/oneplus-lms/doctors.json').catch(() => {
+          console.log('SW: doctors.json not yet available — will cache on first fetch');
+        });
+      });
+    }).then(() => self.skipWaiting())
   );
 });
 

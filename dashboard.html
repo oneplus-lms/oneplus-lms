@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v19.48 — OnePLUS</title>
+<title>LabFlow Dashboard v19.59 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -165,7 +165,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v19.48</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v19.59</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -633,12 +633,12 @@ function showLabFilter(status){
   document.getElementById('lab-modal-body').innerHTML=orders.length
     ?orders.map(function(o){
         var time=o.createdAt&&o.createdAt.toDate?o.createdAt.toDate().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'';
-        return '<div class="li" style="flex-direction:column;align-items:stretch">'\
-          +'<div style="display:flex;justify-content:space-between">'\
-          +'<span style="font-size:13px;font-weight:500">'+esc(o.patientName)+(o.urgent?' <span class="b br">URG</span>':'')+'</span>'\
-          +'<span style="font-size:11px;font-family:var(--mono);color:var(--text3)">'+time+'</span>'\
-          +'</div>'\
-          +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+esc((o.tests||[]).slice(0,3).map(function(t){return t.name;}).join(', '))+((o.tests||[]).length>3?' +'+((o.tests||[]).length-3):'')+'</div>'\
+        return '<div class="li" style="flex-direction:column;align-items:stretch">'
+          +'<div style="display:flex;justify-content:space-between">'
+          +'<span style="font-size:13px;font-weight:500">'+esc(o.patientName)+(o.urgent?' <span class="b br">URG</span>':'')+'</span>'
+          +'<span style="font-size:11px;font-family:var(--mono);color:var(--text3)">'+time+'</span>'
+          +'</div>'
+          +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+esc((o.tests||[]).slice(0,3).map(function(t){return t.name;}).join(', '))+((o.tests||[]).length>3?' +'+((o.tests||[]).length-3):'')+'</div>'
           +'</div>';
       }).join('')
     :'<div class="empty">No orders in this status</div>';
@@ -680,8 +680,8 @@ function renderTable(orders){
     var hasMore=allTests.length>2;
     var moreBtn=hasMore?' <span id="xb-'+rid+'" onclick="toggleRow(\''+rid+'\')" style="cursor:pointer;color:var(--blue);font-size:10px;font-family:var(--mono)">▸ +'+(allTests.length-2)+'</span>':'';
     var fullTests=allTests.map(function(t,i){
-      return '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid var(--border);font-size:11px">'\
-        +'<span>'+(i+1)+'. '+esc(t.name)+'</span>'\
+      return '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid var(--border);font-size:11px">'
+        +'<span>'+(i+1)+'. '+esc(t.name)+'</span>'
         +(t.rate?'<span style="font-family:var(--mono);color:var(--text3)">Rs.'+t.rate+'</span>':'')+'</div>';
     }).join('');
     var src=o.source&&o.source!=='Walk-in'?'<span class="b bb">'+(o.source==='Home Collection'?'Home':o.source==='Hospital Collection'?'Hosp':esc(o.source))+'</span>'+(o.gps?' 📍':''):'Walk-in';
@@ -701,14 +701,14 @@ function renderTable(orders){
     var panelNames={jk:'JK Gupta',du:'DU Panel',sh:'Shalini Gupta'};
     var panelBadge=(o.panel&&o.panel!=='standard'&&panelNames[o.panel])?'<span style="font-size:9px;font-family:var(--mono);background:#EEF2FF;color:#3730A3;border-radius:4px;padding:1px 5px;margin-left:3px">'+panelNames[o.panel]+'</span>':'';
     var dueCell=due>0?'<span style="font-size:11px;font-family:var(--mono);color:var(--amber)">'+fmt(due)+'</span>':'<span style="color:var(--text3)">—</span>';
-    var mainRow='<tr>'\
-      +'<td><div style="font-weight:500">'+ub+esc(o.patientName)+panelBadge+'</div><div style="font-size:10px;color:var(--text3)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+'</div></td>'\
-      +'<td style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(o.serialNo||'—')+'</td>'\
-      +'<td style="font-size:11px;color:var(--text2);max-width:180px">'+preview+moreBtn+'</td>'\
-      +'<td>'+src+'</td>'\
-      +'<td style="font-family:var(--mono);font-weight:500">'+fmt(o.paidAmount)+'</td>'\
-      +'<td>'+dueCell+'</td>'\
-      +'<td style="font-size:11px;font-family:var(--mono)">'+(cc>0?'<span style="color:var(--blue)">+'+cc+'</span>':'—')+'</td>'\
+    var mainRow='<tr>'
+      +'<td><div style="font-weight:500">'+ub+esc(o.patientName)+panelBadge+'</div><div style="font-size:10px;color:var(--text3)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+'</div></td>'
+      +'<td style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(o.serialNo||'—')+'</td>'
+      +'<td style="font-size:11px;color:var(--text2);max-width:180px">'+preview+moreBtn+'</td>'
+      +'<td>'+src+'</td>'
+      +'<td style="font-family:var(--mono);font-weight:500">'+fmt(o.paidAmount)+'</td>'
+      +'<td>'+dueCell+'</td>'
+      +'<td style="font-size:11px;font-family:var(--mono)">'+(cc>0?'<span style="color:var(--blue)">+'+cc+'</span>':'—')+'</td>'
       +(function(){
           var pm=o.payMode||'';
           if(pm==='split'&&o.splitPayments){
@@ -719,15 +719,15 @@ function renderTable(orders){
             return '<td style="font-size:10px;font-family:var(--mono)">'+p.join('<br>')+'</td>';
           }
           return '<td style="font-size:11px;font-family:var(--mono);text-transform:uppercase">'+esc(pm)+'</td>';
-        })()\
-      +'<td>'+labBadge+'</td>'\
-      +'<td style="font-size:11px;color:var(--text2)">'+esc(o.createdByName||'-')+'</td>'\
-      +'<td>'+sb+'</td>'\
-      +'<td style="font-size:11px;font-family:var(--mono);color:var(--text3)">'+time+'</td>'\
+        })()
+      +'<td>'+labBadge+'</td>'
+      +'<td style="font-size:11px;color:var(--text2)">'+esc(o.createdByName||'-')+'</td>'
+      +'<td>'+sb+'</td>'
+      +'<td style="font-size:11px;font-family:var(--mono);color:var(--text3)">'+time+'</td>'
       +'</tr>';
     var expandRow=hasMore
-      ?'<tr id="xr-'+rid+'" style="display:none"><td colspan="12" style="padding:0 12px 10px;background:var(--surface2)">'\
-        +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;padding:6px 0 4px">All tests — '+esc(o.patientName)+'</div>'\
+      ?'<tr id="xr-'+rid+'" style="display:none"><td colspan="12" style="padding:0 12px 10px;background:var(--surface2)">'
+        +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;padding:6px 0 4px">All tests — '+esc(o.patientName)+'</div>'
         +fullTests+'</td></tr>'
       :'';
     return mainRow+expandRow;
@@ -744,8 +744,8 @@ function renderDepts(){
   if(!depts.length){el.innerHTML='<div class="empty">No tests today</div>';return;}
   el.innerHTML=depts.slice(0,12).map(function(d){
     var pct=Math.round(d.count/max*100);
-    return '<div class="dr"><div style="font-size:12px;width:140px;flex-shrink:0">'+esc(d.dept)+'</div>'\
-      +'<div class="dbb"><div class="dbf" style="width:'+pct+'%"></div></div>'\
+    return '<div class="dr"><div style="font-size:12px;width:140px;flex-shrink:0">'+esc(d.dept)+'</div>'
+      +'<div class="dbb"><div class="dbf" style="width:'+pct+'%"></div></div>'
       +'<div style="font-size:12px;font-family:var(--mono);color:var(--text3);width:24px;text-align:right">'+d.count+'</div></div>';
   }).join('');
 }
@@ -767,10 +767,10 @@ function renderField(){
     var src='<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(o.source)+'</span> ';
     var assignee=o.fieldAssignedToName?' &rarr; '+esc(o.fieldAssignedToName):'';
     var cc=o.collectionCharge>0?' &middot; Coll: Rs.'+o.collectionCharge:'';
-    return '<div class="li"><div style="flex:1;min-width:0">'\
-      +'<div class="lin">'+src+esc(o.patientName)+'</div>'\
+    return '<div class="li"><div style="flex:1;min-width:0">'
+      +'<div class="lin">'+src+esc(o.patientName)+'</div>'
       +'<div class="lim">'+esc(o.address||'No address')+(o.gps?' 📍':'')
-      +' &middot; '+esc(o.createdByName||'-')+assignee+cc+'</div>'\
+      +' &middot; '+esc(o.createdByName||'-')+assignee+cc+'</div>'
       +'</div><div style="text-align:right;flex-shrink:0">'+st+'</div></div>';
   }).join('');
 }
@@ -783,9 +783,9 @@ function renderTransfers(){
   card.style.display='block';set('tc',pend.length);
   document.getElementById('tlist').innerHTML=pend.map(function(o){
     var t=o.fieldTransferPending;
-    return '<div class="li"><div style="flex:1;min-width:0">'\
-      +'<div class="lin">'+esc(o.patientName)+'</div>'\
-      +'<div class="lim">'+esc(t.fromName||'-')+' &rarr; '+esc(t.toName||'-')+' &middot; '+esc(t.reason||'')+'</div>'\
+    return '<div class="li"><div style="flex:1;min-width:0">'
+      +'<div class="lin">'+esc(o.patientName)+'</div>'
+      +'<div class="lim">'+esc(t.fromName||'-')+' &rarr; '+esc(t.toName||'-')+' &middot; '+esc(t.reason||'')+'</div>'
       +'</div><div style="flex-shrink:0"><span class="b bpend">Pending</span></div></div>';
   }).join('');
 }
@@ -800,19 +800,19 @@ function renderHandovers(){
   }).map(function(h){
     var st=h.custodyStatus||'ACCEPTED';
     var bc=st==='PENDING'?'bpend':st==='REJECTED'?'brej':'bacc';
-    return '<div class="li" style="flex-direction:column;align-items:stretch">'\
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'\
-        +'<div style="flex:1;min-width:0">'\
+    return '<div class="li" style="flex-direction:column;align-items:stretch">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+        +'<div style="flex:1;min-width:0">'
           +(h.type==='refund'
             ?'<div class="lin"><span style="color:#DC2626;font-size:10px;font-family:var(--mono)">REFUND</span> '+esc(h.refundRequestedFromName||'-')+' &rarr; '+esc(h.recordedByName||'-')+'</div>'
-            :'<div class="lin">'+esc(h.recordedByName||'-')+' &rarr; '+esc(h.handoverTo||'-')+'</div>')\
-          +'<div class="lim">'+esc(h.time||'')+(h.notes?' &middot; '+esc(h.notes):'')+'</div>'\
-        +'</div>'\
-        +'<div style="text-align:right;flex-shrink:0;margin-left:8px">'\
-          +'<div style="font-family:var(--mono);font-weight:500;font-size:13px">'+(h.type==='refund'?'<span style="color:#DC2626">-</span>':'')+fmt(h.amount)+'</div>'\
-          +'<span class="b '+bc+'">'+st+'</span>'\
-        +'</div>'\
-      +'</div>'\
+            :'<div class="lin">'+esc(h.recordedByName||'-')+' &rarr; '+esc(h.handoverTo||'-')+'</div>')
+          +'<div class="lim">'+esc(h.time||'')+(h.notes?' &middot; '+esc(h.notes):'')+'</div>'
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0;margin-left:8px">'
+          +'<div style="font-family:var(--mono);font-weight:500;font-size:13px">'+(h.type==='refund'?'<span style="color:#DC2626">-</span>':'')+fmt(h.amount)+'</div>'
+          +'<span class="b '+bc+'">'+st+'</span>'
+        +'</div>'
+      +'</div>'
     +'</div>';
   }).join('');
 }
@@ -846,9 +846,9 @@ function renderActivity(){
   if(!evs.length){el.innerHTML='<div class="empty">No activity today</div>';return;}
   el.innerHTML=evs.slice(0,60).map(function(ev){
     var time=ev.at?ev.at.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'';
-    return '<div class="ai"><div class="ad" style="background:'+ev.color+'"></div>'\
-      +'<div style="flex:1"><div style="font-size:12px">'+ev.label+'</div>'\
-      +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+ev.sub+(time?' &middot; '+time:'')+'</div>'\
+    return '<div class="ai"><div class="ad" style="background:'+ev.color+'"></div>'
+      +'<div style="flex:1"><div style="font-size:12px">'+ev.label+'</div>'
+      +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+ev.sub+(time?' &middot; '+time:'')+'</div>'
       +'</div></div>';
   }).join('');
 }
@@ -891,22 +891,22 @@ function renderRangeSummary(){
   set('range-days-title','Daily Breakdown ('+days.length+' days)');
   var el=document.getElementById('range-days-body');
   if(!el)return;
-  el.innerHTML='<div class="day-row" style="background:var(--surface2);font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">'\
-    +'<span style="width:110px">Date</span><span style="width:50px;text-align:right">Orders</span>'\
-    +'<span style="width:100px;text-align:right">Revenue</span><span style="width:80px;text-align:right">Cash</span>'\
-    +'<span style="width:80px;text-align:right">UPI</span><span style="width:80px;text-align:right">Card</span>'\
-    +'<span style="width:90px;text-align:right">Credit</span></div>'\
+  el.innerHTML='<div class="day-row" style="background:var(--surface2);font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">'
+    +'<span style="width:110px">Date</span><span style="width:50px;text-align:right">Orders</span>'
+    +'<span style="width:100px;text-align:right">Revenue</span><span style="width:80px;text-align:right">Cash</span>'
+    +'<span style="width:80px;text-align:right">UPI</span><span style="width:80px;text-align:right">Card</span>'
+    +'<span style="width:90px;text-align:right">Credit</span></div>'
     +days.map(function(day){
       var b=byDay[day]; var isToday=day===td();
       var dayLabel=new Date(day+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short'});
-      return '<div class="day-row">'\
-        +'<span style="width:110px;font-weight:'+(isToday?'600':'400')+'">'+dayLabel+(isToday?' ★':'')+'</span>'\
-        +'<span style="width:50px;text-align:right;font-family:var(--mono)">'+b.orders+'</span>'\
-        +'<span style="width:100px;text-align:right;font-family:var(--mono);font-weight:500">'+fmt(b.rev)+'</span>'\
-        +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.cash)+'</span>'\
-        +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.upi)+'</span>'\
-        +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.card)+'</span>'\
-        +'<span style="width:90px;text-align:right;font-family:var(--mono);color:var(--amber)">'+fmt(b.credit)+'</span>'\
+      return '<div class="day-row">'
+        +'<span style="width:110px;font-weight:'+(isToday?'600':'400')+'">'+dayLabel+(isToday?' ★':'')+'</span>'
+        +'<span style="width:50px;text-align:right;font-family:var(--mono)">'+b.orders+'</span>'
+        +'<span style="width:100px;text-align:right;font-family:var(--mono);font-weight:500">'+fmt(b.rev)+'</span>'
+        +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.cash)+'</span>'
+        +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.upi)+'</span>'
+        +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.card)+'</span>'
+        +'<span style="width:90px;text-align:right;font-family:var(--mono);color:var(--amber)">'+fmt(b.credit)+'</span>'
         +'</div>';
     }).join('');
 }

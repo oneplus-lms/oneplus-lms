@@ -1505,6 +1505,37 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="card-title" style="margin-bottom:8px">Active Doctor Assignments Today</div>
     <div id="temp-doctor-list"><div class="empty">No temp assignments today</div></div>
 
+    <!-- Staff Absence -->
+    <div style="height:16px"></div>
+    <div class="card" style="border-color:#EF4444">
+      <div class="card-title" style="color:#EF4444">🔴 Staff Absence</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Mark a staff member absent for a date range. They will appear as unavailable during this period.</div>
+      <div class="field">
+        <label>Staff Member</label>
+        <select id="absence-staff" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)">
+          <option value="">Select staff member...</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="field">
+          <label>From</label>
+          <input type="date" id="absence-from" style="width:100%;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)">
+        </div>
+        <div class="field">
+          <label>To</label>
+          <input type="date" id="absence-to" style="width:100%;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)">
+        </div>
+      </div>
+      <div class="field">
+        <label>Reason <span style="font-size:11px;color:var(--text3)">(optional)</span></label>
+        <input type="text" id="absence-reason" placeholder="e.g. Sick leave, Personal leave, Emergency">
+      </div>
+      <button class="btn" style="width:100%;background:#EF4444;color:#fff;border-color:#EF4444" onclick="markAbsent()">🔴 Mark Absent</button>
+    </div>
+    <div style="height:8px"></div>
+    <div class="card-title" style="margin-bottom:8px">Active &amp; Upcoming Absences</div>
+    <div id="absence-list"><div class="empty">No absences recorded</div></div>
+
     <!-- Doctor Registry Upload — Admin only -->
     <div style="height:16px"></div>
     <!-- Dues Tracking -->
@@ -2730,7 +2761,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.58';
+var APP_VERSION = 'v19.59';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -8324,6 +8355,13 @@ async function loadAdminScreen() {
   await loadAdminStaff();
   await loadTempRoles();
   await loadTempDoctor();
+  await loadAbsences();
+  // Set default absence dates to today
+  var todayVal = todayStr();
+  var abFromEl = document.getElementById('absence-from');
+  var abToEl   = document.getElementById('absence-to');
+  if (abFromEl && !abFromEl.value) abFromEl.value = todayVal;
+  if (abToEl   && !abToEl.value)   abToEl.value   = todayVal;
   // Set default dues tracking date range: last 30 days
   var toDate = new Date();
   var fromDate = new Date(); fromDate.setDate(fromDate.getDate()-30);
@@ -8360,12 +8398,34 @@ async function loadAdminScreen() {
       doctorSel.appendChild(opt);
     });
   }
+  // Populate absence staff dropdown (all active staff)
+  var absenceSel = document.getElementById('absence-staff');
+  if (absenceSel) {
+    absenceSel.innerHTML = '<option value="">Select staff member...</option>';
+    var staffArr = [];
+    staffSnap.forEach(function(d) { staffArr.push({ id: d.id, data: d.data() }); });
+    staffArr.sort(function(a,b){ return (a.data.name||'').localeCompare(b.data.name||''); });
+    staffArr.forEach(function(item) {
+      var opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = item.data.name + ' (' + (item.data.role||'staff') + ')';
+      absenceSel.appendChild(opt);
+    });
+  }
 }
 
 async function loadAdminStaff() {
   var el = document.getElementById('admin-staff-list');
   el.innerHTML = '<div class="empty">Loading...</div>';
   try {
+    var today = todayStr();
+    var abSnap = await db.collection('temp_roles')
+      .where('type','==','absence').where('active','==',true).get();
+    var absentIds = {};
+    abSnap.forEach(function(d) {
+      var a = d.data();
+      if (a.fromDate <= today && a.toDate >= today) absentIds[a.staffId] = a.reason || 'On leave';
+    });
     var snap = await db.collection('staff').orderBy('name').get();
     if (snap.empty) { el.innerHTML = '<div class="empty">No staff registered</div>'; return; }
     var html = '';
@@ -8373,11 +8433,17 @@ async function loadAdminStaff() {
       var s = d.data();
       var initials = (s.name||'?').split(' ').map(function(w){ return w[0]; }).join('').slice(0,2).toUpperCase();
       var roleColor = {admin:'var(--accent)',pathologist:'var(--blue)',lab:'var(--gold)',senior_lab:'#D97706',reception:'var(--text2)',phlebotomist:'#059669'}[s.role] || 'var(--text2)';
-      html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--border)">'
-        + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0">' + initials + '</div>'
+      var isAbsent = !!absentIds[d.id];
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--border)' + (isAbsent?';background:#FFF5F5':'') + '">'
+        + '<div style="width:38px;height:38px;border-radius:50%;background:' + (isAbsent?'#FEE2E2':'var(--accent-light)') + ';color:' + (isAbsent?'#EF4444':'var(--accent)') + ';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0">' + initials + '</div>'
         + '<div style="flex:1;min-width:0">'
-        + '<div style="font-size:13px;font-weight:500">' + esc(s.name||'-') + (s.active===false?'<span style="font-size:10px;color:var(--red);margin-left:6px">INACTIVE</span>':'') + (s.dashboardAccess?'<span style="font-size:9px;font-family:var(--mono);background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;margin-left:6px">DASH</span>':'') + '</div>'
+        + '<div style="font-size:13px;font-weight:500">' + esc(s.name||'-')
+          + (isAbsent ? '<span style="font-size:10px;font-family:var(--mono);background:#EF4444;color:#fff;padding:1px 7px;border-radius:10px;margin-left:6px">ABSENT</span>' : '')
+          + (s.active===false?'<span style="font-size:10px;color:var(--red);margin-left:6px">INACTIVE</span>':'')
+          + (s.dashboardAccess?'<span style="font-size:9px;font-family:var(--mono);background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;margin-left:6px">DASH</span>':'')
+        + '</div>'
         + '<div style="font-size:11px;font-family:var(--mono);color:' + roleColor + '">' + (s.role||'').toUpperCase() + '</div>'
+        + (isAbsent ? '<div style="font-size:10px;color:#EF4444;margin-top:1px">' + esc(absentIds[d.id]) + '</div>' : '')
         + '<div style="font-size:11px;color:var(--text3)">' + esc(s.email||'') + '</div>'
         + (s.defaultDoctor ? '<div style="font-size:10px;font-family:var(--mono);color:var(--accent);margin-top:2px">&#128084; ' + esc(s.defaultDoctor) + '</div>' : '')
         + '</div>'
@@ -8770,6 +8836,110 @@ async function revokeTempDoctor(id) {
     toast('Assignment removed ✓','ok');
     loadTempDoctor();
   } catch(e) { toast('Error','err'); }
+}
+
+// ── STAFF ABSENCE ─────────────────────────────────────────────────────────────
+async function markAbsent() {
+  var staffSel = document.getElementById('absence-staff');
+  var fromEl   = document.getElementById('absence-from');
+  var toEl     = document.getElementById('absence-to');
+  var reasonEl = document.getElementById('absence-reason');
+  var staffId  = staffSel.value;
+  var fromDate = fromEl.value;
+  var toDate   = toEl.value;
+  var reason   = reasonEl.value.trim();
+  if (!staffId)   { toast('Select a staff member', 'warn'); return; }
+  if (!fromDate)  { toast('Select a from date', 'warn'); return; }
+  if (!toDate)    { toast('Select a to date', 'warn'); return; }
+  if (toDate < fromDate) { toast('To date must be on or after from date', 'warn'); return; }
+  var staffName = staffSel.options[staffSel.selectedIndex].text.split(' (')[0];
+  try {
+    await db.collection('temp_roles').add({
+      type: 'absence',
+      staffId: staffId, staffName: staffName,
+      fromDate: fromDate, toDate: toDate,
+      reason: reason,
+      markedBy: curUser.uid,
+      markedByName: (curProfile && curProfile.name) || curUser.email,
+      markedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      active: true
+    });
+    toast(staffName + ' marked absent ✓', 'ok');
+    logActivity('staff_absence', 'Marked ' + staffName + ' absent ' + fromDate + ' to ' + toDate + (reason ? ' — ' + reason : ''));
+    staffSel.value = '';
+    fromEl.value = '';
+    toEl.value = '';
+    reasonEl.value = '';
+    loadAbsences();
+    loadAdminStaff();
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+async function loadAbsences() {
+  var el = document.getElementById('absence-list');
+  if (!el) return;
+  var today = todayStr();
+  try {
+    // Load all active absences; filter client-side (toDate >= today)
+    var snap = await db.collection('temp_roles')
+      .where('type','==','absence')
+      .where('active','==',true)
+      .orderBy('fromDate')
+      .get();
+    var items = [];
+    snap.forEach(function(d) {
+      var a = d.data();
+      if (a.toDate >= today) items.push({ id: d.id, data: a });
+    });
+    if (!items.length) { el.innerHTML = '<div class="empty">No active or upcoming absences</div>'; return; }
+    var html = '';
+    items.forEach(function(item) {
+      var a = item.data;
+      var isNow = a.fromDate <= today && a.toDate >= today;
+      var badge = isNow
+        ? '<span style="font-size:10px;font-family:var(--mono);background:#EF4444;color:#fff;padding:1px 7px;border-radius:10px;margin-left:6px">ABSENT NOW</span>'
+        : '<span style="font-size:10px;font-family:var(--mono);background:#F59E0B;color:#fff;padding:1px 7px;border-radius:10px;margin-left:6px">UPCOMING</span>';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid var(--border)">'
+        + '<div style="flex:1;min-width:0">'
+        + '<div style="font-size:13px;font-weight:500">' + esc(a.staffName) + badge + '</div>'
+        + '<div style="font-size:11px;font-family:var(--mono);color:var(--text3);margin-top:2px">'
+        + esc(a.fromDate) + ' → ' + esc(a.toDate)
+        + (a.reason ? ' · ' + esc(a.reason) : '') + '</div>'
+        + '</div>'
+        + '<button data-id="' + item.id + '" onclick="cancelAbsence(this.dataset.id)" style="font-size:12px;padding:5px 10px;border:0.5px solid var(--red);border-radius:6px;color:var(--red);background:none;cursor:pointer;flex-shrink:0;margin-left:8px">Cancel</button>'
+        + '</div>';
+    });
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="empty">Error loading absences</div>'; }
+}
+
+async function cancelAbsence(id) {
+  if (!confirm('Cancel this absence record?')) return;
+  try {
+    await db.collection('temp_roles').doc(id).update({ active: false });
+    toast('Absence cancelled ✓', 'ok');
+    loadAbsences();
+    loadAdminStaff();
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+// Returns true if staffId is currently absent (used by task dispatch logic)
+var _absenceCache = null;
+var _absenceCacheDate = '';
+async function isStaffAbsent(staffId) {
+  var today = todayStr();
+  if (_absenceCacheDate !== today || !_absenceCache) {
+    var snap = await db.collection('temp_roles')
+      .where('type','==','absence')
+      .where('active','==',true)
+      .get();
+    _absenceCache = [];
+    snap.forEach(function(d) { _absenceCache.push(d.data()); });
+    _absenceCacheDate = today;
+  }
+  return _absenceCache.some(function(a) {
+    return a.staffId === staffId && a.fromDate <= today && a.toDate >= today;
+  });
 }
 
 // ── HELPERS ──

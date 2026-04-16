@@ -350,7 +350,16 @@ function doLogin(){
   err.textContent='Signing in…';
   auth.signInWithEmailAndPassword(e,p).catch(function(x){err.textContent=x.message;});
 }
-function doSignOut(){if(uO)uO();if(uH)uH();auth.signOut();}
+function doSignOut() {
+  // Clear inactivity timer
+  clearTimeout(_inactivityTimer); _inactivityTimer = null;
+  // Unsubscribe all real-time listeners
+  if (uO) { uO(); uO = null; }
+  if (uH) { uH(); uH = null; }
+  // Clear all session state
+  allOrders = []; allHandovers = [];
+  auth.signOut();
+}
 document.getElementById('pw').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
 
 auth.onAuthStateChanged(function(user){
@@ -371,6 +380,7 @@ auth.onAuthStateChanged(function(user){
       document.getElementById('login').style.display='none';
       document.getElementById('main').style.display='flex';
       startDash();
+      initInactivityWatcher();
     }).catch(function(){
       // Never grant silent admin — sign out on Firestore failure
       auth.signOut();
@@ -393,6 +403,30 @@ function isMultiDay(){return dashFrom!==dashTo;}
 var dashFrom=td(), dashTo=td(), dashViewLabel='today', dashMode='today';
 
 // ── Range control ─────────────────────────────────────────────────────────
+
+// ── INACTIVITY AUTO-LOCK ─────────────────────────────────────────────────
+var _inactivityTimer = null;
+var INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes for desktop
+
+function resetInactivityTimer() {
+  clearTimeout(_inactivityTimer);
+  _inactivityTimer = setTimeout(function() {
+    // Sign out and return to login
+    if (uO) { uO(); uO = null; }
+    if (uH) { uH(); uH = null; }
+    allOrders = []; allHandovers = [];
+    auth.signOut();
+    document.getElementById('lerr').textContent = 'Signed out due to inactivity.';
+  }, INACTIVITY_TIMEOUT_MS);
+}
+
+function initInactivityWatcher() {
+  ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'].forEach(function(evt) {
+    document.addEventListener(evt, resetInactivityTimer, { passive: true });
+  });
+  resetInactivityTimer();
+}
+// ─────────────────────────────────────────────────────────────────────────
 function startDash(){
   var today=td();
   var rf=document.getElementById('range-from');

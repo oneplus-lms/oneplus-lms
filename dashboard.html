@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v19.60 — OnePLUS</title>
+<title>LabFlow Dashboard v19.61 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -109,6 +109,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .bg{background:#D1FAE5;color:#065F46}
 .bgo{background:#FEF3C7;color:#92400E}
 .bpart{background:#FEF3C7;color:#92400E;border:1px solid #FCD34D}
+.bdue{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5}
 .bb{background:#DBEAFE;color:#1D4ED8}
 .br{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5}
 .bp{background:#EDE9FE;color:#5B21B6}
@@ -253,8 +254,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
               <button class="pf on"  id="pf-all"     onclick="setPayFilter('all')">All</button>
               <button class="pf"     id="pf-paid"    onclick="setPayFilter('paid')">&#10003; Paid</button>
               <button class="pf"     id="pf-partial" onclick="setPayFilter('partial')">&#9680; Partial</button>
+              <button class="pf"     id="pf-due"     onclick="setPayFilter('due')">&#9888; Due</button>
               <button class="pf"     id="pf-credit"  onclick="setPayFilter('credit')">&#128218; Credit</button>
-              <button class="pf"     id="pf-due"     onclick="setPayFilter('due')">&#9888; Any Due</button>
+              <button class="pf"     id="pf-anydue"  onclick="setPayFilter('anydue')">&#9888; Any Due</button>
             </div>
             <input type="text" id="sq" placeholder="Search name, mobile, doctor..."
               oninput="applyTableFilter()"
@@ -551,12 +553,15 @@ function applyTableFilter(){
     if(dashPayFilter==='all')return true;
     var due=o.dueAmount||0;
     var isCredit=o.payMode==='credit'&&o.status==='pending';
-    var isPartial=!isCredit&&due>0;
+    var paid=o.paidAmount||0;
+    var isPartial=!isCredit&&due>0&&paid>0;
+    var isDue=!isCredit&&due>0&&paid===0;
     var isPaid=o.status==='paid'&&due<=0;
     if(dashPayFilter==='paid')    return isPaid;
     if(dashPayFilter==='partial') return isPartial;
+    if(dashPayFilter==='due')     return isDue;
     if(dashPayFilter==='credit')  return isCredit;
-    if(dashPayFilter==='due')     return due>0;
+    if(dashPayFilter==='anydue')  return due>0;
     return true;
   });
   renderTable(filtered);
@@ -564,7 +569,7 @@ function applyTableFilter(){
 
 // ── Stats ─────────────────────────────────────────────────────────────────
 function renderStats(){
-  var cash=0,upi=0,card=0,credit=0,partialDue=0,pend=0,partial=0,home=0,urg=0,coll=0,amend=0,trans=0,reported=0;
+  var cash=0,upi=0,card=0,credit=0,partialDue=0,patientDue=0,pend=0,partial=0,patientDueCt=0,home=0,urg=0,coll=0,amend=0,trans=0,reported=0;
   allOrders.forEach(function(o){
     var paid=o.paidAmount||0;
     var due=o.dueAmount||0;
@@ -574,8 +579,10 @@ function renderStats(){
     else if(o.payMode==='card')card+=paid;
     // Credit = full credit (nothing collected)
     if(o.payMode==='credit'&&o.status==='pending'){credit+=(o.totalAmount||0);pend++;}
-    // Partial = cash collected but balance remaining
+    // Partial = some cash collected but balance remaining
     if(due>0&&paid>0&&o.payMode!=='credit'){partialDue+=due;partial++;}
+    // Patient Due = nothing paid, full amount outstanding (not institutional credit)
+    if(due>0&&paid===0&&o.payMode!=='credit'){patientDue+=due;patientDueCt++;}
     if(o.source==='Home Collection'||o.source==='Hospital Collection')home++;
     if(o.urgent)urg++;
     coll+=(o.collectionCharge||0);
@@ -688,9 +695,12 @@ function renderTable(orders){
     var ub=o.urgent?'<span class="b br">URG</span> ':'';
     var due=o.dueAmount||0;
     var isCredit=o.payMode==='credit'&&o.status==='pending';
-    var isPartial=!isCredit&&due>0;
+    var paid=o.paidAmount||0;
+    var isPartial=!isCredit&&due>0&&paid>0;
+    var isDue=!isCredit&&due>0&&paid===0;
     var sb=isCredit?'<span class="b bgo">Credit</span>'
       :isPartial?'<span class="b bpart">Partial</span>'
+      :isDue?'<span class="b bdue">Due</span>'
       :'<span class="b bg">Paid</span>';
     if(o.amendments&&o.amendments.length)sb+=' <span style="font-size:10px;color:var(--amber)">✎</span>';
     var labColors={registered:'#DC2626',collected:'#1D4ED8',processing:'#D97706',reported:'#059669'};
@@ -824,9 +834,11 @@ function renderActivity(){
     var t=o.createdAt&&o.createdAt.toDate?o.createdAt.toDate():null;
     var due=o.dueAmount||0;
     var isCredit=o.payMode==='credit';
-    var isPartial=!isCredit&&due>0;
+    var isPartial=!isCredit&&due>0&&(o.paidAmount||0)>0;
+    var isDue=!isCredit&&due>0&&(o.paidAmount||0)===0;
     var payStr=isCredit?'Credit'
       :isPartial?fmt(o.paidAmount)+' paid, '+fmt(due)+' due'
+      :isDue?'Nothing paid, '+fmt(due)+' due'
       :fmt(o.paidAmount);
     var src=o.source&&o.source!=='Walk-in'?' &middot; '+esc(o.source):'';
     var urg=o.urgent?' &middot; URGENT':'';

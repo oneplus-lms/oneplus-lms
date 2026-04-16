@@ -802,8 +802,9 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <button id="pf-all"     class="tog on"  onclick="setPayFilter('all')"     style="font-size:11px;padding:5px 10px">All</button>
       <button id="pf-paid"    class="tog"     onclick="setPayFilter('paid')"    style="font-size:11px;padding:5px 10px">&#10003; Paid</button>
       <button id="pf-partial" class="tog"     onclick="setPayFilter('partial')" style="font-size:11px;padding:5px 10px">&#9680; Partial</button>
-      <button id="pf-credit"  class="tog"     onclick="setPayFilter('credit')"  style="font-size:11px;padding:5px 10px">&#128218; Credit</button>
       <button id="pf-due"     class="tog"     onclick="setPayFilter('due')"     style="font-size:11px;padding:5px 10px">&#9888; Due</button>
+      <button id="pf-credit"  class="tog"     onclick="setPayFilter('credit')"  style="font-size:11px;padding:5px 10px">&#128218; Credit</button>
+      <button id="pf-anydue"  class="tog"     onclick="setPayFilter('anydue')"  style="font-size:11px;padding:5px 10px">&#9888; Any Due</button>
     </div>
     <!-- Revenue breakdown strip -->
     <div id="orders-revenue" style="display:none;background:var(--surface2);border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:10px;font-size:11px;font-family:var(--mono)">
@@ -2761,7 +2762,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.60';
+var APP_VERSION = 'v19.61';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -5430,7 +5431,7 @@ function loadOrders(loadMore) {
     _ordersCursor = null;
     _ordersAllLoaded = false;
     _ordersPayFilter = 'all';
-    ['all','paid','partial','credit','due'].forEach(function(id) {
+    ['all','paid','partial','due','credit','anydue'].forEach(function(id) {
       var btn = document.getElementById('pf-'+id);
       if (btn) btn.className = 'tog' + (id === 'all' ? ' on' : '');
     });
@@ -5487,7 +5488,7 @@ var _ordersPayFilter = 'all';
 
 function setPayFilter(f) {
   _ordersPayFilter = f;
-  ['all','paid','partial','credit','due'].forEach(function(id) {
+  ['all','paid','partial','due','credit','anydue'].forEach(function(id) {
     var btn = document.getElementById('pf-'+id);
     if (btn) btn.className = 'tog' + (id === f ? ' on' : '');
   });
@@ -5509,13 +5510,15 @@ function applyOrdersFilter() {
     if (_ordersPayFilter === 'all') return true;
     var due = o.dueAmount || 0;
     var isCredit = o.payMode === 'credit' && o.status === 'pending';
-    var isPartial = !isCredit && due > 0;
-    var isDue = due > 0; // covers both credit and partial
+    var _paid = o.paidAmount || 0;
+    var isPartial = !isCredit && due > 0 && _paid > 0;
+    var isDue = !isCredit && due > 0 && _paid === 0;
     var isPaid = o.status === 'paid' && due <= 0;
     if (_ordersPayFilter === 'paid')    return isPaid;
     if (_ordersPayFilter === 'partial') return isPartial;
-    if (_ordersPayFilter === 'credit')  return isCredit;
     if (_ordersPayFilter === 'due')     return isDue;
+    if (_ordersPayFilter === 'credit')  return isCredit;
+    if (_ordersPayFilter === 'anydue')  return due > 0;
     return true;
   });
   renderOrders(filtered);
@@ -5576,8 +5579,8 @@ function renderOrders(orders) {
       +'<span>&#128100; '+esc(o.createdByName||'-')+'</span>'
       +(o.gps?'<span style="color:#1D4ED8">&#128205; GPS</span>':'')
       +'</div>'
-      +'<div class="order-footer">'      +'<span class="badge '+(o.status==='paid'&&(o.dueAmount||0)>0?'badge-gold':o.status==='paid'?'badge-green':'badge-gold')+'">'
-        +(o.status==='draft'?'DISPATCH':o.status==='paid'&&(o.dueAmount||0)>0?'PARTIAL':((o.status||'paid').toUpperCase()))+'</span>'      +(function(){          if(o.payMode==='split'&&o.splitPayments){            var p=[];if(o.splitPayments.cash>0)p.push('Cash');if(o.splitPayments.upi>0)p.push('UPI');if(o.splitPayments.card>0)p.push('Card');            return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+p.join('+')+'</span>';          }          if(o.payMode&&o.payMode!=='cash')return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+o.payMode.toUpperCase()+'</span>';          return '';        })()      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'      +'</div>'
+      +'<div class="order-footer">'      +'<span class="badge '+(o.status==='draft'?'badge-gold':(o.payMode==='credit'&&o.status==='pending')?'badge-gold':(o.dueAmount||0)>0&&(o.paidAmount||0)>0?'badge-gold':(o.dueAmount||0)>0&&(o.paidAmount||0)===0?'badge-red':'badge-green')+'">'
+        +(o.status==='draft'?'DISPATCH':(o.payMode==='credit'&&o.status==='pending')?'CREDIT':(o.dueAmount||0)>0&&(o.paidAmount||0)>0?'PARTIAL':(o.dueAmount||0)>0&&(o.paidAmount||0)===0?'DUE':((o.status||'paid').toUpperCase()))+'</span>'      +(function(){          if(o.payMode==='split'&&o.splitPayments){            var p=[];if(o.splitPayments.cash>0)p.push('Cash');if(o.splitPayments.upi>0)p.push('UPI');if(o.splitPayments.card>0)p.push('Card');            return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+p.join('+')+'</span>';          }          if(o.payMode&&o.payMode!=='cash')return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+o.payMode.toUpperCase()+'</span>';          return '';        })()      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'      +'</div>'
       +'</div>';
   }).join('');
 }

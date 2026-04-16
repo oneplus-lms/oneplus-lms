@@ -150,7 +150,8 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 .urgent-check{margin-left:auto;width:22px;height:22px;border-radius:50%;border:2px solid #FB923C;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;color:transparent;transition:all 0.15s}
 .urgent-check.on{background:#EF4444;border-color:#EF4444;color:#fff}
 /* Edit Order Modal */
-.edit-modal-bg{position:fixed;inset:0;background:rgba(20,15,5,0.55);z-index:400;display:flex;align-items:flex-end;justify-content:center}
+.edit-modal-bg{position:fixed;inset:0;background:rgba(20,15,5,0.55);z-index:400;display:flex;align-items:flex-end;justify-content:center;pointer-events:none}
+.edit-modal-bg.open{pointer-events:all}
 .edit-modal{background:var(--surface);border-radius:20px 20px 0 0;padding:20px 20px 40px;width:100%;max-width:430px;max-height:88vh;overflow-y:auto;transform:translateY(100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1)}
 .edit-modal-bg.open .edit-modal{transform:translateY(0)}
 .edit-section-lbl{font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:14px 0 6px}
@@ -2705,7 +2706,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.55';
+var APP_VERSION = 'v19.56';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;

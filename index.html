@@ -1577,6 +1577,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <button type="button" class="tog" id="smr-pathologist" onclick="setStaffRole('pathologist')">Pathologist</button>
         <button type="button" class="tog" id="smr-phlebotomist" onclick="setStaffRole('phlebotomist')">Phlebotomist</button>
         <button type="button" class="tog" id="smr-manager" onclick="setStaffRole('manager')">Manager</button>
+        <button type="button" class="tog" id="smr-senior_lab" onclick="setStaffRole('senior_lab')" style="grid-column:1/-1">Senior Lab</button>
       </div>
     </div>
     <div class="field">
@@ -2706,7 +2707,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.56';
+var APP_VERSION = 'v19.57';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;

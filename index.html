@@ -228,6 +228,11 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 <div id="app" onclick="hideSuggest(event)">
 
 <!-- LOADING -->
+<!-- Update banner — shown when new SW version is ready -->
+<div id="update-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#1A4A3A;color:#fff;padding:12px 18px;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-family:var(--sans,sans-serif)">
+  <span>&#8634; New version available</span>
+  <button onclick="applyUpdate()" style="background:#fff;color:#1A4A3A;border:none;border-radius:8px;padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer">Update now</button>
+</div>
 <div class="loading-overlay" id="loading">
   <div class="loading-spinner"></div>
   <div style="font-size:12px;font-family:var(--mono);color:var(--text3)" id="load-txt">connecting...</div>
@@ -2643,7 +2648,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.48';
+var APP_VERSION = 'v19.50';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -2727,11 +2732,42 @@ db.enablePersistence({ synchronizeTabs: true })
 // Register service worker for app shell caching (offline load)
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/oneplus-lms/sw.js')
-    .then(function(reg) { console.log('SW registered'); })
+    .then(function(reg) {
+      console.log('SW registered');
+      // Check for updates when app becomes visible (user switches back)
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') reg.update();
+      });
+      // Also check every 4 hours as fallback
+      setInterval(function() { reg.update(); }, 4 * 60 * 60 * 1000);
+      // When a new SW is waiting — prompt user to update
+      reg.addEventListener('updatefound', function() {
+        var newWorker = reg.installing;
+        newWorker.addEventListener('statechange', function() {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            // New version ready — show update banner
+            var banner = document.getElementById('update-banner');
+            if (banner) banner.style.display = 'flex';
+          }
+        });
+      });
+    })
     .catch(function(err) { console.warn('SW registration failed:', err); });
+  // When SW activates after skipWaiting — reload to get fresh app
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    window.location.reload();
+  });
 }
 
 // Dynamic online/offline indicator
+function applyUpdate() {
+  navigator.serviceWorker.getRegistration().then(function(reg) {
+    if (reg && reg.waiting) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+  });
+}
+
 function updateConnectivityUI() {
   var dot = document.getElementById('sync-dot');
   var banner = document.getElementById('offline-banner');

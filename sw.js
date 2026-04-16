@@ -1,5 +1,5 @@
-// LabFlow Service Worker — v19.48
-const CACHE_NAME = 'labflow-v19.48';
+// LabFlow Service Worker — v19.50
+const CACHE_NAME = 'labflow-v19.50';
 
 const PRECACHE = [
   '/oneplus-lms/index.html',
@@ -53,4 +53,11 @@ self.addEventListener('fetch', event => {
       })
       .catch(() => caches.match(event.request))
   );
+});
+
+// Listen for skip waiting message from app
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

@@ -2761,7 +2761,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.59';
+var APP_VERSION = 'v19.60';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -5509,7 +5509,7 @@ function applyOrdersFilter() {
     if (_ordersPayFilter === 'all') return true;
     var due = o.dueAmount || 0;
     var isCredit = o.payMode === 'credit' && o.status === 'pending';
-    var isPartial = !isCredit && due > 0 && (o.paidAmount || 0) > 0;
+    var isPartial = !isCredit && due > 0;
     var isDue = due > 0; // covers both credit and partial
     var isPaid = o.status === 'paid' && due <= 0;
     if (_ordersPayFilter === 'paid')    return isPaid;

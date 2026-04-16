@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v19.59 — OnePLUS</title>
+<title>LabFlow Dashboard v19.60 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -165,7 +165,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v19.59</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v19.60</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -551,7 +551,7 @@ function applyTableFilter(){
     if(dashPayFilter==='all')return true;
     var due=o.dueAmount||0;
     var isCredit=o.payMode==='credit'&&o.status==='pending';
-    var isPartial=!isCredit&&due>0&&(o.paidAmount||0)>0;
+    var isPartial=!isCredit&&due>0;
     var isPaid=o.status==='paid'&&due<=0;
     if(dashPayFilter==='paid')    return isPaid;
     if(dashPayFilter==='partial') return isPartial;
@@ -688,7 +688,7 @@ function renderTable(orders){
     var ub=o.urgent?'<span class="b br">URG</span> ':'';
     var due=o.dueAmount||0;
     var isCredit=o.payMode==='credit'&&o.status==='pending';
-    var isPartial=!isCredit&&due>0&&(o.paidAmount||0)>0;
+    var isPartial=!isCredit&&due>0;
     var sb=isCredit?'<span class="b bgo">Credit</span>'
       :isPartial?'<span class="b bpart">Partial</span>'
       :'<span class="b bg">Paid</span>';

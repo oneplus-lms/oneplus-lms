@@ -673,7 +673,20 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         </div>
         <div class="urgent-check" id="urgent-check"></div>
       </div>
-      <button class="btn btn-primary" onclick="submitOrder()">&#10003; Save Order</button>
+      <!-- Dual save buttons — shown based on source selection -->
+      <div id="order-save-walkin" style="margin-bottom:0">
+        <button class="btn btn-primary" style="width:100%" onclick="submitOrder()">&#10003; Save Order</button>
+      </div>
+      <div id="order-save-field" style="display:none">
+        <div style="background:#EFF6FF;border:0.5px solid #93C5FD;border-radius:var(--radius);padding:10px 12px;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:600;color:#1D4ED8;margin-bottom:4px">&#128664; Home / Hospital Collection</div>
+          <div style="font-size:11px;color:#1E40AF">Use <b>Dispatch</b> if the phlebotomist will complete the booking on site. Use <b>Save Order</b> if all details are confirmed now.</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn" style="font-size:13px;border-color:#1D4ED8;color:#1D4ED8" onclick="submitDraft()">&#128664; Dispatch</button>
+          <button class="btn btn-primary" style="font-size:13px" onclick="submitOrder()">&#10003; Save Order</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -967,6 +980,28 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <input type="number" id="field-pay-amt" inputmode="numeric" placeholder="Amount collected"
         style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:14px;display:none;margin-bottom:4px">
     </div>
+    <!-- History confirmation — shown for fasting tests -->
+    <div id="field-history-section" style="display:none;margin-bottom:12px">
+      <div class="edit-section-lbl" style="color:#DC2626">&#9889; Pre-Collection Checklist</div>
+      <!-- Fasting confirmation -->
+      <div id="field-fasting-row" style="display:none;background:#FEF3C7;border:0.5px solid #FCD34D;border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:#92400E;margin-bottom:6px">&#9889; Fasting Test — Confirm with patient:</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <button type="button" id="fhx-yes" class="tog" onclick="setFieldFasting(true)" style="font-size:12px;padding:7px">&#10003; Fasting</button>
+          <button type="button" id="fhx-no" class="tog" onclick="setFieldFasting(false)" style="font-size:12px;padding:7px">&#10007; Not Fasting</button>
+        </div>
+        <div id="fhx-warn" style="display:none;font-size:11px;color:#DC2626;margin-top:6px;font-weight:600">&#9888; Result may be invalid — note in remarks</div>
+      </div>
+      <!-- Medication confirmation -->
+      <div id="field-med-row" style="display:none;background:#F5F3FF;border:0.5px solid #DDD6FE;border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:#5B21B6;margin-bottom:4px">&#128683; Medication check:</div>
+        <div style="font-size:11px;color:#5B21B6;margin-bottom:6px" id="field-med-note"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <button type="button" id="fmed-yes" class="tog" onclick="setFieldMed(true)" style="font-size:12px;padding:7px">Complied</button>
+          <button type="button" id="fmed-no" class="tog" onclick="setFieldMed(false)" style="font-size:12px;padding:7px">Not complied</button>
+        </div>
+      </div>
+    </div>
     <div class="edit-section-lbl">GPS at Collection Site (optional)</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
       <button type="button" class="btn" style="flex:1;font-size:13px" onclick="captureFieldGPS()">&#128205; Capture GPS</button>
@@ -1255,6 +1290,10 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <div style="background:#F0FDF4;padding:10px 8px;text-align:center">
         <div style="font-family:var(--serif);font-size:20px;font-weight:500;color:var(--green)" id="ph-delivered">0</div>
         <div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase">Delivered</div>
+      </div>
+      <div style="background:#EFF6FF;padding:10px 8px;text-align:center;display:none" id="ph-drafts-tile">
+        <div style="font-family:var(--serif);font-size:20px;font-weight:500;color:#1D4ED8" id="ph-drafts">0</div>
+        <div style="font-size:9px;font-family:var(--mono);color:#1D4ED8;text-transform:uppercase">Dispatch</div>
       </div>
     </div>
     <div id="ph-late-alert" style="display:none;background:#FEE2E2;border-bottom:1px solid #FCA5A5;padding:10px 16px;font-size:13px;font-weight:600;color:#991B1B">
@@ -2109,7 +2148,7 @@ function buildCollectionGuide(tests, isPending) {
     var nm = (t.name||'').toLowerCase();
     if (deptData.patterns) {
       deptData.patterns.forEach(function(p) {
-        p.match.forEach(function(kw){ if (nm.indexOf(kw) >= 0) pa = p.data; });
+        p.match.forEach(function(kw){ if (nm.indexOf(kw.toLowerCase()) >= 0) pa = p.data; });
       });
     }
     // Apply Firestore override if exists
@@ -2217,7 +2256,8 @@ function toggleCollectionGuide(id) {
 }
 
 function renderPhleboDash(orders) {
-  var pending   = orders.filter(function(o){ return !o.fieldStatus&&!o.fieldTransferPending; });
+  var drafts    = orders.filter(function(o){ return o.status==='draft'; });
+  var pending   = orders.filter(function(o){ return o.status!=='draft'&&!o.fieldStatus&&!o.fieldTransferPending; });
   var collected = orders.filter(function(o){ return o.fieldStatus==='collected'; });
   var delivered = orders.filter(function(o){ return o.fieldStatus==='delivered'; });
 
@@ -2226,6 +2266,11 @@ function renderPhleboDash(orders) {
   setEl('ph-pending', pending.length);
   setEl('ph-collected', collected.length);
   setEl('ph-delivered', delivered.length);
+  // Draft dispatch tasks
+  var draftEl = document.getElementById('ph-drafts');
+  var draftTile = document.getElementById('ph-drafts-tile');
+  if (draftEl) draftEl.textContent = drafts.length;
+  if (draftTile) draftTile.style.display = drafts.length ? 'block' : 'none';
 
   // Late urgent alert
   var now = Date.now();
@@ -2288,8 +2333,12 @@ function renderPhleboDash(orders) {
         +'</div></div>';
     }
 
+    var isDraft = o.status === 'draft';
     var actions = '';
-    if (!isCollected && !isDelivered && canAct && !isPendingToMe) {
+    if (isDraft && canAct) {
+      actions = '<button class="btn btn-primary" style="flex:1;font-size:13px;padding:10px;background:#1D4ED8;border-color:#1D4ED8" onclick="completeBooking(\'' + o.id + '\')">&#128221; Complete Booking</button>'
+              + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
+    } else if (!isCollected && !isDelivered && canAct && !isPendingToMe) {
       actions = '<button class="btn btn-primary" style="flex:1;font-size:13px;padding:10px" onclick="fieldActionIdx('+fidx+',\'collect\')">&#10003; Collected</button>'
               + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
     } else if (isCollected && canAct) {
@@ -2610,6 +2659,14 @@ function loadReview() {
         }
       });
       renderReview(byPhlebo);
+    }).catch(function(e) {
+      var el = document.getElementById('review-list');
+      if (!el) return;
+      if (e.message && e.message.toLowerCase().indexOf('index') >= 0) {
+        el.innerHTML = '<div class="empty">Index still building — please wait 2 minutes and try again.<br><small style="color:var(--text3)">'+esc(e.message)+'</small></div>';
+      } else {
+        el.innerHTML = '<div class="empty">Error: '+esc(e.message)+'</div>';
+      }
     });
 }
 
@@ -2648,7 +2705,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.50';
+var APP_VERSION = 'v19.55';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3234,9 +3291,12 @@ function loadStats() {
     ? db.collection('orders').where('date','==',today).where('createdBy','==',myUid)
     : db.collection('orders').where('date','==',today);
   ordersQ.get().then(function(snap){
-    var rev=0, pend=0;
-    snap.forEach(function(d){ var o=d.data(); rev+=(o.paidAmount||0); if(o.payMode==='credit') pend++; });
-    document.getElementById('st-orders').textContent=snap.size;
+    var rev=0, pend=0, count=0;
+    snap.forEach(function(d){ var o=d.data();
+      if (o.status==='draft') return; // exclude drafts from stats
+      count++; rev+=(o.paidAmount||0); if(o.payMode==='credit') pend++;
+    });
+    document.getElementById('st-orders').textContent=count;
     document.getElementById('st-rev').textContent='Rs.'+rev.toLocaleString('en-IN');
     document.getElementById('st-pend').textContent=pend;
   }).catch(function(){});
@@ -3256,7 +3316,7 @@ function loadRecent() {
     var el=document.getElementById('dash-recent');
     if (snap.empty) { el.innerHTML='<div class="empty">No orders yet today</div>'; return; }
     var rows=[];
-    snap.forEach(function(d){ rows.push(Object.assign({id:d.id},d.data())); });
+    snap.forEach(function(d){ var o=d.data(); if(o.status==='draft') return; rows.push(Object.assign({id:d.id},o)); });
     rows.sort(function(a,b){ return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0); });
     el.innerHTML = rows.slice(0,5).map(function(o){
       return '<div class="row" style="cursor:pointer" onclick="openOrderDetail(\''+o.id+'\')">'
@@ -3514,7 +3574,7 @@ function buildPatientInstructions(tests) {
     var deptData = (PA_DATA[dept]) || (PA_DATA['BIOCHEMISTRY']) || {default:{},patterns:[]};
     var pa = Object.assign({}, deptData.default);
     var nm = (t.name||'').toLowerCase();
-    if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw)>=0) pa=Object.assign({},p.data); }); });
+    if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw.toLowerCase())>=0) pa=Object.assign({},p.data); }); });
     var key = nm.replace(/[^a-z0-9]/g,'_');
     pa = mergePA(pa, key);
     if (!pa || pa.tube === 'NA') return;
@@ -3988,6 +4048,11 @@ function toggleHomeCollection() {
   var src = document.getElementById('pt-source').value;
   var hcf = document.getElementById('home-collection-fields');
   var needsAddress = src==='Home Collection' || src==='Hospital Collection';
+  // Show dispatch button only for field collections
+  var saveWalkin = document.getElementById('order-save-walkin');
+  var saveField  = document.getElementById('order-save-field');
+  if (saveWalkin) saveWalkin.style.display = needsAddress ? 'none' : 'block';
+  if (saveField)  saveField.style.display  = needsAddress ? 'block' : 'none';
   hcf.style.display = needsAddress ? 'block' : 'none';
   if (src==='Home Collection') {
     setTimeout(captureGPS, 300);
@@ -5045,6 +5110,78 @@ async function uploadOrderPhotos(orderId, rxPhotos, proofB64) {
   }
 }
 
+
+// ── SUBMIT DRAFT (Dispatch for field collection) ──────────────────────────
+function submitDraft() {
+  // Read fields
+  if (!curOrder.patientName) curOrder.patientName = (document.getElementById('pt-name').value||'').trim();
+  if (!curOrder.phone)       curOrder.phone       = (document.getElementById('pt-phone').value||'').trim();
+  if (!curOrder.source)      curOrder.source      = document.getElementById('pt-source').value||'Home Collection';
+  if (!curOrder.address)     curOrder.address     = (document.getElementById('pt-address').value||'').trim();
+
+  // Validate — only name and mobile required for draft
+  if (!curOrder.patientName) { toast('Patient name is required', 'warn'); goTo('s-order'); showStep(1); document.getElementById('pt-name').focus(); return; }
+  if (!curOrder.phone || curOrder.phone.length < 6) { toast('Mobile number is required', 'warn'); goTo('s-order'); showStep(1); document.getElementById('pt-phone').focus(); return; }
+  if (curOrder.source !== 'Home Collection' && curOrder.source !== 'Hospital Collection') {
+    toast('Dispatch is only for Home or Hospital Collection', 'warn'); return;
+  }
+
+  var draft = {
+    patientName: curOrder.patientName,
+    phone:       curOrder.phone,
+    age:         curOrder.age         || '',
+    sex:         curOrder.sex         || '',
+    refBy:       curOrder.refBy       || document.getElementById('pt-ref').value || '',
+    source:      curOrder.source,
+    address:     curOrder.address,
+    mapsLink:    curOrder.mapsLink    || document.getElementById('pt-maps-link') ? (document.getElementById('pt-maps-link').value||'') : '',
+    gps:         curOrder.gps         || null,
+    tests:       selTests.length ? selTests : [],           // optional — phlebo fills on site if empty
+    totalAmount:  curOrder.totalAmount  || 0,
+    testTotal:    curOrder.testTotal    || 0,
+    collectionCharge: curOrder.collectionCharge || 0,
+    discount:    0, netAmount: 0, paidAmount: 0, dueAmount: 0,
+    payMode:     'pending', splitPayments: null,
+    notes:       document.getElementById('bill-notes').value || '',
+    history:     curOrder.history || {},
+    date:        todayStr(),
+    createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
+    createdBy:   curUser.uid,
+    createdByName: (curProfile&&curProfile.name) || curUser.email,
+    status:      'draft',
+    hasDue:      false,
+    urgent:      isUrgent || false,
+    labStatus:   'registered',
+    fieldAssignedToUid:  curOrder._fieldAssignedToUid  || null,
+    fieldAssignedToName: curOrder._fieldAssignedToName || null,
+    fieldAssignedAt: curOrder._fieldAssignedToUid ? firebase.firestore.FieldValue.serverTimestamp() : null,
+    serialNo:    null, // assigned when phlebo completes booking
+    seq:         null,
+  };
+
+  var safeOrder = cleanForFirestore(draft);
+  db.collection('orders').add(safeOrder).then(function(ref) {
+    lastOrder = { id: ref.id }; Object.assign(lastOrder, draft);
+    var _trfBtn = document.getElementById('done-trf-btn');
+    if (_trfBtn) _trfBtn.dataset.orderId = ref.id;
+    document.getElementById('done-id').textContent = draft.patientName + ' — Dispatched ✓';
+    logActivity('order_create', 'Draft dispatched: ' + draft.patientName + ' · ' + draft.source);
+    // Show done screen with dispatch message instead of prep instructions
+    var instrEl = document.getElementById('done-instructions');
+    if (instrEl) instrEl.innerHTML = (
+      '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:10px;padding:12px 14px;margin-bottom:8px;text-align:left">'
+      + '<div style="font-size:13px;font-weight:600;color:#1D4ED8;margin-bottom:2px">&#128664; Dispatched for Collection</div>'
+      + '<div style="font-size:12px;color:#1E40AF">Assign a phlebotomist from the Assign Tasks screen. Phlebo will complete the booking on site.</div>'
+      + '</div>'
+    );
+    var prepWaEl = document.getElementById('done-prep-wa');
+    if (prepWaEl) prepWaEl.style.display = 'none';
+    goTo('s-done');
+    loadStats();
+  }).catch(function(e) { toast('Dispatch failed: ' + e.message, 'err'); });
+}
+// ─────────────────────────────────────────────────────────────────────────
+
 function submitOrder() {
   // Read patient fields from DOM in case step1Next was skipped (e.g. estimate conversion)
   if (!curOrder.patientName) curOrder.patientName = (document.getElementById('pt-name').value||'').trim();
@@ -5338,6 +5475,7 @@ function updateOrdersRevenue() {
   if (!revEl || !allOrders.length) { if(revEl) revEl.style.display='none'; return; }
   var cash=0, upi=0, card=0, credit=0, total=0;
   allOrders.forEach(function(o) {
+    if (o.status === 'draft') return; // exclude drafts from revenue
     var paid = o.paidAmount || 0;
     total += paid;
     if (o.payMode === 'split' && o.splitPayments) {
@@ -5383,7 +5521,7 @@ function renderOrders(orders) {
       +(o.gps?'<span style="color:#1D4ED8">&#128205; GPS</span>':'')
       +'</div>'
       +'<div class="order-footer">'      +'<span class="badge '+(o.status==='paid'&&(o.dueAmount||0)>0?'badge-gold':o.status==='paid'?'badge-green':'badge-gold')+'">'
-        +(o.status==='paid'&&(o.dueAmount||0)>0?'PARTIAL':((o.status||'paid').toUpperCase()))+'</span>'      +(function(){          if(o.payMode==='split'&&o.splitPayments){            var p=[];if(o.splitPayments.cash>0)p.push('Cash');if(o.splitPayments.upi>0)p.push('UPI');if(o.splitPayments.card>0)p.push('Card');            return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+p.join('+')+'</span>';          }          if(o.payMode&&o.payMode!=='cash')return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+o.payMode.toUpperCase()+'</span>';          return '';        })()      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'      +'</div>'
+        +(o.status==='draft'?'DISPATCH':o.status==='paid'&&(o.dueAmount||0)>0?'PARTIAL':((o.status||'paid').toUpperCase()))+'</span>'      +(function(){          if(o.payMode==='split'&&o.splitPayments){            var p=[];if(o.splitPayments.cash>0)p.push('Cash');if(o.splitPayments.upi>0)p.push('UPI');if(o.splitPayments.card>0)p.push('Card');            return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+p.join('+')+'</span>';          }          if(o.payMode&&o.payMode!=='cash')return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+o.payMode.toUpperCase()+'</span>';          return '';        })()      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'      +'</div>'
       +'</div>';
   }).join('');
 }
@@ -5706,6 +5844,11 @@ function closeEditModal() {
   var bg = document.getElementById('edit-modal-bg');
   bg.classList.remove('open');
   setTimeout(function() { bg.style.display = 'none'; }, 280);
+  // Reset Complete Booking state if it was open
+  var saveBtn = document.getElementById('edit-save-btn');
+  if (saveBtn) { saveBtn.textContent = 'Save Changes'; saveBtn.style.background = ''; saveBtn.onclick = submitEditOrder; }
+  var banner = document.getElementById('draft-completion-banner');
+  if (banner) banner.remove();
 }
 
 function renderEditTests() {
@@ -5960,7 +6103,7 @@ function submitEditOrder() {
         var deptData = (PA_DATA[dept]) || (PA_DATA['BIOCHEMISTRY']) || {default:{},patterns:[]};
         var pa = Object.assign({}, deptData.default);
         var nm = (t.name||'').toLowerCase();
-        if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw)>=0) pa=Object.assign({},p.data); }); });
+        if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw.toLowerCase())>=0) pa=Object.assign({},p.data); }); });
         pa = mergePA(pa, nm.replace(/[^a-z0-9]/g,'_'));
         if (pa.fast) hasFasting = true;
         if (pa.med_avoid && pa.med_avoid.toLowerCase().indexOf('stop')>=0) medStops.push(t.shortCode||t.name);
@@ -6439,6 +6582,116 @@ function loadField() {
     }, function(){});
 }
 
+
+// ── COMPLETE BOOKING (draft → full order with serial) ─────────────────────
+function completeBooking(orderId) {
+  // Fetch the draft from Firestore
+  db.collection('orders').doc(orderId).get().then(function(snap) {
+    if (!snap.exists) { toast('Draft not found', 'err'); return; }
+    var o = Object.assign({ id: snap.id }, snap.data());
+
+    // Open edit modal pre-filled — phlebo fills missing fields
+    curDetailOrder = o;
+
+    // Pre-fill the edit modal
+    openEditModal();
+
+    // Override save button to do completeBookingSubmit instead of submitEditOrder
+    var saveBtn = document.getElementById('edit-save-btn');
+    if (saveBtn) {
+      saveBtn.textContent = '✓ Complete Booking';
+      saveBtn.style.background = '#1D4ED8';
+      saveBtn.onclick = function() { completeBookingSubmit(orderId); };
+    }
+
+    // Show a blue banner at top of edit modal
+    var modal = document.getElementById('edit-modal');
+    if (modal) {
+      var existing = document.getElementById('draft-completion-banner');
+      if (!existing) {
+        var banner = document.createElement('div');
+        banner.id = 'draft-completion-banner';
+        banner.style.cssText = 'background:#EFF6FF;border:0.5px solid #93C5FD;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1E40AF;font-weight:500';
+        banner.innerHTML = '&#128664; Complete the booking details below. Serial number will be assigned on save.';
+        modal.insertBefore(banner, modal.children[1]);
+      }
+    }
+  }).catch(function(e) { toast('Error loading draft: ' + e.message, 'err'); });
+}
+
+function completeBookingSubmit(orderId) {
+  // Validate — now tests are required
+  if (!editSelTests.length) { toast('Select at least one test', 'warn'); return; }
+
+  var disc = parseFloat(document.getElementById('edit-discount').value || 0);
+  var total = editSelTests.reduce(function(s, t) { return s + (t.rate || 0); }, 0);
+  var netAmt = Math.max(0, total - disc);
+  var paid = parseFloat(document.getElementById('edit-paid').value || 0);
+  var dueAmt = Math.max(0, netAmt - paid);
+  var editPayMode = document.getElementById('edit-paymode') ? document.getElementById('edit-paymode').value : 'cash';
+
+  var byName = (curProfile && curProfile.name) || curUser.email;
+  var now = new Date();
+  var timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+  // Get next serial number then update
+  var counterRef = db.collection('counters').doc(todayStr());
+  db.runTransaction(function(tx) {
+    return tx.get(counterRef).then(function(doc) {
+      var next = doc.exists ? (doc.data().seq || 0) + 1 : 1;
+      tx.set(counterRef, { seq: next, date: todayStr() }, { merge: true });
+      return next;
+    });
+  }).then(function(seq) {
+    var parts = todayStr().split('-');
+    var displayDate = parts[2] + '/' + parts[1] + '/' + parts[0];
+    var serialNo = displayDate + ' - ' + String(seq).padStart(4, '0');
+
+    var update = {
+      tests:       editSelTests,
+      totalAmount: total,
+      testTotal:   total,
+      discount:    disc,
+      netAmount:   netAmt,
+      paidAmount:  paid,
+      dueAmount:   dueAmt,
+      payMode:     editPayMode,
+      status:      dueAmt > 0 ? 'pending' : 'paid',
+      hasDue:      dueAmt > 0,
+      serialNo:    serialNo,
+      seq:         seq,
+      labStatus:   'registered',
+      fieldStatus: 'collected', // auto-mark collected — phlebo is on site
+      fieldUpdatedBy: byName,
+      fieldUpdatedAt: timeStr,
+      completedBy: byName,
+      completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      // Update history with confirmed fasting/meds
+      'history.collectionTime': timeStr,
+      'history.collectedBy': byName,
+    };
+    // Add age/sex if filled in edit form
+    var editAge = document.getElementById('edit-age');
+    var editSex = document.getElementById('edit-sex');
+    if (editAge && editAge.value) update.age = editAge.value;
+    if (editSex && editSex.value) update.sex = editSex.value;
+
+    // Status changes from draft to active
+    update.status = dueAmt > 0 ? 'pending' : 'paid';
+
+    return db.collection('orders').doc(orderId).update(update);
+  }).then(function() {
+    closeEditModal();
+    // Remove draft banner
+    var banner = document.getElementById('draft-completion-banner');
+    if (banner) banner.remove();
+    toast('Booking completed ✓ — sample marked collected', 'ok');
+    logActivity('order_create', 'Draft completed on site by ' + byName);
+    loadStats();
+  }).catch(function(e) { toast('Completion failed: ' + e.message, 'err'); });
+}
+// ─────────────────────────────────────────────────────────────────────────
+
 function renderFieldTasks(orders) {
   var total = orders.length;
   var done = orders.filter(function(o){ return o.fieldStatus === 'collected'; }).length;
@@ -6457,11 +6710,14 @@ function renderFieldTasks(orders) {
 
     var fieldGuide = buildCollectionGuide(o.tests||[]);
 
-    var statusBadge = isDelivered
-      ? '<span class="badge badge-green">Delivered</span>'
-      : isCollected
-        ? '<span class="badge badge-blue">Collected</span>'
-        : (o.urgent ? '<span class="badge badge-urgent">URGENT</span>' : '<span class="badge badge-gold">Pending</span>');
+    var isDraft = o.status === 'draft';
+    var statusBadge = isDraft
+      ? '<span class="badge" style="background:#EFF6FF;color:#1D4ED8;border:1px solid #93C5FD">&#128664; Dispatch</span>'
+      : isDelivered
+        ? '<span class="badge badge-green">Delivered</span>'
+        : isCollected
+          ? '<span class="badge badge-blue">Collected</span>'
+          : (o.urgent ? '<span class="badge badge-urgent">URGENT</span>' : '<span class="badge badge-gold">Pending</span>');
 
     var mapLink = o.gps
       ? '<a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="font-size:11px;color:var(--blue)">&#128205; Open in Maps</a>'
@@ -6510,7 +6766,10 @@ function renderFieldTasks(orders) {
     }
 
     var actions = '';
-    if (!isCollected && !isDelivered && canAct) {
+    if (isDraft && canAct) {
+      actions = '<button class="btn btn-primary" style="flex:1;font-size:12px;padding:8px;background:#1D4ED8;border-color:#1D4ED8" onclick="completeBooking(\'' + o.id + '\')">&#128221; Complete Booking</button>'
+              + '<button class="btn" style="flex:1;font-size:12px;padding:8px" onclick="openTransferModal(' + fidx + ')">&#8644; Transfer</button>';
+    } else if (!isCollected && !isDelivered && canAct) {
       actions = '<button class="btn btn-primary" style="flex:1;font-size:12px;padding:8px" onclick="fieldActionIdx(' + fidx + ',\"collect\")">&#10003; Collect</button>'
               + '<button class="btn" style="flex:1;font-size:12px;padding:8px" onclick="openTransferModal(' + fidx + ')">&#8644; Transfer</button>';
     } else if (isCollected && canAct) {
@@ -6529,7 +6788,9 @@ function renderFieldTasks(orders) {
       + '<div class="field-task-meta">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+' · '+esc(o.phone||'-')+'</div>'
       + (o.address?'<div class="field-task-address">'+esc(o.address)+'</div>':'')
       + mapLink
-      + '<div class="field-task-tests">'+esc((o.tests||[]).map(function(t){return t.name;}).slice(0,4).join(', '))+((o.tests||[]).length>4?' +'+((o.tests||[]).length-4)+' more':'')+'</div>'
+      + (isDraft && !(o.tests||[]).length
+          ? '<div style="font-size:11px;color:#1D4ED8;font-style:italic;margin-bottom:4px">Tests: to be confirmed at site</div>'
+          : '<div class="field-task-tests">'+esc((o.tests||[]).map(function(t){return t.name;}).slice(0,4).join(', '))+((o.tests||[]).length>4?' +'+((o.tests||[]).length-4)+' more':'')+'</div>')
       + (fieldGuide||'')
       + transferChain
       + (o.fieldNotes?'<div style="font-size:11px;color:var(--text2);background:var(--surface2);padding:4px 8px;border-radius:6px;margin-bottom:6px">'+esc(o.fieldNotes)+'</div>':'')
@@ -6704,8 +6965,39 @@ function fieldActionIdx(idx, action) {
   var sub = document.getElementById('field-modal-sub');
   var okBtn = document.getElementById('field-modal-ok');
   document.getElementById('field-col-notes').value = '';
-  _fieldGPS = null;
+  _fieldGPS = null; _fieldFasting = null; _fieldMedComplied = null;
   var _fgs=document.getElementById('field-gps-status'); if(_fgs){_fgs.textContent='Optional';_fgs.style.color='var(--text3)';}
+  // Reset history section
+  ['fhx-yes','fhx-no','fmed-yes','fmed-no'].forEach(function(id){ var el=document.getElementById(id); if(el) el.className='tog'; });
+  var fwarn=document.getElementById('fhx-warn'); if(fwarn) fwarn.style.display='none';
+  // Check if any test requires fasting or has med restrictions
+  var _fo = fieldOrders[idx];
+  var hasFast=false, medNote='';
+  if (_fo && _fo.tests && PA_DATA) {
+    _fo.tests.forEach(function(t) {
+      var dept = t.dept || 'BIOCHEMISTRY';
+      var deptData = (PA_DATA[dept]) || (PA_DATA['BIOCHEMISTRY']) || {default:{},patterns:[]};
+      var pa = Object.assign({}, deptData.default);
+      var nm = (t.name||''). toLowerCase();
+      if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw.toLowerCase())>=0) pa=Object.assign({},p.data); }); });
+      if (pa.fast) hasFast = true;
+      if (pa.med_avoid && !medNote) medNote = pa.med_avoid.split('.')[0];
+    });
+  }
+  var histSec = document.getElementById('field-history-section');
+  var fastRow = document.getElementById('field-fasting-row');
+  var medRow  = document.getElementById('field-med-row');
+  var medNoteEl = document.getElementById('field-med-note');
+  // Drafts use Complete Booking — no pre-collection checklist needed
+  var _isFoDraft = _fo && _fo.status === 'draft';
+  if (!_isFoDraft && action === 'collect' && (hasFast || medNote)) {
+    if (histSec) histSec.style.display = 'block';
+    if (fastRow) fastRow.style.display = hasFast ? 'block' : 'none';
+    if (medRow)  medRow.style.display  = medNote ? 'block' : 'none';
+    if (medNoteEl) medNoteEl.textContent = medNote;
+  } else {
+    if (histSec) histSec.style.display = 'none';
+  }
   var _fps=document.getElementById('field-pay-section');
   var _fo=fieldOrders[idx];
   if (_fps && action==='collect' && (_fo.status==='pending'||(_fo.dueAmount&&_fo.dueAmount>0))) {
@@ -6739,6 +7031,23 @@ function closeFieldModal() {
   fieldPendingAction = null;
 }
 
+var _fieldFasting = null;     // true=fasting confirmed, false=not fasting
+var _fieldMedComplied = null; // true=complied, false=not complied
+
+function setFieldFasting(val) {
+  _fieldFasting = val;
+  document.getElementById('fhx-yes').className = 'tog' + (val === true  ? ' on' : '');
+  document.getElementById('fhx-no').className  = 'tog' + (val === false ? ' on' : '');
+  var warn = document.getElementById('fhx-warn');
+  if (warn) warn.style.display = val === false ? 'block' : 'none';
+}
+
+function setFieldMed(val) {
+  _fieldMedComplied = val;
+  document.getElementById('fmed-yes').className = 'tog' + (val === true  ? ' on' : '');
+  document.getElementById('fmed-no').className  = 'tog' + (val === false ? ' on' : '');
+}
+
 function fieldConfirm() {
   if (!fieldPendingAction) return;
   var action = fieldPendingAction.action;
@@ -6753,6 +7062,18 @@ function fieldConfirm() {
     fieldUpdatedAt: timeStr
   };
   if (notes) update.fieldNotes = notes;
+  // Save confirmed history from phlebotomist at collection point
+  if (action === 'collect') {
+    if (_fieldFasting !== null) update['history.fastingConfirmed'] = _fieldFasting;
+    if (_fieldMedComplied !== null) update['history.medComplied'] = _fieldMedComplied;
+    update['history.collectionTime'] = timeStr;
+    update['history.collectedBy'] = byName;
+    // If not fasting on a fasting test — flag it
+    if (_fieldFasting === false) {
+      var existingNotes = notes ? notes + ' | ' : '';
+      update.fieldNotes = existingNotes + 'NON-FASTING — result may be invalid';
+    }
+  }
   closeFieldModal();
   db.collection('orders').doc(orderId).update(update)
     .then(function(){
@@ -7779,7 +8100,7 @@ function buildPrepWAText(order) {
     var deptData = (PA_DATA[dept]) || (PA_DATA['BIOCHEMISTRY']) || {default:{},patterns:[]};
     var pa = Object.assign({}, deptData.default);
     var nm = (t.name||'').toLowerCase();
-    if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw)>=0) pa=Object.assign({},p.data); }); });
+    if (deptData.patterns) deptData.patterns.forEach(function(p){ p.match.forEach(function(kw){ if(nm.indexOf(kw.toLowerCase())>=0) pa=Object.assign({},p.data); }); });
     pa = mergePA(pa, nm.replace(/[^a-z0-9]/g,'_'));
     if (pa.fast) hasFasting = true;
     if (pa.timing && pa.timing !== 'Any time' && pa.timing.indexOf('Any')<0) {

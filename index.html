@@ -2769,7 +2769,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.65';
+var APP_VERSION = 'v19.68';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -2939,7 +2939,22 @@ function showScreen(id) {
   }
   if (id === 's-admin') loadAdminScreen();
   if (id === 's-field') loadField();
-  if (id === 's-order' && !_fromEstimate) { curOrder={}; selTests=[]; curPanel='standard'; showStep(1); renderTests(); setPanelButtons(); }
+  if (id === 's-order' && !_fromEstimate) {
+    curOrder={}; selTests=[]; curPanel='standard'; _orderInProgress=false;
+    // Clear ALL DOM input fields — same as newOrder() but without re-calling goTo
+    ['pt-name','pt-age','pt-phone','pt-ref','pt-address','bill-notes'].forEach(function(id2){
+      var el=document.getElementById(id2); if(el) el.value='';
+    });
+    var _sx=document.getElementById('pt-sex'); if(_sx) _sx.value='';
+    var _src=document.getElementById('pt-source'); if(_src) _src.value='Walk-in';
+    var _ml=document.getElementById('pt-maps-link'); if(_ml) _ml.value='';
+    var _rpb=document.getElementById('repeat-patient-banner'); if(_rpb) _rpb.style.display='none';
+    var _hcf=document.getElementById('home-collection-fields'); if(_hcf) _hcf.style.display='none';
+    // Auto-set doctor clinic if staff has default doctor
+    var _ed = curProfile && (curProfile.effectiveDoctor || curProfile.defaultDoctor);
+    if (_ed) { var _src2=document.getElementById('pt-source'); if(_src2) _src2.value='Doctor Clinic'; var _ref=document.getElementById('pt-ref'); if(_ref) _ref.value=_ed; }
+    showStep(1); renderTests(); setPanelButtons();
+  }
   if (id === 's-estimate') { initEstimateScreen(); }
   if (id === 's-review') { loadReview(); }
   if (id === 's-assign') { loadAssignScreen(); }
@@ -4098,8 +4113,11 @@ function renderTests() {
 
 // ── ORDER STEPS ──
 var _curStep = 1;
+var _orderInProgress = false; // true only after user has advanced past step 1
 function showStep(n) {
   _curStep = n;
+  // Mark order as in progress once user advances past step 1
+  if (n !== 1) _orderInProgress = true;
   var s1b = n==='1b';
   document.getElementById('step1').style.display=n===1?'block':'none';
   document.getElementById('step1b').style.display=s1b?'block':'none';
@@ -4112,7 +4130,8 @@ function showStep(n) {
   ['seg0','seg1','seg2','seg3'].forEach(function(id,i){
     document.getElementById(id).className='step-seg'+(i<pos?' done':i===pos?' curr':'');
   });
-  if (n===1) restoreStep1Inputs();
+  // Only restore inputs when navigating BACK within an order already in progress
+  if (n===1 && _orderInProgress) restoreStep1Inputs();
 }
 function restoreStep1Inputs() {
   if (!curOrder || !curOrder.patientName) return; // nothing saved yet
@@ -5467,6 +5486,7 @@ function newOrder() {
   document.getElementById('gps-status').textContent='Not captured';
   document.getElementById('test-q').value='';
   document.getElementById('repeat-patient-banner').style.display='none';
+  _orderInProgress = false;
   renderTests(); showStep(1); goTo('s-order');
 }
 

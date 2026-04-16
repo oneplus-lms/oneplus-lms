@@ -1644,8 +1644,15 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <input type="tel" id="sm-phone" placeholder="10-digit mobile number" maxlength="10" inputmode="numeric" autocomplete="off">
     </div>
     <div class="field">
-      <label>Default Referring Doctor <span style="font-size:11px;color:var(--text3);font-weight:400">— for Doctor Clinic orders</span></label>
-      <input type="text" id="sm-defdr" placeholder="Dr. Name (e.g. Dr. Sharma)" autocomplete="off">
+      <label>Default Referring Doctors <span style="font-size:11px;color:var(--text3);font-weight:400">— auto-fill on Doctor Clinic orders</span></label>
+      <div id="sm-defdr-tags" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;margin-bottom:6px"></div>
+      <div style="position:relative">
+        <input type="text" id="sm-defdr" placeholder="Search and add doctor..." autocomplete="off"
+          oninput="inlineDoctorSearch(this.value,'sm-defdr','sm-defdr-list')"
+          onfocus="if(this.value.length>=1)inlineDoctorSearch(this.value,'sm-defdr','sm-defdr-list')"
+          onblur="setTimeout(function(){hideDrList('sm-defdr-list');},400)">
+        <div id="sm-defdr-list" style="display:none;position:absolute;left:0;right:0;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,0.15);z-index:400;max-height:200px;overflow-y:auto;margin-top:2px"></div>
+      </div>
     </div>
     <div class="field" style="background:var(--surface2);border-radius:var(--radius);padding:10px 12px">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -2762,7 +2769,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.64';
+var APP_VERSION = 'v19.65';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3273,6 +3280,7 @@ function unlock() {
         toast('⚔ Today assigned to: ' + td, 'ok');
       } else {
         curProfile.effectiveDoctor = curProfile.defaultDoctor || '';
+        if (!curProfile.defaultDoctors) curProfile.defaultDoctors = curProfile.defaultDoctor ? [curProfile.defaultDoctor] : [];
       }
     }).catch(function() {
       curProfile.effectiveDoctor = curProfile.defaultDoctor || '';
@@ -4136,9 +4144,16 @@ function toggleHomeCollection() {
   // Auto-fill referring doctor from staff profile when Doctor Clinic selected
   if (src==='Doctor Clinic') {
     var refField = document.getElementById('pt-ref');
-    var doctor = curProfile && (curProfile.effectiveDoctor || curProfile.defaultDoctor);
-    if (refField && !refField.value && doctor) {
-      refField.value = doctor;
+    if (refField && !refField.value) {
+      var doctors = curProfile && (curProfile.defaultDoctors && curProfile.defaultDoctors.length
+        ? curProfile.defaultDoctors
+        : (curProfile.effectiveDoctor ? [curProfile.effectiveDoctor]
+          : (curProfile.defaultDoctor ? [curProfile.defaultDoctor] : [])));
+      if (doctors && doctors.length === 1) {
+        refField.value = doctors[0]; // single doctor — auto-fill directly
+      } else if (doctors && doctors.length > 1) {
+        showDefaultDoctorPicker(doctors, refField); // multiple — show picker
+      }
     }
   }
   if (!needsAddress) {
@@ -4663,6 +4678,45 @@ function _doctorFullFetch() {
 
 var _drSearchTimer = null;
 
+function showDefaultDoctorPicker(doctors, refField) {
+  // Show a small floating picker near the ref field so user picks which alias
+  var existing = document.getElementById('defdr-picker');
+  if (existing) existing.remove();
+  var picker = document.createElement('div');
+  picker.id = 'defdr-picker';
+  picker.style.cssText = 'position:absolute;left:0;right:0;background:var(--surface);border:1.5px solid var(--accent);border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,0.15);z-index:400;overflow:hidden;margin-top:2px';
+  var header = '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;padding:7px 12px 4px">Select referring doctor</div>';
+  var items = doctors.map(function(name) {
+    var safeAttr = name.replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+    return '<div onmousedown="pickDefaultDoctor(this)" ontouchstart="pickDefaultDoctor(this)" data-drname="' + safeAttr + '" style="padding:10px 12px;cursor:pointer;border-top:0.5px solid var(--border);font-size:13px;font-weight:500;-webkit-tap-highlight-color:rgba(0,0,0,0.05)">' + esc(name) + '</div>';
+  }).join('');
+  picker.innerHTML = header + items;
+  // Position relative to the ref field container
+  var container = refField.parentNode;
+  container.style.position = 'relative';
+  container.appendChild(picker);
+  // Auto-dismiss on outside click
+  setTimeout(function() {
+    document.addEventListener('click', function removePicker(e) {
+      if (!picker.contains(e.target) && e.target !== refField) {
+        picker.remove();
+        document.removeEventListener('click', removePicker);
+      }
+    });
+  }, 100);
+}
+
+function pickDefaultDoctor(el) {
+  var name = el.dataset ? el.dataset.drname : el;
+  // decode HTML entities back to plain text
+  var txt = document.createElement('textarea'); txt.innerHTML = name; name = txt.value;
+  var refField = document.getElementById('pt-ref');
+  if (refField) refField.value = name;
+  var picker = document.getElementById('defdr-picker');
+  if (picker) picker.remove();
+  validateDoctorForPanel(name);
+}
+
 function inlineDoctorSearch(val, inputId, listId) {
   var input = document.getElementById(inputId);
   var corrected = val.replace(/\bDr\.\s*/gi,'Dr ').replace(/([A-Za-z])\.([A-Za-z])/g,'$1 $2').replace(/\s{2,}/g,' ');
@@ -4737,6 +4791,8 @@ function normaliseDrName(name) {
 
 function pickInlineDoctor(name, inputId, listId) {
   var clean = normaliseDrName(name);
+  // Staff modal default doctor — add to tag list instead of setting input value
+  if (inputId === 'sm-defdr') { addDefDr(clean); return; }
   document.getElementById(inputId).value = clean;
   hideDrList(listId);
   if (clean !== name) addDoctorToRegistry(clean);
@@ -8477,6 +8533,36 @@ async function loadAdminStaff() {
 }
 
 var smDashAccess = false;
+var smDefaultDoctors = []; // array of doctor names for staff modal
+
+function renderDefDrTags() {
+  var el = document.getElementById('sm-defdr-tags');
+  if (!el) return;
+  if (!smDefaultDoctors.length) { el.innerHTML = '<span style="font-size:11px;color:var(--text3)">No doctors added yet</span>'; return; }
+  el.innerHTML = smDefaultDoctors.map(function(name, i) {
+    return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--accent-light);color:var(--accent);font-size:12px;padding:4px 10px;border-radius:20px;font-family:var(--mono)">'
+      + esc(name)
+      + '<button type="button" onclick="removeDefDr(' + i + ')" style="background:none;border:none;cursor:pointer;color:var(--accent);font-size:14px;line-height:1;padding:0">×</button>'
+      + '</span>';
+  }).join('');
+}
+
+function addDefDr(name) {
+  if (!name) return;
+  var clean = normaliseDrName(name);
+  if (smDefaultDoctors.indexOf(clean) >= 0) { toast('Already added', 'warn'); return; }
+  smDefaultDoctors.push(clean);
+  renderDefDrTags();
+  var inp = document.getElementById('sm-defdr');
+  if (inp) inp.value = '';
+  hideDrList('sm-defdr-list');
+  addDoctorToRegistry(clean);
+}
+
+function removeDefDr(i) {
+  smDefaultDoctors.splice(i, 1);
+  renderDefDrTags();
+}
 
 function toggleDashAccess() {
   if (!editingStaffId) return;
@@ -8545,6 +8631,7 @@ function showAddStaff() {
     document.getElementById('smr-'+r).className = 'tog';
   });
   setDashAccessUI(false);
+  smDefaultDoctors = []; renderDefDrTags();
   document.getElementById('staff-modal').classList.add('open');
 }
 
@@ -8559,7 +8646,11 @@ async function editStaff(id) {
     document.getElementById('sm-email').value = s.email || '';
     document.getElementById('sm-pass').value = '';
     document.getElementById('sm-pin').value = ''; // never show stored hash
-    var defdr = document.getElementById('sm-defdr'); if(defdr) defdr.value = s.defaultDoctor || '';
+    var defdr = document.getElementById('sm-defdr'); if(defdr) defdr.value = '';
+    // Support legacy string and new array
+    smDefaultDoctors = Array.isArray(s.defaultDoctors) ? s.defaultDoctors.slice()
+      : (s.defaultDoctor ? [s.defaultDoctor] : []);
+    renderDefDrTags();
     var smph = document.getElementById('sm-phone'); if(smph) smph.value = s.phone || '';
     document.getElementById('sm-err').textContent = '';
     document.getElementById('sm-pass-field').style.display = 'block';
@@ -8614,14 +8705,14 @@ async function saveStaff() {
       var _adminEmail2 = curUser.email;
       var _adminPass2 = document.getElementById('sm-admin-pass') ? document.getElementById('sm-admin-pass').value : '';
       var cred = await auth.createUserWithEmailAndPassword(email, pass);
-      var defDr = (document.getElementById('sm-defdr').value||'').trim();
       var staffPhone = (document.getElementById('sm-phone').value||'').trim();
       var pinHash = await hashPin(pin);
       await db.collection('staff').doc(cred.user.uid).set({
         name: name, email: email, role: smRole, pin: pinHash,
         uid: cred.user.uid, active: true, phone: staffPhone,
         dashboardAccess: smDashAccess,
-        defaultDoctor: defDr,
+        defaultDoctors: smDefaultDoctors.slice(),
+        defaultDoctor: smDefaultDoctors[0] || '',
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         createdBy: curUser.uid
       });
@@ -8631,9 +8722,11 @@ async function saveStaff() {
       logActivity('staff_create', 'Created staff: ' + name + ' (' + smRole + ')');
     } else {
       // EDIT EXISTING
-      var defDr = (document.getElementById('sm-defdr').value||'').trim();
       var staffPhone = (document.getElementById('sm-phone').value||'').trim();
-      var update = { name: name, email: email, role: smRole, dashboardAccess: smDashAccess, defaultDoctor: defDr, phone: staffPhone };
+      var update = { name: name, email: email, role: smRole, dashboardAccess: smDashAccess,
+        defaultDoctors: smDefaultDoctors.slice(),
+        defaultDoctor: smDefaultDoctors[0] || '',
+        phone: staffPhone };
       if (pin) update.pin = await hashPin(pin);
 
       // Password change

@@ -891,13 +891,36 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <input type="text" id="edit-notes" placeholder="Remarks...">
     </div>
 
+    <div id="edit-reason-section">
     <div class="edit-section-lbl">Reason for Edit <span style="color:var(--red)">*</span></div>
     <div class="field">
       <input type="text" id="edit-reason" placeholder="e.g. Wrong test added, payment mode corrected...">
       <div class="ferr" id="err-edit-reason">Reason is required</div>
     </div>
+    </div>
 
-    <button class="btn btn-primary" style="width:100%;margin-top:6px" onclick="submitEditOrder()">Save Changes</button>
+    <!-- CB History Section: shown only in Complete Booking mode -->
+    <div id="cb-history-section" style="display:none;margin-bottom:10px">
+      <div class="edit-section-lbl">Collection History <span style="color:var(--red)">*</span></div>
+      <div id="cb-fasting-row" style="display:none;background:#FEF3C7;border:0.5px solid #FCD34D;border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:#92400E;margin-bottom:6px">&#9889; Fasting Test — Confirm Patient Status</div>
+        <div style="display:flex;gap:8px">
+          <button id="cb-fast-yes" class="tog" onclick="setCBFasting(true)">&#10003; Fasting</button>
+          <button id="cb-fast-no"  class="tog" onclick="setCBFasting(false)">&#10005; Not Fasting</button>
+        </div>
+        <div id="cb-fast-warn" style="display:none;margin-top:6px;font-size:11px;font-weight:600;color:#991B1B;background:#FEE2E2;padding:5px 8px;border-radius:5px">&#9888; NON-FASTING — result may be invalid. Will be flagged on order.</div>
+      </div>
+      <div id="cb-med-row" style="display:none;background:#F5F3FF;border:0.5px solid #DDD6FE;border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:#5B21B6;margin-bottom:2px">&#128138; Medication Check</div>
+        <div id="cb-med-note" style="font-size:11px;color:#6D28D9;margin-bottom:6px"></div>
+        <div style="display:flex;gap:8px">
+          <button id="cb-med-yes" class="tog" onclick="setCBMed(true)">&#10003; Complied</button>
+          <button id="cb-med-no"  class="tog" onclick="setCBMed(false)">&#10005; Not Complied</button>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="edit-save-btn" style="width:100%;margin-top:6px" onclick="submitEditOrder()">Save Changes</button>
   </div>
 </div>
 
@@ -2707,7 +2730,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.57';
+var APP_VERSION = 'v19.58';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -5851,6 +5874,22 @@ function closeEditModal() {
   if (saveBtn) { saveBtn.textContent = 'Save Changes'; saveBtn.style.background = ''; saveBtn.onclick = submitEditOrder; }
   var banner = document.getElementById('draft-completion-banner');
   if (banner) banner.remove();
+  // Reset CB history checklist
+  _cbFasting = null; _cbMedComplied = null; _cbHasFast = false; _cbHasMed = false;
+  var cbSec = document.getElementById('cb-history-section');
+  if (cbSec) cbSec.style.display = 'none';
+  ['cb-fast-yes','cb-fast-no','cb-med-yes','cb-med-no'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.className = 'tog';
+  });
+  var cbWarn = document.getElementById('cb-fast-warn');
+  if (cbWarn) cbWarn.style.display = 'none';
+  // Restore Reason for Edit section
+  var reasonSec = document.getElementById('edit-reason-section');
+  if (reasonSec) reasonSec.style.display = '';
+  var reasonEl = document.getElementById('edit-reason');
+  if (reasonEl) reasonEl.value = '';
+  var reasonErr = document.getElementById('err-edit-reason');
+  if (reasonErr) reasonErr.classList.remove('on');
 }
 
 function renderEditTests() {
@@ -6598,7 +6637,46 @@ function completeBooking(orderId) {
     // Pre-fill the edit modal
     openEditModal();
 
-    // Override save button to do completeBookingSubmit instead of submitEditOrder
+    // Reset CB state
+    _cbFasting = null; _cbMedComplied = null; _cbHasFast = false; _cbHasMed = false;
+
+    // Compute PA flags for this order's tests
+    var medNote = '';
+    if (o.tests && PA_DATA) {
+      o.tests.forEach(function(t) {
+        var dept = t.dept || 'BIOCHEMISTRY';
+        var deptData = PA_DATA[dept] || PA_DATA['BIOCHEMISTRY'] || { default: {}, patterns: [] };
+        var pa = Object.assign({}, deptData.default);
+        var nm = (t.name || '').toLowerCase();
+        if (deptData.patterns) deptData.patterns.forEach(function(p) {
+          p.match.forEach(function(kw) { if (nm.indexOf(kw.toLowerCase()) >= 0) pa = Object.assign({}, p.data); });
+        });
+        if (pa.fast) _cbHasFast = true;
+        if (pa.med_avoid && !medNote) medNote = pa.med_avoid.split('.')[0];
+      });
+    }
+    _cbHasMed = !!medNote;
+
+    // Show / hide checklist rows
+    var cbSec   = document.getElementById('cb-history-section');
+    var cbFastR = document.getElementById('cb-fasting-row');
+    var cbMedR  = document.getElementById('cb-med-row');
+    var cbMedNt = document.getElementById('cb-med-note');
+    if (_cbHasFast || _cbHasMed) {
+      if (cbSec)   cbSec.style.display   = 'block';
+      if (cbFastR) cbFastR.style.display = _cbHasFast ? 'block' : 'none';
+      if (cbMedR)  cbMedR.style.display  = _cbHasMed  ? 'block' : 'none';
+      if (cbMedNt) cbMedNt.textContent   = medNote;
+    } else {
+      if (cbSec) cbSec.style.display = 'none';
+    }
+
+    // Hide "Reason for Edit" — not needed for draft completion
+    var reasonSec = document.getElementById('edit-reason-section');
+    if (reasonSec) reasonSec.style.display = 'none';
+    document.getElementById('edit-reason').value = 'Draft completed on site';
+
+    // Override save button
     var saveBtn = document.getElementById('edit-save-btn');
     if (saveBtn) {
       saveBtn.textContent = '✓ Complete Booking';
@@ -6672,6 +6750,14 @@ function completeBookingSubmit(orderId) {
       'history.collectionTime': timeStr,
       'history.collectedBy': byName,
     };
+    // Save fasting & medication confirmation from CB checklist
+    if (_cbHasFast && _cbFasting !== null) update['history.fastingConfirmed'] = _cbFasting;
+    if (_cbHasMed  && _cbMedComplied !== null) update['history.medComplied'] = _cbMedComplied;
+    // Flag NON-FASTING on a fasting-required test
+    if (_cbHasFast && _cbFasting === false) {
+      var editNotes = document.getElementById('edit-notes').value.trim();
+      update.fieldNotes = (editNotes ? editNotes + ' | ' : '') + 'NON-FASTING — result may be invalid';
+    }
     // Add age/sex if filled in edit form
     var editAge = document.getElementById('edit-age');
     var editSex = document.getElementById('edit-sex');
@@ -7035,6 +7121,10 @@ function closeFieldModal() {
 
 var _fieldFasting = null;     // true=fasting confirmed, false=not fasting
 var _fieldMedComplied = null; // true=complied, false=not complied
+var _cbFasting = null;        // CB mode: fasting confirmed
+var _cbMedComplied = null;    // CB mode: med complied
+var _cbHasFast = false;       // CB mode: does order have fasting test
+var _cbHasMed = false;        // CB mode: does order have med restriction
 
 function setFieldFasting(val) {
   _fieldFasting = val;
@@ -7048,6 +7138,20 @@ function setFieldMed(val) {
   _fieldMedComplied = val;
   document.getElementById('fmed-yes').className = 'tog' + (val === true  ? ' on' : '');
   document.getElementById('fmed-no').className  = 'tog' + (val === false ? ' on' : '');
+}
+
+function setCBFasting(val) {
+  _cbFasting = val;
+  document.getElementById('cb-fast-yes').className = 'tog' + (val === true  ? ' on' : '');
+  document.getElementById('cb-fast-no').className  = 'tog' + (val === false ? ' on' : '');
+  var warn = document.getElementById('cb-fast-warn');
+  if (warn) warn.style.display = val === false ? 'block' : 'none';
+}
+
+function setCBMed(val) {
+  _cbMedComplied = val;
+  document.getElementById('cb-med-yes').className = 'tog' + (val === true  ? ' on' : '');
+  document.getElementById('cb-med-no').className  = 'tog' + (val === false ? ' on' : '');
 }
 
 function fieldConfirm() {

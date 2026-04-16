@@ -2762,7 +2762,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.61';
+var APP_VERSION = 'v19.63';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3993,11 +3993,7 @@ function setPanelAndRecalc(panel) {
   var pname = document.getElementById('step2-panel-name');
   if (pname) pname.textContent = PANEL_NAMES[panel] || 'Standard';
   // Update button styles
-  ['standard','jk','du','sh'].forEach(function(id) {
-    var btn = document.getElementById('panel-btn-'+id);
-    if (btn) btn.style.background = (panel===id) ? 'var(--accent)' : '';
-    if (btn) btn.style.color = (panel===id) ? '#fff' : '';
-  });
+  setPanelButtons();
   // Recalculate test rates in selTests
   selTests = selTests.map(function(t) {
     var pr = getPanelRate(t.dept, t.name);
@@ -4100,7 +4096,22 @@ function showStep(n) {
   ['seg0','seg1','seg2','seg3'].forEach(function(id,i){
     document.getElementById(id).className='step-seg'+(i<pos?' done':i===pos?' curr':'');
   });
+  if (n===1) restoreStep1Inputs();
 }
+function restoreStep1Inputs() {
+  if (!curOrder || !curOrder.patientName) return; // nothing saved yet
+  var el;
+  el = document.getElementById('pt-name');   if (el && curOrder.patientName) el.value = curOrder.patientName;
+  el = document.getElementById('pt-phone');  if (el && curOrder.phone)       el.value = curOrder.phone;
+  el = document.getElementById('pt-age');    if (el && curOrder.age !== undefined) el.value = curOrder.age;
+  el = document.getElementById('pt-sex');    if (el && curOrder.sex)         el.value = curOrder.sex;
+  el = document.getElementById('pt-ref');    if (el && curOrder.refBy)       el.value = curOrder.refBy;
+  el = document.getElementById('pt-source'); if (el && curOrder.source)      { el.value = curOrder.source; toggleHomeCollection(); }
+  el = document.getElementById('pt-address');if (el && curOrder.address)     el.value = curOrder.address;
+  var mll = document.getElementById('pt-maps-link'); if (mll && curOrder.mapsLink) mll.value = curOrder.mapsLink;
+  setPanelButtons();
+}
+
 function toggleHomeCollection() {
   var src = document.getElementById('pt-source').value;
   var hcf = document.getElementById('home-collection-fields');
@@ -8345,7 +8356,7 @@ function toggleMed(m) {
 function step1bNext() {
   curOrder.history = Object.assign({}, curHistory);
   // Only reset tests if NOT coming from estimate conversion
-  if (!_fromEstimate && !curOrder._fromEstimate) { selTests=[]; curPanel='standard'; }
+  if (!_fromEstimate && !curOrder._fromEstimate) { selTests=[]; } // curPanel preserved — set in step 1
   renderTests(); showStep(2); setPanelButtons();
 }
 

@@ -2762,7 +2762,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.63';
+var APP_VERSION = 'v19.64';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -2974,10 +2974,16 @@ function toggleEye(id, btn) {
 }
 
 function goBack() {
-  // Guard: warn if leaving s-order with unsaved data
   var cur = stack[stack.length-1];
-  if (cur === 's-order' && (curOrder.patientName || selTests.length > 0)) {
-    if (!confirm('Discard this order? All entered data will be lost.')) return;
+  // If mid-order, swipe/back navigates between steps — never discards
+  if (cur === 's-order') {
+    if (_curStep === 3)  { showStep(2); return; }
+    if (_curStep === 2)  { showStep('1b'); return; }
+    if (_curStep === '1b') { showStep(1); return; }
+    // Step 1: confirm discard only when truly leaving the order
+    if (curOrder.patientName || selTests.length > 0) {
+      if (!confirm('Discard this order? All entered data will be lost.')) return;
+    }
   }
   if (stack.length > 1) stack.pop();
   var prev = stack[stack.length-1] || 's-dash';
@@ -4083,7 +4089,9 @@ function renderTests() {
 }
 
 // ── ORDER STEPS ──
+var _curStep = 1;
 function showStep(n) {
+  _curStep = n;
   var s1b = n==='1b';
   document.getElementById('step1').style.display=n===1?'block':'none';
   document.getElementById('step1b').style.display=s1b?'block':'none';

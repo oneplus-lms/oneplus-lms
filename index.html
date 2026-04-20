@@ -2887,7 +2887,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.87';
+var APP_VERSION = 'v19.88';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -7842,9 +7842,26 @@ function loadHO() {
   }).catch(function(){});
 
   // Load today's cash totals from orders
-  db.collection('orders').where('date','==',today).get().then(function(snap){
+  // Phlebotomists see only their own orders; other roles see all
+  var _hoMyUid = curUser && curUser.uid;
+  var _hoRole = curProfile && curProfile.role || '';
+  var _hoIsPhlebo = _hoRole === 'phlebotomist';
+  var _hoQ = _hoIsPhlebo
+    ? db.collection('orders').where('date','==',today).where('createdBy','==',_hoMyUid)
+    : db.collection('orders').where('date','==',today);
+  _hoQ.get().then(function(snap){
     var cash=0, upi=0, credit=0;
-    snap.forEach(function(d){ var o=d.data(); if(o.payMode==='cash') cash+=(o.paidAmount||0); else if(o.payMode==='upi'||o.payMode==='card') upi+=(o.paidAmount||0); else if(o.payMode==='credit') credit+=(o.totalAmount||0); });
+    snap.forEach(function(d){
+      var o=d.data();
+      if (o.status==='draft') return;
+      if (o.payMode==='split' && o.splitPayments) {
+        cash += (o.splitPayments.cash||0);
+        upi  += (o.splitPayments.upi ||0);
+        upi  += (o.splitPayments.card||0);
+      } else if (o.payMode==='cash')  { cash   += (o.paidAmount||0); }
+        else if (o.payMode==='upi' || o.payMode==='card') { upi += (o.paidAmount||0); }
+        else if (o.payMode==='credit') { credit += (o.totalAmount||0); }
+    });
     document.getElementById('ho-cash').textContent='Rs.'+cash.toLocaleString('en-IN');
     document.getElementById('ho-upi').textContent='Rs.'+upi.toLocaleString('en-IN');
     document.getElementById('ho-credit').textContent='Rs.'+credit.toLocaleString('en-IN');
@@ -7971,8 +7988,16 @@ function submitHandover() {
     var cashCollected = 0;
     orderSnap.forEach(function(d) {
       var o = d.data();
-      if (o.payMode === 'cash') cashCollected += (o.paidAmount||0);
-      if (o.source !== 'Walk-in') cashCollected += (o.collectionCharge||0);
+      // Only count this user's own orders
+      if (o.createdBy !== myUid) return;
+      if (o.status === 'draft') return;
+      if (o.payMode === 'split' && o.splitPayments) {
+        cashCollected += (o.splitPayments.cash || 0);
+      } else if (o.payMode === 'cash') {
+        cashCollected += (o.paidAmount || 0);
+      }
+      // Collection charge is cash held by the collecting staff member
+      if (o.source !== 'Walk-in') cashCollected += (o.collectionCharge || 0);
     });
 
     var alreadyHandedOver = 0;

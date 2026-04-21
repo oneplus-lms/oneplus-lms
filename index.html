@@ -389,10 +389,9 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         </div>
       </div>
       <div class="field"><label>Mobile *</label><input type="tel" id="pt-phone" placeholder="9876543210" maxlength="10" inputmode="numeric" oninput="scheduleRepeatCheck()" onblur="checkRepeatPatient()"><div class="ferr" id="err-phone"></div></div>
-      <div id="repeat-patient-banner" style="display:none;background:#F0FDF4;border:1px solid #86EFAC;border-radius:var(--radius);padding:10px 12px;margin-bottom:10px;cursor:pointer" onclick="fillRepeatPatient()">
-        <div style="font-size:11px;font-family:var(--mono);color:#166534;font-weight:600;margin-bottom:3px">&#10003; Returning Patient Found</div>
-        <div id="repeat-patient-info" style="font-size:13px;color:#14532D"></div>
-        <div style="font-size:11px;color:#16A34A;margin-top:3px">Tap to auto-fill details</div>
+      <div id="repeat-patient-banner" style="display:none;background:#F0FDF4;border:1px solid #86EFAC;border-radius:var(--radius);padding:10px 12px;margin-bottom:10px">
+        <div style="font-size:11px;font-family:var(--mono);color:#166534;font-weight:600;margin-bottom:6px">&#10003; Returning Patient Found</div>
+        <div id="repeat-patient-info"></div>
       </div>
       <div class="field"><label>Patient Name *</label><input type="text" id="pt-name" placeholder="Full name"><div class="ferr" id="err-name">Required</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -2887,7 +2886,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.88';
+var APP_VERSION = 'v19.90';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4276,7 +4275,7 @@ function searchTests(q) {
     var displayRate = panelRate !== null && panelRate !== undefined ? panelRate : t.rate;
     var rateStr = displayRate !== null && displayRate !== undefined ? 'Rs.'+displayRate : 'Call for rate';
     var rateColor = displayRate !== null && displayRate !== undefined ? '#1A4A3A' : '#9C917E';
-    html += '<div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-bottom:1px solid #eee;background:#fff" onclick="addOrderHit(' + i + ')">';
+    html += '<div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-bottom:1px solid #eee;background:#fff;touch-action:manipulation;-webkit-tap-highlight-color:transparent" ontouchend="event.preventDefault();addOrderHit(' + i + ')" onclick="addOrderHit(' + i + ')">';
     html += '<div><div style="font-size:14px;font-weight:500;color:#1C1810">' + esc(t.name) + '</div>';
     html += '<div style="font-size:11px;color:#A09080">' + esc(t.dept) + '</div></div>';
     html += '<div style="font-size:13px;font-weight:500;color:'+rateColor+'">' + rateStr + '</div></div>';
@@ -4565,23 +4564,40 @@ function checkRepeatPatient() {
   tryQuery(queries, 0);
 }
 
-function showRepeatBanner(d) {
-  repeatPatientData = d;
-  var info = (d.patientName || '') + ' · ' + (d.age || '-') + 'yr ' + (d.sex || '');
-  if (d.refBy) info += ' · Ref: ' + d.refBy;
-  info += ' · Last: ' + (d.date || '');
-  document.getElementById('repeat-patient-info').textContent = info;
+var _repeatMatches = [];
+
+function showRepeatBanner(matches) {
+  if (!Array.isArray(matches)) matches = [matches];
+  _repeatMatches = matches;
+  var el = document.getElementById('repeat-patient-info');
+  el.innerHTML = matches.map(function(d, i) {
+    var line = esc(d.patientName || '-');
+    if (d.age) line += ' · ' + d.age + 'yr';
+    if (d.sex) line += ' ' + esc(d.sex);
+    if (d.refBy) line += ' · ' + esc(d.refBy);
+    line += '&nbsp;<span style="font-size:10px;color:var(--text3)">Last: ' + esc(d.date || '-') + '</span>';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;'
+      + (i < matches.length-1 ? 'border-bottom:0.5px solid #BBF7D0;' : '') + '">'
+      + '<div style="font-size:13px;color:#14532D;flex:1;min-width:0">' + line + '</div>'
+      + '<button style="margin-left:10px;font-size:12px;font-weight:600;color:#166534;background:#DCFCE7;'
+      + 'border:1px solid #86EFAC;border-radius:6px;padding:5px 12px;cursor:pointer;white-space:nowrap;'
+      + 'flex-shrink:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation"'
+      + ' ontouchend="event.preventDefault();fillRepeatPatient(' + i + ')"'
+      + ' onclick="fillRepeatPatient(' + i + ')">Fill ›</button>'
+      + '</div>';
+  }).join('');
   document.getElementById('repeat-patient-banner').style.display = 'block';
 }
 
-function fillRepeatPatient() {
-  if (!repeatPatientData) return;
-  var d = repeatPatientData;
+function fillRepeatPatient(i) {
+  var d = (typeof i === 'number') ? _repeatMatches[i] : (_repeatMatches[0] || null);
+  if (!d) return;
   document.getElementById('pt-name').value = d.patientName || '';
   document.getElementById('pt-age').value = d.age || '';
   document.getElementById('pt-sex').value = d.sex || '';
   document.getElementById('pt-ref').value = d.refBy || '';
   document.getElementById('repeat-patient-banner').style.display = 'none';
+  _repeatMatches = [];
   toast('Details filled – last visit: ' + (d.date || ''), 'ok');
 }
 
@@ -7378,18 +7394,15 @@ function renderFieldTasks(orders) {
           var reqBadge = pendingReq
             ? '<div style="font-size:11px;color:#D97706;background:#FEF3C7;border:0.5px solid #FCD34D;border-radius:6px;padding:4px 8px;margin-top:4px;margin-bottom:8px">⏳ Time change request: '+esc(visitWindow(o.visitTimeRequest.requestedTime))+(o.visitTimeRequest.note?' · '+esc(o.visitTimeRequest.note):'')+' — by '+esc(o.visitTimeRequest.byName||'-')+'</div>'
             : '';
-          return '<div style="display:inline-flex;align-items:center;gap:6px;background:#F0FDF4;border:0.5px solid #86EFAC;border-radius:8px;padding:5px 10px;margin-bottom:'+(pendingReq?'4px':'8px')+';font-size:13px;font-weight:600;color:#15803D">&#9200; '+esc(visitWindow(o.visitTime))+'</div>' + reqBadge;
+          return '<div style="display:inline-flex;align-items:center;gap:6px;background:#F0FDF4;border:0.5px solid #86EFAC;border-radius:8px;padding:7px 12px;margin-top:8px;margin-bottom:'+(pendingReq?'4px':'8px')+';font-size:14px;font-weight:700;color:#166534">&#9200; '+esc(visitWindow(o.visitTime))+'</div>' + reqBadge;
         })()
-        : '')
-
-      // Assigned timing
-      + (assignedAgo ? '<div class="ftc-time">Assigned '+assignedAgo+'</div>' : '')
-
-      // Location
-      + locationBlock
+        : '<div style="font-size:11px;color:var(--text3);margin-top:6px;margin-bottom:6px">&#9200; Visit time not set</div>')
 
       // Tests
       + testsLine
+
+      // Location
+      + locationBlock
 
       // Collection guide (collapsed)
       + (fieldGuide||'')
@@ -7399,6 +7412,19 @@ function renderFieldTasks(orders) {
 
       // Field notes
       + (o.fieldNotes ? '<div style="margin-top:8px;font-size:11px;color:var(--text2);background:var(--surface2);padding:6px 10px;border-radius:8px;font-style:italic">&#128221; '+esc(o.fieldNotes)+'</div>' : '')
+
+      // Order creation time — bottom of card for reference
+      + (function(){
+          if (!o.createdAt) return '';
+          var _d = o.createdAt.toDate ? o.createdAt.toDate() : new Date(o.createdAt.seconds*1000);
+          var _t = _d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+          var _dt = _d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+          var _isToday = _dt === new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+          return '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);margin-bottom:4px">&#128336; Booked '+(_isToday?'':_dt+' · ')+_t+'</div>';
+        })()
+
+      // Assigned timing
+      + (assignedAgo ? '<div class="ftc-time">Assigned '+assignedAgo+'</div>' : '')
 
       // Actions
       + (actions ? '<div class="ftc-actions">'+actions+'</div>' : '')

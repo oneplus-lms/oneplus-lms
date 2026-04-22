@@ -2954,7 +2954,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.94';
+var APP_VERSION = 'v19.95';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -5709,7 +5709,7 @@ function submitOrder() {
     date: todayStr(), createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     createdBy: curUser.uid, createdByName: (curProfile&&curProfile.name) || curUser.email,
     status: creditMode ? 'pending' : 'paid',
-    hasDue: dueAmt > 0 ? true : false,  // credit orders tracked by payMode==='credit', not hasDue
+    hasDue: (dueAmt > 0 || creditMode) ? true : false,  // credit orders also get hasDue:true so they appear in dues list
     urgent: isUrgent || false,
     labStatus: 'registered',
     fieldAssignedToUid:  curOrder.fieldAssignedToUid  || curOrder._fieldAssignedToUid  || null,
@@ -7952,70 +7952,102 @@ function loadHO() {
   var _hoQ = _hoIsPhlebo
     ? db.collection('orders').where('date','==',today).where('createdBy','==',_hoMyUid)
     : db.collection('orders').where('date','==',today);
-  _hoQ.get().then(function(snap){
+  // Also fetch due collections made TODAY on orders from any date
+  // dueCollectedBy + dueCollectedAt — these are on older orders not in today's date query
+  var _dueQ = _hoIsPhlebo
+    ? db.collection('orders').where('dueCollectedBy','==',_hoMyUid)
+    : db.collection('orders').where('dueCollectedAmt','>',0);
+
+  Promise.all([_hoQ.get(), _dueQ.get()]).then(function(results) {
+    var todaySnap = results[0];
+    var dueSnap   = results[1];
+
+    // Build a set of today's order IDs to avoid double-counting dues collected on today's orders
+    var todayIds = {};
+    todaySnap.forEach(function(d){ todayIds[d.id] = true; });
+
     var cash=0, upi=0, credit=0;
-    snap.forEach(function(d){
+    var previewOrders = [];
+
+    // ── Today's orders ──
+    todaySnap.forEach(function(d){
       var o=d.data();
       if (o.status==='draft') return;
+      if (_hoIsPhlebo && o.createdBy !== _hoMyUid) return;
+
       if (o.payMode==='split' && o.splitPayments) {
         cash += (o.splitPayments.cash||0);
         upi  += (o.splitPayments.upi ||0);
         upi  += (o.splitPayments.card||0);
-      } else if (o.payMode==='cash')  { cash   += (o.paidAmount||0); }
+      } else if (o.payMode==='cash')  { cash += (o.paidAmount||0); }
         else if (o.payMode==='upi' || o.payMode==='card') { upi += (o.paidAmount||0); }
         else if (o.payMode==='credit') { credit += (o.totalAmount||0); }
+
+      var cashAmt = 0;
+      if (o.payMode === 'split' && o.splitPayments) cashAmt = o.splitPayments.cash || 0;
+      else if (o.payMode === 'cash') cashAmt = o.paidAmount || 0;
+      var colCharge = (o.source !== 'Walk-in') ? (o.collectionCharge || 0) : 0;
+      var rowTotal = cashAmt + colCharge;
+      if (rowTotal > 0) previewOrders.push({
+        serial: o.serial || d.id.slice(-6).toUpperCase(),
+        name: o.patientName || '-',
+        tests: (o.tests||[]).map(function(t){return t.shortCode||t.name;}).slice(0,3).join(', '),
+        cashAmt: cashAmt, colCharge: colCharge, total: rowTotal,
+        payMode: o.payMode || 'cash', dueRow: false
+      });
     });
+
+    // ── Due collections on older orders — only those collected today ──
+    dueSnap.forEach(function(d){
+      if (todayIds[d.id]) return; // already counted above
+      var o = d.data();
+      if (!o.dueCollectedAmt || o.dueCollectedAmt <= 0) return;
+      if (_hoIsPhlebo && o.dueCollectedBy !== _hoMyUid) return;
+      // Only count if collected today
+      var collAt = o.dueCollectedAt && o.dueCollectedAt.toDate ? o.dueCollectedAt.toDate() : null;
+      if (!collAt) return;
+      var collDate = collAt.getFullYear()+'-'+String(collAt.getMonth()+1).padStart(2,'0')+'-'+String(collAt.getDate()).padStart(2,'0');
+      if (collDate !== today) return;
+
+      var mode = o.dueCollectedMode || 'cash';
+      var amt  = o.dueCollectedAmt || 0;
+      if (mode === 'cash')       cash += amt;
+      else if (mode === 'upi' || mode === 'card') upi += amt;
+
+      previewOrders.push({
+        serial: o.serial || d.id.slice(-6).toUpperCase(),
+        name: o.patientName || '-',
+        tests: (o.tests||[]).map(function(t){return t.shortCode||t.name;}).slice(0,3).join(', '),
+        cashAmt: mode === 'cash' ? amt : 0,
+        colCharge: 0, total: mode === 'cash' ? amt : 0,
+        payMode: mode, dueRow: true, dueAmt: amt
+      });
+    });
+
     document.getElementById('ho-cash').textContent='Rs.'+cash.toLocaleString('en-IN');
     document.getElementById('ho-upi').textContent='Rs.'+upi.toLocaleString('en-IN');
     document.getElementById('ho-credit').textContent='Rs.'+credit.toLocaleString('en-IN');
     document.getElementById('ho-amt').value=cash;
 
-    // Build order preview list for the handover form
-    var previewOrders = [];
-    snap.forEach(function(d) {
-      var o = d.data();
-      if (o.status === 'draft') return;
-      if (_hoIsPhlebo && o.createdBy !== _hoMyUid) return;
-      var cashAmt = 0;
-      if (o.payMode === 'split' && o.splitPayments) cashAmt = o.splitPayments.cash || 0;
-      else if (o.payMode === 'cash') cashAmt = o.paidAmount || 0;
-      var colCharge = (o.source !== 'Walk-in') ? (o.collectionCharge || 0) : 0;
-      var total = cashAmt + colCharge;
-      if (total > 0) previewOrders.push({
-        serial: o.serial || d.id.slice(-6).toUpperCase(),
-        name: o.patientName || '-',
-        tests: (o.tests||[]).map(function(t){return t.shortCode||t.name;}).slice(0,3).join(', '),
-        cashAmt: cashAmt,
-        colCharge: colCharge,
-        total: total,
-        payMode: o.payMode || 'cash'
-      });
-    });
     previewOrders.sort(function(a,b){ return (b.serial||'').localeCompare(a.serial||''); });
-
     var prev = document.getElementById('ho-order-preview');
     if (!previewOrders.length) {
       prev.style.display = 'none';
     } else {
       var rows = previewOrders.map(function(o) {
-        var modeTag = o.payMode === 'split'
-          ? '<span style="font-size:9px;background:#FEF3C7;color:#92400E;border-radius:3px;padding:1px 5px;margin-left:4px">SPLIT</span>'
-          : '';
+        var tag = o.dueRow
+          ? '<span style="font-size:9px;background:#FEF3C7;color:#92400E;border-radius:3px;padding:1px 5px;margin-left:4px">DUE COLL.</span>'
+          : (o.payMode === 'split' ? '<span style="font-size:9px;background:#EDE9FE;color:#5B21B6;border-radius:3px;padding:1px 5px;margin-left:4px">SPLIT</span>' : '');
         var colLine = o.colCharge > 0
           ? ' <span style="color:var(--text3);font-size:10px">+Rs.'+o.colCharge+' coll.</span>' : '';
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border)">'
           + '<div style="flex:1;min-width:0">'
-          + '<div style="font-size:12px;font-weight:500;color:var(--text1)">'
-          + esc(o.name)
-          + modeTag
-          + '</div>'
-          + '<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-          + esc(o.tests||'-') + '</div>'
+          + '<div style="font-size:12px;font-weight:500;color:var(--text1)">'+esc(o.name)+tag+'</div>'
+          + '<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(o.tests||'-')+'</div>'
           + '</div>'
           + '<div style="font-size:13px;font-weight:600;color:var(--accent);margin-left:10px;white-space:nowrap">'
-          + 'Rs.'+o.total.toLocaleString('en-IN')
-          + colLine
-          + '</div>'
+          + (o.total > 0 ? 'Rs.'+o.total.toLocaleString('en-IN') : o.payMode.toUpperCase())
+          + colLine+'</div>'
           + '</div>';
       }).join('');
       prev.innerHTML = '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
@@ -8142,7 +8174,8 @@ function submitHandover() {
   // Guard: compute actual cash in hand before allowing transfer
   Promise.all([
     db.collection('orders').where('date','==',today).get(),
-    db.collection('handovers').where('date','==',today).get()
+    db.collection('handovers').where('date','==',today).get(),
+    db.collection('orders').where('dueCollectedBy','==',myUid).get()
   ]).then(function(results) {
     var orderSnap = results[0], hoSnap = results[1];
 
@@ -8159,7 +8192,31 @@ function submitHandover() {
       }
       // Collection charge is cash held by the collecting staff member
       if (o.source !== 'Walk-in') cashCollected += (o.collectionCharge || 0);
+      // Due collections on today's own orders (e.g. partial paid at booking, rest collected now)
+      if (o.dueCollectedAmt > 0 && o.dueCollectedBy === myUid && o.dueCollectedMode === 'cash') {
+        // Only add the due portion if the original payMode wasn't cash (avoid double-count)
+        if (o.payMode !== 'cash') cashCollected += (o.dueCollectedAmt || 0);
+      }
     });
+
+    // Also count due collections TODAY on orders from previous dates (not in today's orderSnap)
+    // These are fetched separately to avoid missing them
+    var _dueSnap = results[2] || null;
+    if (_dueSnap) {
+      var todayOrderIds = {};
+      orderSnap.forEach(function(d){ todayOrderIds[d.id] = true; });
+      _dueSnap.forEach(function(d) {
+        if (todayOrderIds[d.id]) return; // already counted above
+        var o = d.data();
+        if (o.dueCollectedBy !== myUid) return;
+        if (!o.dueCollectedAmt || o.dueCollectedAmt <= 0) return;
+        var collAt = o.dueCollectedAt && o.dueCollectedAt.toDate ? o.dueCollectedAt.toDate() : null;
+        if (!collAt) return;
+        var collDate = collAt.getFullYear()+'-'+String(collAt.getMonth()+1).padStart(2,'0')+'-'+String(collAt.getDate()).padStart(2,'0');
+        if (collDate !== today) return;
+        if ((o.dueCollectedMode || 'cash') === 'cash') cashCollected += o.dueCollectedAmt;
+      });
+    }
 
     var alreadyHandedOver = 0;
     var hasPendingOut = false;

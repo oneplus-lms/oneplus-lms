@@ -1447,6 +1447,32 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   </div>
 </div>
 
+<!-- QUICK PAY MODAL -->
+<div id="quick-pay-modal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.5);align-items:flex-end;justify-content:center">
+  <div style="background:var(--surface);border-radius:20px 20px 0 0;padding:20px 18px 32px;width:100%;max-width:480px;box-shadow:0 -4px 24px rgba(0,0,0,0.15)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div style="font-size:16px;font-weight:600">Collect Payment</div>
+      <button onclick="closeQuickPay()" style="font-size:18px;background:none;border:none;color:var(--text3);cursor:pointer;padding:4px">&#10005;</button>
+    </div>
+    <div id="qp-name" style="font-size:12px;color:var(--text3);font-family:var(--mono);margin-bottom:14px"></div>
+    <!-- Payment mode -->
+    <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:6px">Payment mode</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button id="qp-mode-cash" class="pay-mode-btn on" onclick="setQpMode('cash')" style="flex:1">&#128181; Cash</button>
+      <button id="qp-mode-upi"  class="pay-mode-btn"    onclick="setQpMode('upi')"  style="flex:1">&#128241; UPI</button>
+      <button id="qp-mode-card" class="pay-mode-btn"    onclick="setQpMode('card')" style="flex:1">&#128179; Card</button>
+    </div>
+    <!-- Amount -->
+    <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:6px">Amount received (Rs.)</div>
+    <input type="number" id="qp-amt" inputmode="numeric"
+      style="width:100%;padding:12px 14px;font-size:20px;font-weight:600;border:1.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);margin-bottom:6px">
+    <div id="qp-err" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:10px"></div>
+    <button id="qp-save-btn" class="btn btn-primary" style="width:100%;font-size:15px;padding:13px"
+      ontouchend="event.preventDefault();submitQuickPay()"
+      onclick="submitQuickPay()">&#10003; Confirm Payment</button>
+  </div>
+</div>
+
 <!-- PHLEBOTOMIST REVIEW SCREEN -->
 <div id="s-review" class="screen">
   <div class="topbar">
@@ -2311,7 +2337,8 @@ function startPhleboDash() {
       snap.forEach(function(d) {
         var o = Object.assign({id:d.id}, d.data());
         if (o.status === 'draft') return;
-        // Phlebo can collect if: assigned to them, created by them, or walk-in with due
+        // Credit orders are institutional — phlebo cannot collect these
+        if (o.payMode === 'credit') return;
         var assignedToMe = o.fieldAssignedToUid === myUid;
         var createdByMe  = o.createdBy === myUid;
         if (assignedToMe || createdByMe) dues.push(o);
@@ -2469,9 +2496,92 @@ function toggleCollectionGuide(id) {
   }
 }
 
+// ── QUICK PAY MODAL — inline payment from checklist ──────────────────────
+var _qpOrderId = null, _qpMode = 'cash', _qpMax = 0;
+
+function openQuickPay(orderId, dueAmt, payMode) {
+  _qpOrderId = orderId; _qpMax = dueAmt; _qpMode = payMode || 'cash';
+  var modal = document.getElementById('quick-pay-modal');
+  if (!modal) return;
+  document.getElementById('qp-name').textContent = '';
+  document.getElementById('qp-amt').value = dueAmt;
+  document.getElementById('qp-err').textContent = '';
+  // Highlight current mode
+  ['cash','upi','card'].forEach(function(m){
+    var b = document.getElementById('qp-mode-'+m);
+    if (b) b.className = 'pay-mode-btn' + (m===_qpMode?' on':'');
+  });
+  // Pre-fill name from fieldOrders
+  var o = fieldOrders.find(function(x){ return x.id===orderId; });
+  if (o) document.getElementById('qp-name').textContent = esc(o.patientName||'');
+  modal.style.display = 'flex';
+  document.getElementById('qp-amt').focus();
+}
+
+function closeQuickPay() {
+  var modal = document.getElementById('quick-pay-modal');
+  if (modal) modal.style.display = 'none';
+  _qpOrderId = null;
+}
+
+function setQpMode(m) {
+  _qpMode = m;
+  ['cash','upi','card'].forEach(function(mode){
+    var b = document.getElementById('qp-mode-'+mode);
+    if (b) b.className = 'pay-mode-btn' + (mode===m?' on':'');
+  });
+}
+
+async function submitQuickPay() {
+  var amt = parseFloat(document.getElementById('qp-amt').value) || 0;
+  var errEl = document.getElementById('qp-err');
+  errEl.textContent = '';
+  if (!_qpOrderId) return;
+  if (amt <= 0)              { errEl.textContent = 'Enter amount'; return; }
+  if (amt > _qpMax + 0.5)   { errEl.textContent = 'Exceeds due: Rs.' + _qpMax.toLocaleString('en-IN'); return; }
+
+  var btn = document.getElementById('qp-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  try {
+    var snap = await db.collection('orders').doc(_qpOrderId).get();
+    var o = snap.data();
+    var oldPaid = o.paidAmount || 0;
+    var newPaid = oldPaid + amt;
+    var newDue  = Math.max(0, (o.dueAmount||0) - amt);
+    var byName  = (curProfile&&curProfile.name)||(curUser&&curUser.email)||'';
+
+    var instalment = { amt:amt, mode:_qpMode, byUid:curUser&&curUser.uid, byName:byName, at:new Date().toISOString() };
+    var existing   = Array.isArray(o.duePayments) ? o.duePayments : [];
+    existing.push(instalment);
+
+    await db.collection('orders').doc(_qpOrderId).update({
+      paidAmount: newPaid, dueAmount: newDue,
+      status:     newDue <= 0 ? 'paid' : 'pending',
+      hasDue:     newDue > 0,
+      payMode:    newDue <= 0 ? _qpMode : o.payMode || 'pending',
+      dueCollectedAt:     firebase.firestore.FieldValue.serverTimestamp(),
+      dueCollectedBy:     curUser && curUser.uid,
+      dueCollectedByName: byName,
+      dueCollectedMode:   _qpMode,
+      dueCollectedAmt:    amt,
+      duePayments:        existing
+    });
+
+    logActivity('due_collect', 'Quick pay Rs.'+amt+' ('+_qpMode+') from '+(o.patientName||_qpOrderId.slice(-6)));
+    toast('Rs.'+amt.toLocaleString('en-IN')+' recorded ✓', 'ok');
+    closeQuickPay();
+    // Refresh phlebo dash
+    startPhleboDash();
+  } catch(e) {
+    errEl.textContent = 'Failed: ' + e.message;
+    btn.disabled = false; btn.textContent = 'Confirm Payment';
+  }
+}
+
 function renderPhleboDash(orders) {
   var drafts    = orders.filter(function(o){ return o.status==='draft'; });
-  var pending   = orders.filter(function(o){ return o.status!=='draft'&&!o.fieldStatus&&!o.fieldTransferPending; });
+  var pending   = orders.filter(function(o){ return o.status!=='draft'&&(o.fieldStatus!=='collected')&&(o.fieldStatus!=='delivered')&&!o.fieldTransferPending; });
   var collected = orders.filter(function(o){ return o.fieldStatus==='collected'; });
   var delivered = orders.filter(function(o){ return o.fieldStatus==='delivered'; });
 
@@ -2480,25 +2590,21 @@ function renderPhleboDash(orders) {
   setEl('ph-pending', pending.length);
   setEl('ph-collected', collected.length);
   setEl('ph-delivered', delivered.length);
-  // Draft dispatch tasks
   var draftEl = document.getElementById('ph-drafts');
   var draftTile = document.getElementById('ph-drafts-tile');
   if (draftEl) draftEl.textContent = drafts.length;
   if (draftTile) draftTile.style.display = drafts.length ? 'block' : 'none';
 
-  // Late urgent alert
   var now = Date.now();
   var lateUrgent = pending.filter(function(o) {
-    if (!o.urgent) return false;
-    if (!o.fieldAssignedAt) return false;
+    if (!o.urgent || !o.fieldAssignedAt) return false;
     var at = o.fieldAssignedAt.toMillis ? o.fieldAssignedAt.toMillis() : 0;
     return (now - at) > URGENT_LATE_MINS * 60000;
   });
   var lateEl = document.getElementById('ph-late-alert');
   if (lateEl) lateEl.style.display = lateUrgent.length ? 'block' : 'none';
 
-  // Render task cards
-  fieldOrders = orders; // reuse fieldOrders array for action functions
+  fieldOrders = orders;
   var el = document.getElementById('phlebo-task-list');
   if (!el) return;
   if (!orders.length) {
@@ -2506,41 +2612,44 @@ function renderPhleboDash(orders) {
     return;
   }
 
-  el.innerHTML = orders.map(function(o, fidx) {
+  // ── Active tasks (pending + collected) — full card ──
+  var activeTasks = orders.filter(function(o){ return o.fieldStatus!=='delivered'; });
+  // ── Delivered — compact payment checklist ──
+  var deliveredOrders = delivered;
+
+  var activeHtml = activeTasks.map(function(o, _i) {
+    var fidx = orders.indexOf(o);
     var isCollected = o.fieldStatus==='collected';
-    var isDelivered = o.fieldStatus==='delivered';
     var myUid = curUser&&curUser.uid;
     var canAct = (o.fieldAssignedToUid===myUid || o.createdBy===myUid);
 
-    // Time tracking
     function elapsedStr(fromTs) {
       if (!fromTs) return '';
       var ms = Date.now() - (fromTs.toMillis ? fromTs.toMillis() : 0);
       var mins = Math.floor(ms/60000);
       if (mins < 60) return mins+'m ago';
-      return Math.floor(mins/60)+'h '+( mins%60)+'m ago';
+      return Math.floor(mins/60)+'h '+(mins%60)+'m ago';
     }
-    var assignedAgo = o.fieldAssignedAt ? elapsedStr(o.fieldAssignedAt) : '';
-    var collectedAgo = o.collectedAt ? elapsedStr(o.collectedAt) : '';
+    var assignedAgo  = o.fieldAssignedAt ? elapsedStr(o.fieldAssignedAt) : '';
+    var collectedAgo = o.collectedAt     ? elapsedStr(o.collectedAt)     : '';
 
-    var urgentBanner = o.urgent && !isCollected && !isDelivered
+    var urgentBanner = o.urgent && !isCollected
       ? '<div style="background:#FEE2E2;border-radius:6px;padding:7px 10px;margin-bottom:8px;font-size:12px;font-weight:600;color:#991B1B">&#128680; URGENT — Priority collection</div>' : '';
 
-    var statusColor = isDelivered ? '#059669' : isCollected ? '#1D4ED8' : o.urgent ? '#DC2626' : '#D97706';
-    var statusLabel = isDelivered ? 'Delivered' : isCollected ? 'Collected' : o.urgent ? 'URGENT' : 'Pending';
+    var statusColor = isCollected ? '#1D4ED8' : o.urgent ? '#DC2626' : '#D97706';
+    var statusLabel = isCollected ? 'Collected' : o.urgent ? 'URGENT' : 'Pending';
 
     var mapLink = '';
     if (o.gps) mapLink = '<a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="font-size:11px;color:#1D4ED8">&#128205; GPS Location</a>';
     else if (o.mapsLink) mapLink = '<a href="'+o.mapsLink+'" target="_blank" style="font-size:11px;color:#1D4ED8">&#128205; Open in Maps</a>';
 
-    var _isPending = !isCollected && !isDelivered;
-    var collectionGuide = buildCollectionGuide(o.tests||[], false); // always collapsed — phlebo taps to open
+    var collectionGuide = buildCollectionGuide(o.tests||[], !isCollected);
 
-    var isPendingToMe = o.fieldTransferPending && o.fieldTransferPending.toUid === (curUser&&curUser.uid);
+    var isPendingToMe = o.fieldTransferPending && o.fieldTransferPending.toUid === myUid;
     var transferBanner = '';
     if (isPendingToMe) {
       transferBanner = '<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:8px 10px;margin-bottom:8px">'
-        +'<div style="font-size:11px;font-weight:600;color:#92400E;margin-bottom:4px">&#8644; Transfer — Tap to accept or reject</div>'
+        +'<div style="font-size:11px;font-weight:600;color:#92400E;margin-bottom:4px">&#8644; Transfer — Accept or reject</div>'
         +'<div style="display:flex;gap:8px;margin-top:6px">'
         +'<button class="btn-accept" style="flex:1;padding:7px;font-size:12px" onclick="fieldTransferAction('+fidx+',0)">&#10003; Accept</button>'
         +'<button class="btn-reject" style="flex:1;padding:7px;font-size:12px" onclick="fieldTransferAction('+fidx+',1)">&#10005; Reject</button>'
@@ -2552,7 +2661,7 @@ function renderPhleboDash(orders) {
     if (isDraft && canAct) {
       actions = '<button class="btn btn-primary" style="flex:1;font-size:13px;padding:10px;background:#1D4ED8;border-color:#1D4ED8" onclick="completeBooking(\'' + o.id + '\')">&#128221; Complete Booking</button>'
               + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
-    } else if (!isCollected && !isDelivered && canAct && !isPendingToMe) {
+    } else if (!isCollected && canAct && !isPendingToMe) {
       actions = '<button class="btn btn-primary" style="flex:1;font-size:13px;padding:10px" onclick="fieldActionIdx('+fidx+',\'collect\')">&#10003; Collected</button>'
               + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
     } else if (isCollected && canAct) {
@@ -2560,45 +2669,119 @@ function renderPhleboDash(orders) {
               + '<button class="btn" style="flex:1;font-size:13px;padding:10px" onclick="openTransferModal('+fidx+')">&#8644; Transfer</button>';
     }
 
-    var cardBg = o.urgent && !isCollected && !isDelivered ? 'background:#FFF5F5;border-color:#FCA5A5' : 'background:var(--surface);border-color:var(--border)';
-    var hasDue = (o.hasDue || (o.dueAmount||0) > 0);
-    var dueAmt = o.dueAmount > 0 ? o.dueAmount : (o.netAmount||o.totalAmount||0);
+    var cardBg = o.urgent && !isCollected ? 'background:#FFF5F5;border-color:#FCA5A5' : 'background:var(--surface);border-color:var(--border)';
+    var visitBlock = '';
+    if (o.visitTime) {
+      var pendingReq = o.visitTimeRequest && o.visitTimeRequest.status === 'pending';
+      var reqStr = pendingReq
+        ? '<div style="font-size:11px;color:#D97706;margin-top:4px;font-family:var(--mono)">&#8987; Time change requested: ' + esc(visitWindow(o.visitTimeRequest.requestedTime)) + '</div>'
+        : '<button onclick="openTimeReassign(\''+o.id+'\',\''+esc(o.patientName||'')+'\',\''+esc(o.visitTime||'')+'\')" style="font-size:11px;color:#15803D;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline;margin-top:2px">Request different time</button>';
+      visitBlock = '<div style="display:inline-flex;align-items:center;gap:6px;background:#F0FDF4;border:0.5px solid #86EFAC;border-radius:8px;padding:5px 10px;margin-bottom:4px;font-size:13px;font-weight:600;color:#15803D">&#9200; '+esc(visitWindow(o.visitTime))+'</div>'
+        + '<div style="margin-bottom:8px">'+reqStr+'</div>';
+    }
 
-    return '<div style="'+cardBg+';border:1px solid;border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">'
-      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;cursor:pointer" ontouchend="event.preventDefault();openOrderDetail(\''+o.id+'\')" onclick="openOrderDetail(\''+o.id+'\')" >'
+    return '<div style="'+cardBg+';border:1px solid;border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;cursor:pointer" ontouchend="event.preventDefault();openOrderDetail(\''+o.id+'\')" onclick="openOrderDetail(\''+o.id+'\')">'
       + '<div style="font-size:16px;font-weight:600">'+esc(o.patientName||'-')+'</div>'
       + '<span style="font-size:10px;font-family:var(--mono);font-weight:700;color:'+statusColor+';background:'+statusColor+'18;border-radius:10px;padding:3px 8px;white-space:nowrap;margin-left:8px">'+statusLabel+'</span>'
       + '</div>'
-      + urgentBanner
-      + transferBanner
+      + urgentBanner + transferBanner
       + '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">'
       + (o.age||o.sex?'<span>'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+'</span><span style="color:var(--border-strong)">·</span>':'')
       + '<a href="tel:'+esc(o.phone||'')+'" style="color:#1D4ED8">&#128222; '+esc(o.phone||'-')+'</a>'
-      + (o.address?'<span style="color:var(--border-strong)">·</span><span>&#127968; '+esc(o.address)+'</span>':'')
       + (mapLink?' '+mapLink:'')
       + '</div>'
-      + (assignedAgo?'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);margin-bottom:4px">Assigned '+assignedAgo+'</div>':'')
-      + (o.visitTime ? (function(){
-          var pendingReq = o.visitTimeRequest && o.visitTimeRequest.status === 'pending';
-          var reqStr = pendingReq
-            ? '<div style="font-size:11px;color:#D97706;margin-top:4px;font-family:var(--mono)">⏳ Time change requested: ' + esc(visitWindow(o.visitTimeRequest.requestedTime)) + '</div>'
-            : '<button onclick="openTimeReassign(\''+o.id+'\',\''+esc(o.patientName||'')+'\',\''+esc(o.visitTime||'')+'\')" style="font-size:11px;color:#15803D;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline;margin-top:2px">Request different time</button>';
-          return '<div style="display:inline-flex;align-items:center;gap:6px;background:#F0FDF4;border:0.5px solid #86EFAC;border-radius:8px;padding:5px 10px;margin-bottom:4px;font-size:13px;font-weight:600;color:#15803D">&#9200; '+esc(visitWindow(o.visitTime))+'</div>'
-            + '<div style="margin-bottom:8px">' + reqStr + '</div>';
-        })()
-        : '')
+      + visitBlock
       + (collectedAgo?'<div style="font-size:10px;font-family:var(--mono);color:#1D4ED8;margin-bottom:4px">Collected '+collectedAgo+'</div>':'')
-      + '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">'+esc((o.tests||[]).slice(0,3).map(function(t){return t.shortCode||t.name;}).join(' · '))+((o.tests||[]).length>3?' +'+((o.tests||[]).length-3)+' more':'')+'</div>'
+      + '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">'+esc((o.tests||[]).slice(0,3).map(function(t){return t.shortCode||t.name;}).join(' · '))+((o.tests||[]).length>3?' +'+(( o.tests||[]).length-3)+' more':'')+'</div>'
       + (collectionGuide||'')
       + (o.collectionCharge>0?'<div style="font-size:11px;font-family:var(--mono);color:var(--accent);margin-bottom:8px">&#128176; Collection charge: Rs.'+o.collectionCharge+'</div>':'')
-      + (actions?'<div style="display:flex;gap:8px;margin-bottom:8px">'+actions+'</div>':'')
-      + (isDelivered
-          ? (hasDue
-              ? '<button style="width:100%;font-size:12px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:8px;cursor:pointer;touch-action:manipulation" ontouchend="event.preventDefault();_phDueCollect(this)" onclick="_phDueCollect(this)" data-id="'+o.id+'" data-due="'+dueAmt+'">&#128176; Collect Due — Rs.'+dueAmt.toLocaleString('en-IN')+'</button>'
-              : '<button style="width:100%;font-size:12px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;cursor:pointer;touch-action:manipulation" ontouchend="event.preventDefault();openOrderDetail(\''+o.id+'\')" onclick="openOrderDetail(\''+o.id+'\')" >&#128196; View Order</button>')
-          : '')
+      + (actions?'<div style="display:flex;gap:8px">'+actions+'</div>':'')
       + '</div>';
   }).join('');
+
+  // ── Delivered — compact payment checklist ──
+  var checklistHtml = '';
+  if (deliveredOrders.length) {
+    var totalAmt   = 0, totalDue = 0, totalPaid = 0;
+    deliveredOrders.forEach(function(o){
+      totalAmt  += (o.netAmount||o.totalAmount||0);
+      totalDue  += (o.dueAmount||0);
+      totalPaid += (o.paidAmount||0);
+    });
+
+    var rows = deliveredOrders.map(function(o) {
+      var hasDue     = (o.hasDue || (o.dueAmount||0) > 0) && o.payMode !== 'credit';
+      var dueAmt     = o.dueAmount || 0;
+      var netAmt     = o.netAmount || o.totalAmount || 0;
+      var paidAmt    = o.paidAmount || 0;
+      var cc         = o.collectionCharge || 0;
+      var testNames  = (o.tests||[]).slice(0,2).map(function(t){return t.shortCode||t.name;}).join(', ');
+      var payMode    = o.payMode || 'cash';
+
+      // Payment badge
+      var badge, badgeStyle;
+      if (o.payMode === 'credit') {
+        badge = 'CREDIT'; badgeStyle = 'background:#EDE9FE;color:#5B21B6';
+      } else if (hasDue && paidAmt > 0) {
+        badge = 'PARTIAL'; badgeStyle = 'background:#FEF3C7;color:#92400E';
+      } else if (hasDue && paidAmt === 0) {
+        badge = 'DUE'; badgeStyle = 'background:#FEE2E2;color:#991B1B';
+      } else {
+        badge = 'PAID'; badgeStyle = 'background:#F0FDF4;color:#166534';
+      }
+
+      // Amount display
+      var amtDisplay = hasDue
+        ? '<span style="font-size:12px;font-weight:700;color:#D97706">Rs.'+dueAmt.toLocaleString('en-IN')+' due</span>'
+          + (paidAmt>0?'<span style="font-size:10px;color:var(--text3)"> / Rs.'+netAmt.toLocaleString('en-IN')+'</span>':'')
+        : '<span style="font-size:12px;font-weight:600;color:#059669">Rs.'+netAmt.toLocaleString('en-IN')+'</span>';
+
+      // Action button
+      var actionBtn = '';
+      if (hasDue) {
+        actionBtn = '<button style="flex-shrink:0;font-size:11px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:5px 10px;cursor:pointer;touch-action:manipulation;white-space:nowrap"'
+          + ' ontouchend="event.preventDefault();openQuickPay(\''+o.id+'\','+dueAmt+',\''+payMode+'\')"'
+          + ' onclick="openQuickPay(\''+o.id+'\','+dueAmt+',\''+payMode+'\')">'
+          + '&#128176; Collect</button>';
+      } else {
+        actionBtn = '<button style="flex-shrink:0;font-size:11px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;cursor:pointer;touch-action:manipulation"'
+          + ' ontouchend="event.preventDefault();openOrderDetail(\''+o.id+'\')"'
+          + ' onclick="openOrderDetail(\''+o.id+'\')">'
+          + '&#128196; View</button>';
+      }
+
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:0.5px solid var(--border)">'
+        // Checkbox circle — green if paid, amber if due
+        + '<div style="width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;'
+        + (hasDue?'background:#FEF3C7;color:#D97706;border:1.5px solid #FCD34D':'background:#F0FDF4;color:#059669;border:1.5px solid #86EFAC')
+        + '">'+(hasDue?'&#9679;':'&#10003;')+'</div>'
+        // Patient info
+        + '<div style="flex:1;min-width:0">'
+        + '<div style="display:flex;align-items:center;gap:6px">'
+        + '<span style="font-size:13px;font-weight:600;color:var(--text1)">'+esc(o.patientName||'-')+'</span>'
+        + '<span style="font-size:9px;font-family:var(--mono);font-weight:600;padding:1px 5px;border-radius:4px;'+badgeStyle+'">'+badge+'</span>'
+        + '</div>'
+        + '<div style="font-size:10px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+        + esc(testNames) + (cc>0?' · +Rs.'+cc+' coll.':'')
+        + '</div>'
+        + '<div style="margin-top:2px">'+amtDisplay+'</div>'
+        + '</div>'
+        // Action button
+        + actionBtn
+        + '</div>';
+    }).join('');
+
+    checklistHtml = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+      + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">&#9989; Delivered — Payment Checklist ('+deliveredOrders.length+')</div>'
+      + (totalDue>0?'<div style="font-size:12px;font-weight:600;color:#D97706">Rs.'+totalDue.toLocaleString('en-IN')+' pending</div>':'<div style="font-size:12px;font-weight:600;color:#059669">All paid &#10003;</div>')
+      + '</div>'
+      + rows
+      + '</div>';
+  }
+
+  el.innerHTML = activeHtml + checklistHtml;
 }
 
 // ── TIME TRACKING: patch fieldConfirm to save timestamps ─────────────────
@@ -2975,7 +3158,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.99';
+var APP_VERSION = 'v20.03';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4127,13 +4310,20 @@ function loadDues() {
     var listEl = document.getElementById('dash-dues');
     if (snap.empty) { card.style.display='none'; return; }
     var rows = [];
-    snap.forEach(function(d){ var o=Object.assign({id:d.id},d.data()); if(!o.reminderSuppressed) rows.push(o); });
+    snap.forEach(function(d){
+      var o=Object.assign({id:d.id},d.data());
+      if (o.reminderSuppressed) return;
+      // Credit orders (institutional billing) — only admin/manager/pathologist should see these
+      if (o.payMode==='credit' && !canSeeAll) return;
+      rows.push(o);
+    });
     if (!rows.length) { card.style.display='none'; return; }
     rows.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
     card.style.display='block';
     countEl.textContent = rows.length;
     listEl.innerHTML = rows.map(function(o){
-      var due = o.dueAmount>0 ? o.dueAmount : (o.netAmount||o.totalAmount||0);
+      var due = o.dueAmount > 0 ? o.dueAmount : 0;
+      if (due <= 0) return ''; // skip if no actual due
       var daysAgo = Math.floor((Date.now()-new Date(o.date).getTime())/86400000);
       var age = daysAgo===0?'Today':daysAgo===1?'Yesterday':daysAgo+'d ago';
       return '<div class="row" style="cursor:pointer" onclick="openOrderDetail(\''+o.id+'\')">'
@@ -4164,7 +4354,10 @@ function checkDuesReminder() {
       var dues = [];
       snap.forEach(function(d){
         var o = Object.assign({id:d.id},d.data());
-        if (!o.reminderSuppressed) dues.push(o);
+        if (o.reminderSuppressed) return;
+        // Never remind phlebotomist/reception about credit orders — those are institutional
+        if (o.payMode === 'credit') return;
+        dues.push(o);
       });
       if (!dues.length) return;
       dues.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
@@ -5703,7 +5896,7 @@ function submitOrder() {
     if (pCash > 0) modes.push('cash');
     if (pUpi > 0) modes.push('upi');
     if (pCard > 0) modes.push('card');
-    finalPayMode = modes.length === 1 ? modes[0] : (modes.length > 1 ? 'split' : 'cash');
+    finalPayMode = modes.length === 1 ? modes[0] : (modes.length > 1 ? 'split' : (paid > 0 ? 'cash' : 'pending'));
     splitPayments = (modes.length > 1) ? {cash: pCash, upi: pUpi, card: pCard} : null;
   }
   var order={
@@ -5729,7 +5922,7 @@ function submitOrder() {
     history: curOrder.history || {},
     date: todayStr(), createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     createdBy: curUser.uid, createdByName: (curProfile&&curProfile.name) || curUser.email,
-    status: creditMode ? 'pending' : 'paid',
+    status: (creditMode || dueAmt > 0) ? 'pending' : 'paid',
     hasDue: (dueAmt > 0 || creditMode) ? true : false,  // credit orders also get hasDue:true so they appear in dues list
     urgent: isUrgent || false,
     labStatus: 'registered',
@@ -6121,10 +6314,17 @@ function renderOrderDetail(o) {
     + (function(){
         var role = curProfile && curProfile.role || '';
         var isOwner = o.createdBy === (curUser && curUser.uid);
-        var hasDue = o.dueAmount > 0; // credit = institutional, handled separately by admin
-        var canCollect = hasDue && (isOwner || role==='admin' || role==='pathologist' || role==='manager' || role==='phlebotomist');
-        if (!canCollect) return '';
+        var hasDue = o.dueAmount > 0;
+        var isCredit = o.payMode === 'credit';
+        // Credit orders: only admin/pathologist/manager can collect — not phlebo/reception
+        var canCollect = hasDue && !isCredit && (isOwner || role==='admin' || role==='pathologist' || role==='manager' || role==='phlebotomist');
+        var canCollectCredit = hasDue && isCredit && (role==='admin' || role==='pathologist' || role==='manager');
+        if (!canCollect && !canCollectCredit) return '';
         var dueAmt = o.dueAmount > 0 ? o.dueAmount : (o.netAmount || o.totalAmount || 0);
+        if (canCollectCredit && !canCollect) {
+          // Admin-only credit collection button
+          return '<button class="btn" style="width:100%;margin-bottom:10px;border-color:#7C3AED;color:#7C3AED;font-weight:500" onclick="openCollectDue(\''+o.id+'\','+dueAmt+')">&#128196; Collect Credit Payment — Rs.'+dueAmt.toLocaleString('en-IN')+'</button>';
+        }
         // Instalment history
         var instalHtml = '';
         if (Array.isArray(o.duePayments) && o.duePayments.length > 0) {
@@ -6745,11 +6945,18 @@ function closeEditModal() {
 }
 
 function submitEditOrder() {
+  // Stop any in-progress recording before checking reason
+  if (_vrRecording) stopVoiceReason();
+
   var reason = document.getElementById('edit-reason').value.trim();
+  // Voice note alone satisfies the reason requirement — auto-fill fallback text
+  if (!reason && _vrAudioBlob) {
+    var langLabel = _vrLang === 'hi-IN' ? 'Hindi' : 'English';
+    reason = '[Voice note — ' + langLabel + ']';
+    document.getElementById('edit-reason').value = reason;
+  }
   if (!reason) { document.getElementById('err-edit-reason').classList.add('on'); return; }
   document.getElementById('err-edit-reason').classList.remove('on');
-  // Stop any in-progress recording before saving
-  if (_vrRecording) stopVoiceReason();
 
   var o = curDetailOrder;
   var name = document.getElementById('edit-name').value.trim() || o.patientName;
@@ -6792,7 +6999,7 @@ function submitEditOrder() {
     }
   }
   var total = editSelTests.reduce(function(s, t) { return s + (t.rate || 0); }, 0);
-  var netAmt = Math.max(0, total - disc);
+  var netAmt = Math.max(0, total + cc - disc);  // cc = collection charge, already read above
   var dueAmt = Math.max(0, netAmt - paid);
 
   // Build change summary for audit
@@ -6829,7 +7036,7 @@ function submitEditOrder() {
     patientName: name, phone: phone, age: age, sex: sex,
     refBy: ref, source: source, address: address,
     collectionCharge: cc, totalAmount: total + cc,
-    testTotal: total, notes: notes,
+    testTotal: total, netAmount: netAmt, notes: notes,
     tests: editSelTests, discount: disc,
     netAmount: netAmt, paidAmount: paid,
     dueAmount: dueAmt,
@@ -7062,7 +7269,14 @@ function downloadTRFpdf() {
   doc.setDrawColor(220,220,220); doc.line(ml, y, pw-mr, y); y += 5;
   doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(150,150,150);
   doc.text('Collected by: '+(o.createdByName||'-'), ml, y);
-  doc.text('Status: '+(o.status||'paid').toUpperCase(), pw-mr, y, {align:'right'});
+  var _trf_status = (function() {
+    if (o.status === 'draft') return 'DRAFT';
+    if (o.payMode === 'credit' && o.status === 'pending') return 'CREDIT';
+    if ((o.dueAmount||0) > 0 && (o.paidAmount||0) > 0) return 'PARTIAL';
+    if ((o.dueAmount||0) > 0 && (o.paidAmount||0) === 0) return 'DUE';
+    return 'PAID';
+  })();
+  doc.text('Status: '+_trf_status, pw-mr, y, {align:'right'});
   y += 5;
   if(o.lastEditedBy) doc.text('Last edited by: '+o.lastEditedBy+' at '+o.lastEditedAt, ml, y);
 

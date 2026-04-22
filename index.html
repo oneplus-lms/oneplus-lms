@@ -2075,14 +2075,7 @@ function routeAfterPin(role) {
   if (vspan) vspan.textContent = APP_VERSION;
 
   if (role === 'phlebotomist') {
-    goTo('s-dash', false); stack=['s-dash'];
-    loadDash();
-    var fieldBtnP = document.getElementById('field-btn');
-    var adminBtnP = document.getElementById('admin-btn');
-    var reviewBtnP = document.getElementById('review-btn');
-    if (fieldBtnP) fieldBtnP.style.display = 'block';
-    if (adminBtnP) adminBtnP.style.display = 'none';
-    if (reviewBtnP) reviewBtnP.style.display = 'none';
+    // Phlebotomists go directly to their own dashboard — never s-dash
     goTo('s-phlebo', false); stack=['s-phlebo']; startPhleboDash();
   } else if (role === 'senior_lab') {
     goTo('s-dash', false); stack=['s-dash'];
@@ -2938,7 +2931,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.92';
+var APP_VERSION = 'v19.93';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3095,6 +3088,10 @@ function showScreen(id) {
   if (id !== 's-assign' && assignUnsub) { assignUnsub(); assignUnsub=null; }
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   document.getElementById(id).classList.add('active');
+  // Phlebotomists should never land on s-dash — redirect to their own screen
+  if (id === 's-dash' && curProfile && curProfile.role === 'phlebotomist') {
+    showScreen('s-phlebo'); startPhleboDash(); return;
+  }
   if (id === 's-orders') { ordersDateOffset=0; loadOrders(); }
   if (id === 's-order-detail') {} // loaded by openOrderDetail()
   if (id === 's-ho') loadHO();

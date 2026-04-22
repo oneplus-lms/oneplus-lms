@@ -814,7 +814,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="done-sub" id="done-id">Synced to Firebase</div>
     <div id="done-instructions" style="width:100%;max-width:320px"></div>
     <div id="done-prep-wa" style="display:none;width:100%;max-width:260px;margin-bottom:0"></div>
-    <button class="btn btn-primary" style="max-width:260px" onclick="goTo('s-dash')">Back to Dashboard</button>
+    <button class="btn btn-primary" style="max-width:260px" onclick="goTo(curProfile&&curProfile.role==='phlebotomist'?'s-phlebo':'s-dash')">Back to Dashboard</button>
     <div style="height:8px"></div>
     <button class="btn" id="done-trf-btn" style="max-width:260px;color:var(--accent);border-color:var(--accent)" onclick="openTRFFromDone()">&#128196; PDF / Share TRF</button>
     <div style="height:8px"></div>
@@ -2624,14 +2624,37 @@ fieldConfirm = function() {
   if (action === 'deliver') update.deliveredAt = firebase.firestore.FieldValue.serverTimestamp();
   if (notes) update.fieldNotes = notes;
   if (action==='collect' && _fieldGPS) { update.gps=_fieldGPS; _fieldGPS=null; }
+  // Fasting and medication history from pre-collection checklist
+  if (action==='collect') {
+    if (_fieldFasting !== null) update['history.fastingConfirmed'] = _fieldFasting;
+    if (_fieldMedComplied !== null) update['history.medComplied'] = _fieldMedComplied;
+    update['history.collectionTime'] = timeStr;
+    update['history.collectedBy'] = byName;
+    if (_fieldFasting === false) {
+      update.fieldNotes = (notes ? notes + ' | ' : '') + 'NON-FASTING — result may be invalid';
+    }
+  }
+  // Payment collection at field
   if (action==='collect' && _fieldPayMode && _fieldPayMode!=='skip') {
-    var _amt=parseFloat(document.getElementById('field-pay-amt').value)||fieldPendingAction.dueAmount||0;
-    update.paidAmount=_amt; update.dueAmount=0; update.hasDue=false; update.status='paid';
-    update.payMode=_fieldPayMode; update.collectedByPhlebo=byName;
-    _fieldPayMode=null;
+    var _amt = parseFloat(document.getElementById('field-pay-amt').value) || fieldPendingAction.dueAmount || 0;
+    var _fo = fieldOrders && fieldOrders.find(function(o){ return o.id === orderId; });
+    var _oldPaid = (_fo && _fo.paidAmount) || 0;
+    var _oldDue  = (_fo && _fo.dueAmount)  || 0;
+    var _newPaid = _oldPaid + _amt;
+    var _newDue  = Math.max(0, _oldDue - _amt);
+    update.paidAmount    = _newPaid;
+    update.dueAmount     = _newDue;
+    update.hasDue        = _newDue > 0;
+    update.status        = _newDue <= 0 ? 'paid' : 'pending';
+    update.payMode       = _fieldPayMode;
+    update.collectedByPhlebo = byName;
+    update.dueCollectedAt    = firebase.firestore.FieldValue.serverTimestamp();
+    update.dueCollectedByName = byName;
+    update.dueCollectedMode  = _fieldPayMode;
+    update.dueCollectedAmt   = _amt;
+    _fieldPayMode = null;
   }
   closeFieldModal();
-  // Fetch order data for urgent WA check (use fieldOrders if available)
   var _phleboUrgentOrder = fieldOrders && fieldOrders.find(function(o){ return o.id === orderId; });
   db.collection('orders').doc(orderId).update(update)
     .then(function(){
@@ -2931,7 +2954,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.93';
+var APP_VERSION = 'v19.94';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3086,12 +3109,12 @@ function showScreen(id) {
   if (id !== 's-ho' && hoUnsubscribe) { hoUnsubscribe(); hoUnsubscribe=null; }
   if (id !== 's-field' && fieldUnsubscribe) { fieldUnsubscribe(); fieldUnsubscribe=null; }
   if (id !== 's-assign' && assignUnsub) { assignUnsub(); assignUnsub=null; }
-  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
-  document.getElementById(id).classList.add('active');
-  // Phlebotomists should never land on s-dash — redirect to their own screen
+  // Phlebotomists should never land on s-dash — redirect before any rendering
   if (id === 's-dash' && curProfile && curProfile.role === 'phlebotomist') {
     showScreen('s-phlebo'); startPhleboDash(); return;
   }
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
   if (id === 's-orders') { ordersDateOffset=0; loadOrders(); }
   if (id === 's-order-detail') {} // loaded by openOrderDetail()
   if (id === 's-ho') loadHO();
@@ -3177,7 +3200,7 @@ function goBack() {
     }
   }
   if (stack.length > 1) stack.pop();
-  var prev = stack[stack.length-1] || 's-dash';
+  var prev = stack[stack.length-1] || (curProfile&&curProfile.role==='phlebotomist' ? 's-phlebo' : 's-dash');
   showScreen(prev);
   // After going back, push a fresh sentinel so the NEXT back press
   // is also caught — without this, back would exit after one goBack().
@@ -5686,7 +5709,7 @@ function submitOrder() {
     date: todayStr(), createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     createdBy: curUser.uid, createdByName: (curProfile&&curProfile.name) || curUser.email,
     status: creditMode ? 'pending' : 'paid',
-    hasDue: (creditMode || dueAmt > 0) ? true : false,
+    hasDue: dueAmt > 0 ? true : false,  // credit orders tracked by payMode==='credit', not hasDue
     urgent: isUrgent || false,
     labStatus: 'registered',
     fieldAssignedToUid:  curOrder.fieldAssignedToUid  || curOrder._fieldAssignedToUid  || null,
@@ -6077,7 +6100,7 @@ function renderOrderDetail(o) {
     + (function(){
         var role = curProfile && curProfile.role || '';
         var isOwner = o.createdBy === (curUser && curUser.uid);
-        var hasDue = (o.dueAmount > 0) || o.payMode === 'credit';
+        var hasDue = o.dueAmount > 0; // credit = institutional, handled separately by admin
         var canCollect = hasDue && (isOwner || role==='admin' || role==='pathologist' || role==='manager' || role==='phlebotomist');
         if (!canCollect) return '';
         var dueAmt = o.dueAmount > 0 ? o.dueAmount : (o.netAmount || o.totalAmount || 0);
@@ -7465,7 +7488,12 @@ function renderFieldTasks(orders) {
       // Order creation time — bottom of card for reference
       + (function(){
           if (!o.createdAt) return '';
-          var _d = o.createdAt.toDate ? o.createdAt.toDate() : new Date(o.createdAt.seconds*1000);
+          // Guard against pending serverTimestamp (null-ish object before server resolves)
+          var _d = null;
+          try {
+            _d = o.createdAt.toDate ? o.createdAt.toDate() : (o.createdAt.seconds ? new Date(o.createdAt.seconds*1000) : null);
+          } catch(e) { _d = null; }
+          if (!_d || isNaN(_d.getTime())) return '';
           var _t = _d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
           var _dt = _d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
           var _isToday = _dt === new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
@@ -7756,10 +7784,10 @@ function fieldActionIdx(idx, action) {
   if (_fps && action==='collect' && (_fo.status==='pending'||(_fo.dueAmount&&_fo.dueAmount>0))) {
     _fps.style.display='block';
     var _fpa=document.getElementById('field-pay-amt');
-    if(_fpa){_fpa.style.display='none';_fpa.value='';_fpa.placeholder='Amount: Rs.'+(_fo.netAmount||_fo.totalAmount||0);}
+    var _foDue=(_fo.dueAmount>0)?_fo.dueAmount:(_fo.netAmount||_fo.totalAmount||0); if(_fpa){_fpa.style.display='none';_fpa.value=_foDue;_fpa.placeholder='Amount: Rs.'+_foDue;}
     _fieldPayMode=null;
     ['fpay-cash','fpay-upi','fpay-skip'].forEach(function(b){var el=document.getElementById(b);if(el)el.className='tog';});
-    fieldPendingAction.dueAmount=_fo.netAmount||_fo.totalAmount||0;
+    fieldPendingAction.dueAmount=(_fo.dueAmount>0)?_fo.dueAmount:(_fo.netAmount||_fo.totalAmount||0);
   } else if (_fps) { _fps.style.display='none'; }
   if (action === 'collect') {
     title.textContent = 'Mark Sample Collected';

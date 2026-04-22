@@ -1172,6 +1172,8 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         </select>
       </div>
       <div class="field"><label>Cash Amount (Rs.)</label><input type="number" id="ho-amt" placeholder="0" inputmode="numeric"></div>
+      <!-- Order preview — populated by loadHO -->
+      <div id="ho-order-preview" style="display:none;margin-bottom:12px"></div>
       <div class="field"><label>Notes</label><input type="text" id="ho-notes" placeholder="Shift end, remarks..."></div>
       <button class="btn btn-primary" id="ho-submit-btn" onclick="submitHandover()">Initiate Handover →</button>
     </div>
@@ -1414,6 +1416,11 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
     <div id="ph-late-alert" style="display:none;background:#FEE2E2;border-bottom:1px solid #FCA5A5;padding:10px 16px;font-size:13px;font-weight:600;color:#991B1B">
       &#128680; Urgent task overdue (30+ min) — collect immediately
+    </div>
+    <!-- Dues to collect today -->
+    <div id="ph-dues-section" style="display:none;background:#FFFBEB;border-bottom:1px solid #FCD34D;padding:10px 16px">
+      <div style="font-size:10px;font-family:var(--mono);color:#92400E;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">&#128176; Pending dues — collect today</div>
+      <div id="ph-dues-list"></div>
     </div>
     <div style="padding:12px 16px">
       <div id="phlebo-task-list"><div class="empty">Loading your tasks...</div></div>
@@ -2250,6 +2257,12 @@ function _slUpdateUrgent(snap) {
 
 // ── PHLEBOTOMIST DASHBOARD ────────────────────────────────────────────────
 var phleboDashUnsub = null;
+
+function _phDueCollect(btn) {
+  var id  = btn.getAttribute('data-id');
+  var due = parseFloat(btn.getAttribute('data-due')) || 0;
+  openCollectDue(id, due);
+}
 var URGENT_LATE_MINS = 30;
 
 function startPhleboDash() {
@@ -2281,6 +2294,45 @@ function startPhleboDash() {
       });
       renderPhleboDash(orders);
     });
+
+  // Load pending dues for this phlebo — all orders where they can collect
+  db.collection('orders')
+    .where('date','==',today)
+    .where('hasDue','==',true)
+    .get().then(function(snap) {
+      var dues = [];
+      snap.forEach(function(d) {
+        var o = Object.assign({id:d.id}, d.data());
+        if (o.status === 'draft') return;
+        // Phlebo can collect if: assigned to them, created by them, or walk-in with due
+        var assignedToMe = o.fieldAssignedToUid === myUid;
+        var createdByMe  = o.createdBy === myUid;
+        if (assignedToMe || createdByMe) dues.push(o);
+      });
+      var sec = document.getElementById('ph-dues-section');
+      var list = document.getElementById('ph-dues-list');
+      if (!sec || !list) return;
+      if (!dues.length) { sec.style.display = 'none'; return; }
+      sec.style.display = 'block';
+      list.innerHTML = dues.map(function(o) {
+        var due = o.dueAmount > 0 ? o.dueAmount : (o.netAmount || o.totalAmount || 0);
+        return '<div style="display:flex;justify-content:space-between;align-items:center;'
+          + 'padding:7px 0;border-bottom:0.5px solid #FCD34D">'
+          + '<div>'
+          + '<div style="font-size:13px;font-weight:500;color:var(--text1)">' + esc(o.patientName||'-') + '</div>'
+          + '<div style="font-size:10px;color:var(--text3);font-family:var(--mono)">'
+          + esc((o.tests||[]).map(function(t){return t.shortCode||t.name;}).slice(0,3).join(', '))
+          + '</div>'
+          + '</div>'
+          + '<button style="font-size:12px;font-weight:600;color:#92400E;background:#FEF3C7;'
+          + 'border:1px solid #FCD34D;border-radius:8px;padding:5px 12px;cursor:pointer;'
+          + 'white-space:nowrap;touch-action:manipulation"'
+          + ' data-id="' + o.id + '" data-due="' + due + '"'
+          + ' ontouchend="event.preventDefault();_phDueCollect(this)" onclick="_phDueCollect(this)">' 
+          + 'Rs.' + due.toLocaleString('en-IN') + ' Collect</button>'
+          + '</div>';
+      }).join('');
+    }).catch(function(){});
 }
 
 // ── PHLEBO COLLECTION GUIDE ──────────────────────────────────────────────
@@ -2886,7 +2938,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.90';
+var APP_VERSION = 'v19.92';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -6029,7 +6081,7 @@ function renderOrderDetail(o) {
         var role = curProfile && curProfile.role || '';
         var isOwner = o.createdBy === (curUser && curUser.uid);
         var hasDue = (o.dueAmount > 0) || o.payMode === 'credit';
-        var canCollect = hasDue && (isOwner || role==='admin' || role==='pathologist' || role==='manager');
+        var canCollect = hasDue && (isOwner || role==='admin' || role==='pathologist' || role==='manager' || role==='phlebotomist');
         if (!canCollect) return '';
         var dueAmt = o.dueAmount > 0 ? o.dueAmount : (o.netAmount || o.totalAmount || 0);
         return '<button class="btn" style="width:100%;margin-bottom:10px;border-color:#D97706;color:#D97706;font-weight:500" onclick="openCollectDue(\''+o.id+'\','+dueAmt+')">&#128176; Collect Due Payment — Rs.'+dueAmt.toLocaleString('en-IN')+'</button>'
@@ -7892,6 +7944,64 @@ function loadHO() {
     document.getElementById('ho-upi').textContent='Rs.'+upi.toLocaleString('en-IN');
     document.getElementById('ho-credit').textContent='Rs.'+credit.toLocaleString('en-IN');
     document.getElementById('ho-amt').value=cash;
+
+    // Build order preview list for the handover form
+    var previewOrders = [];
+    snap.forEach(function(d) {
+      var o = d.data();
+      if (o.status === 'draft') return;
+      if (_hoIsPhlebo && o.createdBy !== _hoMyUid) return;
+      var cashAmt = 0;
+      if (o.payMode === 'split' && o.splitPayments) cashAmt = o.splitPayments.cash || 0;
+      else if (o.payMode === 'cash') cashAmt = o.paidAmount || 0;
+      var colCharge = (o.source !== 'Walk-in') ? (o.collectionCharge || 0) : 0;
+      var total = cashAmt + colCharge;
+      if (total > 0) previewOrders.push({
+        serial: o.serial || d.id.slice(-6).toUpperCase(),
+        name: o.patientName || '-',
+        tests: (o.tests||[]).map(function(t){return t.shortCode||t.name;}).slice(0,3).join(', '),
+        cashAmt: cashAmt,
+        colCharge: colCharge,
+        total: total,
+        payMode: o.payMode || 'cash'
+      });
+    });
+    previewOrders.sort(function(a,b){ return (b.serial||'').localeCompare(a.serial||''); });
+
+    var prev = document.getElementById('ho-order-preview');
+    if (!previewOrders.length) {
+      prev.style.display = 'none';
+    } else {
+      var rows = previewOrders.map(function(o) {
+        var modeTag = o.payMode === 'split'
+          ? '<span style="font-size:9px;background:#FEF3C7;color:#92400E;border-radius:3px;padding:1px 5px;margin-left:4px">SPLIT</span>'
+          : '';
+        var colLine = o.colCharge > 0
+          ? ' <span style="color:var(--text3);font-size:10px">+Rs.'+o.colCharge+' coll.</span>' : '';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border)">'
+          + '<div style="flex:1;min-width:0">'
+          + '<div style="font-size:12px;font-weight:500;color:var(--text1)">'
+          + esc(o.name)
+          + modeTag
+          + '</div>'
+          + '<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+          + esc(o.tests||'-') + '</div>'
+          + '</div>'
+          + '<div style="font-size:13px;font-weight:600;color:var(--accent);margin-left:10px;white-space:nowrap">'
+          + 'Rs.'+o.total.toLocaleString('en-IN')
+          + colLine
+          + '</div>'
+          + '</div>';
+      }).join('');
+      prev.innerHTML = '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
+        + '&#128196; Orders included ('+previewOrders.length+')</div>'
+        + rows
+        + '<div style="display:flex;justify-content:space-between;padding-top:6px;font-size:12px;font-weight:600">'
+        + '<span style="color:var(--text2)">Total cash</span>'
+        + '<span style="color:var(--accent)">Rs.'+cash.toLocaleString('en-IN')+'</span>'
+        + '</div>';
+      prev.style.display = 'block';
+    }
   }).catch(function(){});
 
   // Real-time listener for today's handovers (for pending detection)

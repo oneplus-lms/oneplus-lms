@@ -2561,9 +2561,11 @@ function renderPhleboDash(orders) {
     }
 
     var cardBg = o.urgent && !isCollected && !isDelivered ? 'background:#FFF5F5;border-color:#FCA5A5' : 'background:var(--surface);border-color:var(--border)';
+    var hasDue = (o.hasDue || (o.dueAmount||0) > 0);
+    var dueAmt = o.dueAmount > 0 ? o.dueAmount : (o.netAmount||o.totalAmount||0);
 
     return '<div style="'+cardBg+';border:1px solid;border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">'
-      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;cursor:pointer" ontouchend="event.preventDefault();openOrderDetail(\''+o.id+'\')" onclick="openOrderDetail(\''+o.id+'\')" >'
       + '<div style="font-size:16px;font-weight:600">'+esc(o.patientName||'-')+'</div>'
       + '<span style="font-size:10px;font-family:var(--mono);font-weight:700;color:'+statusColor+';background:'+statusColor+'18;border-radius:10px;padding:3px 8px;white-space:nowrap;margin-left:8px">'+statusLabel+'</span>'
       + '</div>'
@@ -2589,7 +2591,12 @@ function renderPhleboDash(orders) {
       + '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">'+esc((o.tests||[]).slice(0,3).map(function(t){return t.shortCode||t.name;}).join(' · '))+((o.tests||[]).length>3?' +'+((o.tests||[]).length-3)+' more':'')+'</div>'
       + (collectionGuide||'')
       + (o.collectionCharge>0?'<div style="font-size:11px;font-family:var(--mono);color:var(--accent);margin-bottom:8px">&#128176; Collection charge: Rs.'+o.collectionCharge+'</div>':'')
-      + (actions?'<div style="display:flex;gap:8px">'+actions+'</div>':'')
+      + (actions?'<div style="display:flex;gap:8px;margin-bottom:8px">'+actions+'</div>':'')
+      + (isDelivered
+          ? (hasDue
+              ? '<button style="width:100%;font-size:12px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:8px;cursor:pointer;touch-action:manipulation" ontouchend="event.preventDefault();_phDueCollect(this)" onclick="_phDueCollect(this)" data-id="'+o.id+'" data-due="'+dueAmt+'">&#128176; Collect Due — Rs.'+dueAmt.toLocaleString('en-IN')+'</button>'
+              : '<button style="width:100%;font-size:12px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;cursor:pointer;touch-action:manipulation" ontouchend="event.preventDefault();openOrderDetail(\''+o.id+'\')" onclick="openOrderDetail(\''+o.id+'\')" >&#128196; View Order</button>')
+          : '')
       + '</div>';
   }).join('');
 }
@@ -2968,7 +2975,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.97';
+var APP_VERSION = 'v19.99';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -6118,7 +6125,25 @@ function renderOrderDetail(o) {
         var canCollect = hasDue && (isOwner || role==='admin' || role==='pathologist' || role==='manager' || role==='phlebotomist');
         if (!canCollect) return '';
         var dueAmt = o.dueAmount > 0 ? o.dueAmount : (o.netAmount || o.totalAmount || 0);
-        return '<button class="btn" style="width:100%;margin-bottom:10px;border-color:#D97706;color:#D97706;font-weight:500" onclick="openCollectDue(\''+o.id+'\','+dueAmt+')">&#128176; Collect Due Payment — Rs.'+dueAmt.toLocaleString('en-IN')+'</button>'
+        // Instalment history
+        var instalHtml = '';
+        if (Array.isArray(o.duePayments) && o.duePayments.length > 0) {
+          var rows = o.duePayments.map(function(p,i) {
+            var d = p.at ? new Date(p.at) : null;
+            var ds = d ? d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '-';
+            return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border)">'
+              +'<span style="color:var(--text3)">'+(i+1)+'. '+esc(p.byName||'-')+' · '+ds+'</span>'
+              +'<span style="font-weight:600;color:var(--accent)">Rs.'+(p.amt||0).toLocaleString('en-IN')+' '+(p.mode||'cash').toUpperCase()+'</span>'
+              +'</div>';
+          }).join('');
+          var totalPaid = o.duePayments.reduce(function(s,p){ return s+(p.amt||0); },0);
+          instalHtml = '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:10px">'
+            +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:6px">Payment instalments · Rs.'+totalPaid.toLocaleString('en-IN')+' collected</div>'
+            + rows
+            +'</div>';
+        }
+        return instalHtml
+          + '<button class="btn" style="width:100%;margin-bottom:10px;border-color:#D97706;color:#D97706;font-weight:500" onclick="openCollectDue(\''+o.id+'\','+dueAmt+')">&#128176; Collect Due — Rs.'+dueAmt.toLocaleString('en-IN')+' remaining</button>'
           + (function(){
               var role2 = curProfile && curProfile.role || '';
               if (role2!=='admin' && role2!=='pathologist') return '';
@@ -7254,17 +7279,33 @@ async function submitCollectDue() {
     var now = new Date();
     var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
 
+    // Build instalment record
+    var instalment = {
+      amt:    amt,
+      mode:   _cDuePayMode,
+      byUid:  curUser && curUser.uid,
+      byName: byName,
+      at:     new Date().toISOString()
+    };
+
+    // Append to existing duePayments array (or start new one)
+    var existingInstalments = Array.isArray(o.duePayments) ? o.duePayments : [];
+    existingInstalments.push(instalment);
+
     var update = {
-      paidAmount: newPaid,
-      dueAmount: newDue,
-      status: newStatus,
-      hasDue: newDue > 0,
-      payMode: newDue <= 0 ? _cDuePayMode : 'credit',
-      dueCollectedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      dueCollectedBy: curUser && curUser.uid,
+      paidAmount:       newPaid,
+      dueAmount:        newDue,
+      status:           newStatus,
+      hasDue:           newDue > 0,
+      payMode:          newDue <= 0 ? _cDuePayMode : o.payMode || 'credit',
+      // Keep last collection details for quick reference
+      dueCollectedAt:   firebase.firestore.FieldValue.serverTimestamp(),
+      dueCollectedBy:   curUser && curUser.uid,
       dueCollectedByName: byName,
       dueCollectedMode: _cDuePayMode,
-      dueCollectedAmt: amt
+      dueCollectedAmt:  amt,
+      // Full instalment history — never overwritten
+      duePayments:      existingInstalments
     };
     await db.collection('orders').doc(_cDueOrderId).update(update);
     toast('Payment of Rs.' + amt.toLocaleString('en-IN') + ' recorded ✓', 'ok');
@@ -7503,12 +7544,13 @@ function completeBookingSubmit(orderId) {
 // ─────────────────────────────────────────────────────────────────────────
 
 function renderFieldTasks(orders) {
-  var total = orders.length;
-  var done = orders.filter(function(o){ return o.fieldStatus === 'collected'; }).length;
-  var pending = total - done;
-  document.getElementById('field-total').textContent = total;
+  var total     = orders.length;
+  var collected = orders.filter(function(o){ return o.fieldStatus === 'collected'; }).length;
+  var delivered = orders.filter(function(o){ return o.fieldStatus === 'delivered'; }).length;
+  var pending   = total - collected - delivered;
+  document.getElementById('field-total').textContent   = total;
   document.getElementById('field-pending').textContent = pending;
-  document.getElementById('field-done').textContent = done;
+  document.getElementById('field-done').textContent    = collected;
 
   var el = document.getElementById('field-list');
   if (!total) { el.innerHTML = '<div class="empty" style="margin-top:24px">No home collection orders today</div>'; return; }
@@ -8184,18 +8226,38 @@ function loadHO() {
       var collDate = collAt.getFullYear()+'-'+String(collAt.getMonth()+1).padStart(2,'0')+'-'+String(collAt.getDate()).padStart(2,'0');
       if (collDate !== today) return;
 
-      var mode = o.dueCollectedMode || 'cash';
-      var amt  = o.dueCollectedAmt || 0;
-      if (mode === 'cash')       cash += amt;
-      else if (mode === 'upi' || mode === 'card') upi += amt;
+      // Sum all instalments paid today (duePayments array)
+      var todayInstalments = [];
+      if (Array.isArray(o.duePayments)) {
+        o.duePayments.forEach(function(p) {
+          if (!p.at) return;
+          var pDate = p.at.substring(0,10); // ISO date YYYY-MM-DD
+          if (pDate !== today) return;
+          if (_hoIsPhlebo && p.byUid !== _hoMyUid) return;
+          todayInstalments.push(p);
+          if (p.mode === 'cash')           cash += (p.amt||0);
+          else if (p.mode === 'upi' || p.mode === 'card') upi += (p.amt||0);
+        });
+      } else if (o.dueCollectedAmt > 0) {
+        // Legacy: single dueCollectedAmt field
+        var mode = o.dueCollectedMode || 'cash';
+        var amt  = o.dueCollectedAmt || 0;
+        if (mode === 'cash') cash += amt;
+        else if (mode === 'upi' || mode === 'card') upi += amt;
+        todayInstalments.push({amt:amt, mode:mode});
+      }
+
+      if (!todayInstalments.length) return;
+      var totalToday = todayInstalments.reduce(function(s,p){ return s+(p.amt||0); },0);
+      var cashToday  = todayInstalments.filter(function(p){ return p.mode==='cash'; }).reduce(function(s,p){ return s+(p.amt||0); },0);
 
       previewOrders.push({
         serial: o.serial || d.id.slice(-6).toUpperCase(),
         name: o.patientName || '-',
         tests: (o.tests||[]).map(function(t){return t.shortCode||t.name;}).slice(0,3).join(', '),
-        cashAmt: mode === 'cash' ? amt : 0,
-        colCharge: 0, total: mode === 'cash' ? amt : 0,
-        payMode: mode, dueRow: true, dueAmt: amt
+        cashAmt: cashToday, colCharge: 0, total: cashToday,
+        payMode: todayInstalments.length > 1 ? 'instalments' : (todayInstalments[0].mode||'cash'),
+        dueRow: true, dueAmt: totalToday
       });
     });
 

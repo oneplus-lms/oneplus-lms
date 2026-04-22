@@ -964,7 +964,21 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div id="edit-reason-section">
     <div class="edit-section-lbl">Reason for Edit <span style="color:var(--red)">*</span></div>
     <div class="field">
-      <input type="text" id="edit-reason" placeholder="e.g. Wrong test added, payment mode corrected...">
+      <input type="text" id="edit-reason" placeholder="Type reason, or use mic below...">
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+        <button id="voice-reason-btn" type="button"
+          style="flex-shrink:0;width:42px;height:42px;border-radius:50%;border:1.5px solid var(--border-strong);background:var(--surface);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;touch-action:manipulation"
+          ontouchend="event.preventDefault();toggleVoiceReason()"
+          onclick="toggleVoiceReason()"
+          title="Record voice note">&#127908;</button>
+        <button id="voice-lang-btn" type="button"
+          style="flex-shrink:0;height:32px;padding:0 10px;border-radius:16px;border:1.5px solid var(--border-strong);background:var(--surface);font-size:11px;font-family:var(--mono);font-weight:600;cursor:pointer;touch-action:manipulation;color:var(--text2)"
+          ontouchend="event.preventDefault();toggleVoiceLang()"
+          onclick="toggleVoiceLang()"
+          title="Toggle language">EN</button>
+        <span style="font-size:11px;color:var(--text3)">Speak reason or type above</span>
+      </div>
+      <div id="voice-reason-status" style="display:none;margin-top:6px;font-size:11px;font-family:var(--mono);color:var(--text3);align-items:center;gap:6px"></div>
       <div class="ferr" id="err-edit-reason">Reason is required</div>
     </div>
     </div>
@@ -2954,7 +2968,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v19.95';
+var APP_VERSION = 'v19.97';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -6559,10 +6573,158 @@ function onEditSplitInput() {
   else { status.textContent='Overpaid by Rs.'+Math.abs(due).toLocaleString('en-IN'); status.style.background='rgba(239,68,68,0.1)'; status.style.color='var(--red,#EF4444)'; }
 }
 
+// ── VOICE REASON ──────────────────────────────────────────────────────
+var _vrRecorder    = null;
+var _vrChunks      = [];
+var _vrAudioBlob   = null;
+var _vrRecording   = false;
+var _vrStartTime   = 0;
+var _vrRecognition = null;
+var _vrLang        = 'en-IN';  // toggled between en-IN and hi-IN
+var VR_MIN_SECS    = 3;        // discard recordings shorter than this
+
+function toggleVoiceLang() {
+  _vrLang = (_vrLang === 'en-IN') ? 'hi-IN' : 'en-IN';
+  var btn = document.getElementById('voice-lang-btn');
+  if (btn) btn.textContent = _vrLang === 'hi-IN' ? 'हि' : 'EN';
+}
+
+function toggleVoiceReason() {
+  if (_vrRecording) { stopVoiceReason(); } else { startVoiceReason(); }
+}
+
+function startVoiceReason() {
+  var btn    = document.getElementById('voice-reason-btn');
+  var status = document.getElementById('voice-reason-status');
+  _vrChunks = []; _vrAudioBlob = null;
+
+  // Web Speech API — live transcription into text field
+  var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SpeechRec) {
+    _vrRecognition = new SpeechRec();
+    _vrRecognition.lang = _vrLang;
+    _vrRecognition.continuous = true;
+    _vrRecognition.interimResults = true;
+    var baseText = document.getElementById('edit-reason').value.trim();
+    var finalTranscript = '';
+    _vrRecognition.onresult = function(e) {
+      var interim = '';
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript + ' ';
+        else interim += e.results[i][0].transcript;
+      }
+      var combined = (baseText ? baseText + ' ' : '') + finalTranscript + interim;
+      document.getElementById('edit-reason').value = combined.trim();
+    };
+    _vrRecognition.onerror = function(e) { console.warn('SR error:', e.error); };
+    try { _vrRecognition.start(); } catch(e) {}
+  }
+
+  // MediaRecorder — for audit trail audio file
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+    var mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus' : 'audio/webm';
+    _vrRecorder = new MediaRecorder(stream, { mimeType: mime });
+    _vrRecorder.ondataavailable = function(e) { if (e.data.size > 0) _vrChunks.push(e.data); };
+    _vrRecorder.onstop = function() {
+      stream.getTracks().forEach(function(t){ t.stop(); });
+      var durSecs = (Date.now() - _vrStartTime) / 1000;
+      _vrRecording = false;
+      _resetVrBtn();
+      if (durSecs < VR_MIN_SECS) {
+        // Too short — discard silently
+        _vrAudioBlob = null;
+        if (status) { status.style.display = 'none'; }
+        toast('Voice note too short — type reason or hold mic longer', 'warn');
+        return;
+      }
+      _vrAudioBlob = new Blob(_vrChunks, { type: mime });
+      var dur = Math.round(durSecs);
+      if (status) {
+        status.style.display = 'flex';
+        status.innerHTML = '&#10003; Voice note ' + dur + 's ('
+          + (_vrLang === 'hi-IN' ? 'Hindi' : 'English')
+          + ') — attached to audit log';
+      }
+    };
+    _vrRecorder.start();
+    _vrRecording = true;
+    _vrStartTime = Date.now();
+    if (btn) {
+      btn.style.background = '#FEE2E2';
+      btn.style.borderColor = '#FCA5A5';
+      btn.style.color = '#DC2626';
+      btn.innerHTML = '&#9209;';
+    }
+    if (status) {
+      var langLabel = _vrLang === 'hi-IN' ? 'हिन्दी' : 'English';
+      status.style.display = 'flex';
+      status.innerHTML = '<span style="color:#DC2626">&#9679;</span> Recording in '
+        + langLabel + '... tap &#9209; to stop';
+    }
+    // Auto-stop after 60s
+    setTimeout(function(){ if (_vrRecording) stopVoiceReason(); }, 60000);
+  }).catch(function(err) {
+    toast('Microphone unavailable: ' + err.message, 'warn');
+  });
+}
+
+function stopVoiceReason() {
+  if (_vrRecognition) { try { _vrRecognition.stop(); } catch(e){} _vrRecognition = null; }
+  if (_vrRecorder && _vrRecording) { _vrRecorder.stop(); }
+}
+
+function _resetVrBtn() {
+  var btn = document.getElementById('voice-reason-btn');
+  if (btn) {
+    btn.style.background = 'var(--surface)';
+    btn.style.borderColor = 'var(--border-strong)';
+    btn.style.color = '';
+    btn.innerHTML = '&#127908;';
+  }
+}
+
+function resetVoiceReason() {
+  _vrChunks = []; _vrAudioBlob = null; _vrRecording = false; _vrStartTime = 0;
+  if (_vrRecognition) { try { _vrRecognition.stop(); } catch(e){} _vrRecognition = null; }
+  _resetVrBtn();
+  var status = document.getElementById('voice-reason-status');
+  if (status) { status.style.display = 'none'; status.innerHTML = ''; }
+  // Reset lang toggle to EN
+  _vrLang = 'en-IN';
+  var lb = document.getElementById('voice-lang-btn');
+  if (lb) lb.textContent = 'EN';
+}
+
+async function uploadVoiceReason(orderId) {
+  // Only upload if blob exists AND is above minimum size (3s ≈ 36KB at 96kbps)
+  if (!_vrAudioBlob || !orderId) return null;
+  if (_vrAudioBlob.size < 3000) return null; // extra safety check
+  try {
+    var ext  = _vrAudioBlob.type.includes('webm') ? 'webm' : 'mp3';
+    var path = 'voice_reasons/' + orderId + '_' + Date.now() + '.' + ext;
+    var ref  = firebase.storage().ref(path);
+    await ref.put(_vrAudioBlob, { contentType: _vrAudioBlob.type });
+    return await ref.getDownloadURL();
+  } catch(e) {
+    console.warn('Voice upload failed:', e);
+    return null;
+  }
+}
+
+function closeEditModal() {
+  var bg = document.getElementById('edit-modal-bg');
+  bg.classList.remove('open');
+  setTimeout(function() { bg.style.display = 'none'; }, 280);
+  resetVoiceReason();
+}
+
 function submitEditOrder() {
   var reason = document.getElementById('edit-reason').value.trim();
   if (!reason) { document.getElementById('err-edit-reason').classList.add('on'); return; }
   document.getElementById('err-edit-reason').classList.remove('on');
+  // Stop any in-progress recording before saving
+  if (_vrRecording) stopVoiceReason();
 
   var o = curDetailOrder;
   var name = document.getElementById('edit-name').value.trim() || o.patientName;
@@ -6659,8 +6821,21 @@ function submitEditOrder() {
   var localUpdate = Object.assign({}, updatedData, { amendments: null });
 
   db.collection('orders').doc(o.id).update(updatedData).then(function() {
-    logActivity('order_edit', 'Edited: ' + name + ' (' + changes.join(', ') + ')');
-    closeEditModal();
+    // Upload voice reason if recorded, then log and close
+    uploadVoiceReason(o.id).then(function(voiceUrl) {
+      var auditMsg = 'Edited: ' + name + ' (' + changes.join(', ') + ') — ' + reason + (voiceUrl ? ' [voice note]' : '');
+      logActivity('order_edit', auditMsg);
+      if (voiceUrl) {
+        db.collection('activity_logs').add({
+          action: 'order_edit_voice', detail: auditMsg, voiceNoteUrl: voiceUrl,
+          orderId: o.id, byUid: curUser&&curUser.uid,
+          byName: (curProfile&&curProfile.name)||(curUser&&curUser.email),
+          at: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(function(){});
+      }
+      resetVoiceReason();
+      closeEditModal();
+    });
     // Show appropriate toast based on resulting balance
     var newNet = netAmt;
     var newDue = dueAmt;

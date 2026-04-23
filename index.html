@@ -1154,7 +1154,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   </div>
   <div class="ho-summary-strip">
     <div class="ho-summary-cell"><div class="ho-summary-val green" id="ho-cash">Rs.0</div><div class="ho-summary-lbl">Cash</div></div>
-    <div class="ho-summary-cell"><div class="ho-summary-val" id="ho-upi">Rs.0</div><div class="ho-summary-lbl">UPI</div></div>
+    <div class="ho-summary-cell"><div class="ho-summary-val" id="ho-upi">Rs.0</div><div class="ho-summary-lbl">UPI / Card</div></div>
     <div class="ho-summary-cell"><div class="ho-summary-val red" id="ho-credit">Rs.0</div><div class="ho-summary-lbl">Credit</div></div>
   </div>
   <div class="scroll-body" style="padding-top:16px">
@@ -1435,6 +1435,11 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div id="ph-dues-section" style="display:none;background:#FFFBEB;border-bottom:1px solid #FCD34D;padding:10px 16px">
       <div style="font-size:10px;font-family:var(--mono);color:#92400E;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">&#128176; Pending dues — collect today</div>
       <div id="ph-dues-list"></div>
+    </div>
+    <!-- Walk-in / Clinic orders created by this phlebo today -->
+    <div id="ph-my-orders-section" style="display:none;border-bottom:1px solid var(--border);padding:10px 16px">
+      <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">&#128203; My orders today</div>
+      <div id="ph-my-orders-list"></div>
     </div>
     <div style="padding:12px 16px">
       <div id="phlebo-task-list"><div class="empty">Loading your tasks...</div></div>
@@ -2302,6 +2307,55 @@ function startPhleboDash() {
   if (phleboDashUnsub) { phleboDashUnsub(); phleboDashUnsub=null; }
   var myUid = curUser && curUser.uid;
   var today = todayStr();
+  // Also load walk-in / clinic orders created by this phlebo
+  db.collection('orders')
+    .where('date','==',today)
+    .where('createdBy','==',myUid)
+    .get().then(function(mySnap) {
+      var myOrders = [];
+      mySnap.forEach(function(d) {
+        var o = Object.assign({id:d.id}, d.data());
+        if (o.status === 'draft') return;
+        // Only show non-field orders here (field orders appear in task list below)
+        if (o.source === 'Home Collection' || o.source === 'Hospital Collection') return;
+        myOrders.push(o);
+      });
+      myOrders.sort(function(a,b){
+        return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)
+             - (a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0);
+      });
+      var sec  = document.getElementById('ph-my-orders-section');
+      var list = document.getElementById('ph-my-orders-list');
+      if (!sec || !list) return;
+      if (!myOrders.length) { sec.style.display='none'; return; }
+      sec.style.display = 'block';
+      list.innerHTML = myOrders.map(function(o) {
+        var isCredit = o.payMode==='credit';
+        var hasDue   = (o.hasDue || (o.dueAmount||0)>0) && !isCredit;
+        var badge, bStyle;
+        if (isCredit)           { badge='CREDIT';  bStyle='background:#EDE9FE;color:#5B21B6'; }
+        else if (hasDue && (o.paidAmount||0)>0) { badge='PARTIAL'; bStyle='background:#FEF3C7;color:#92400E'; }
+        else if (hasDue)        { badge='DUE';     bStyle='background:#FEE2E2;color:#991B1B'; }
+        else                    { badge='PAID';    bStyle='background:#F0FDF4;color:#166534'; }
+        var amt = hasDue ? o.dueAmount : (o.paidAmount||o.netAmount||o.totalAmount||0);
+        var tests = (o.tests||[]).slice(0,2).map(function(t){return t.shortCode||t.name;}).join(', ');
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border);cursor:pointer"'
+          + ' ontouchend="event.preventDefault();openOrderDetail(\''+o.id+'\')"'
+          + ' onclick="openOrderDetail(\''+o.id+'\')">'
+          + '<div style="flex:1;min-width:0">'
+          + '<div style="display:flex;align-items:center;gap:6px">'
+          + '<span style="font-size:13px;font-weight:600">'+esc(o.patientName||'-')+'</span>'
+          + '<span style="font-size:9px;font-family:var(--mono);font-weight:600;padding:1px 5px;border-radius:4px;'+bStyle+'">'+badge+'</span>'
+          + '</div>'
+          + '<div style="font-size:10px;color:var(--text3);margin-top:1px">'+esc(tests)+'</div>'
+          + '</div>'
+          + '<div style="font-size:12px;font-weight:600;color:'+(hasDue?'#D97706':'var(--accent)')+';white-space:nowrap">'
+          + (hasDue?'Due ':'')+'Rs.'+amt.toLocaleString('en-IN')
+          + '</div>'
+          + '</div>';
+      }).join('');
+    }).catch(function(){});
+
   phleboDashUnsub = db.collection('orders')
     .where('date','==',today)
     .where('source','in',['Home Collection','Hospital Collection'])
@@ -3158,7 +3212,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.03';
+var APP_VERSION = 'v20.07';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3834,22 +3888,22 @@ function startFieldDashWidget() {
     }, function() { /* silent — widget is non-critical */ });
 }
 
-// ── URGENT FIELD TASK WhatsApp NOTIFICATION ─────────────────────────────
+// ── URGENT FIELD TASK NOTIFICATION ──────────────────────────────────────
+// Logs to activity_log so admin sees it on dashboard — does NOT open WA on phlebo's device.
+// When Cloud Functions are available, replace logActivity call with a server-side push.
 function sendUrgentFieldWA(order, action) {
   if (!order || !order.urgent) return;
-  var ADMIN_WA = '919312218812';
   var byName = (curProfile&&curProfile.name) || (curUser&&curUser.email) || 'Staff';
   var now = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
   var tests = (order.tests||[]).slice(0,3).map(function(t){return t.shortCode||t.name;}).join(', ');
-  var status = action === 'collect' ? '🧪 Sample Collected' : '📦 Delivered to Lab';
-  var msg = '🚨 *URGENT Sample Update — OnePLUS*\n\n'
-    + status + '\n'
-    + '👤 Patient: ' + (order.patientName||'-') + '\n'
-    + '🧪 Tests: ' + (tests||'-') + '\n'
-    + '👨‍⚕️ By: ' + byName + '\n'
-    + '🕐 Time: ' + now + '\n\n'
-    + 'Please prioritise processing.';
-  window.open('https://wa.me/' + ADMIN_WA + '?text=' + encodeURIComponent(msg), '_blank');
+  var status = action === 'collect' ? 'Sample collected' : 'Delivered to lab';
+  // Log to activity feed — admin sees this in real-time on dashboard
+  logActivity('urgent_update',
+    '🚨 URGENT ' + status + ': ' + (order.patientName||'-') +
+    ' · ' + (tests||'-') + ' · by ' + byName + ' at ' + now
+  );
+  // Note: WhatsApp admin notification removed from phlebo device.
+  // Re-enable via Cloud Function trigger on urgent order update when available.
 }
 function loadStats() {
   var today = todayStr();
@@ -7774,7 +7828,7 @@ function renderFieldTasks(orders) {
     var isCollected = o.fieldStatus === 'collected';
     var isDelivered = o.fieldStatus === 'delivered';
 
-    var fieldGuide = buildCollectionGuide(o.tests||[]);
+    var fieldGuide = buildCollectionGuide(o.tests||[], !isCollected && !isDelivered);
 
     var isDraft = o.status === 'draft';
     var cardClass = 'ftc'
@@ -8406,24 +8460,29 @@ function loadHO() {
       if (o.status==='draft') return;
       if (_hoIsPhlebo && o.createdBy !== _hoMyUid) return;
 
+      // paidAmount already includes collectionCharge (totalAmount = testTotal + cc)
+      // so we just split by payMode — no separate colCharge addition needed
+      var _paid = o.paidAmount || 0;
       if (o.payMode==='split' && o.splitPayments) {
         cash += (o.splitPayments.cash||0);
         upi  += (o.splitPayments.upi ||0);
-        upi  += (o.splitPayments.card||0);
-      } else if (o.payMode==='cash')  { cash += (o.paidAmount||0); }
-        else if (o.payMode==='upi' || o.payMode==='card') { upi += (o.paidAmount||0); }
-        else if (o.payMode==='credit') { credit += (o.totalAmount||0); }
+        upi  += (o.splitPayments.card||0); // card → non-cash bucket (goes to bank)
+      } else if (o.payMode==='cash')   { cash += _paid; }
+        else if (o.payMode==='upi')    { upi  += _paid; }
+        else if (o.payMode==='card')   { upi  += _paid; } // card → non-cash
+        else if (o.payMode==='credit') { credit += (o.netAmount||o.totalAmount||0); } // use netAmt (post-discount)
 
+      // Preview: cash amount only (what phlebo/reception holds physically)
       var cashAmt = 0;
       if (o.payMode === 'split' && o.splitPayments) cashAmt = o.splitPayments.cash || 0;
-      else if (o.payMode === 'cash') cashAmt = o.paidAmount || 0;
-      var colCharge = (o.source !== 'Walk-in') ? (o.collectionCharge || 0) : 0;
-      var rowTotal = cashAmt + colCharge;
-      if (rowTotal > 0) previewOrders.push({
+      else if (o.payMode === 'cash') cashAmt = _paid;
+      // colCharge is already inside paidAmount — show it as a note only, don't add again
+      var cc = (o.source !== 'Walk-in') ? (o.collectionCharge || 0) : 0;
+      if (cashAmt > 0) previewOrders.push({
         serial: o.serial || d.id.slice(-6).toUpperCase(),
         name: o.patientName || '-',
         tests: (o.tests||[]).map(function(t){return t.shortCode||t.name;}).slice(0,3).join(', '),
-        cashAmt: cashAmt, colCharge: colCharge, total: rowTotal,
+        cashAmt: cashAmt, colCharge: cc, total: cashAmt,
         payMode: o.payMode || 'cash', dueRow: false
       });
     });
@@ -8636,13 +8695,16 @@ function submitHandover() {
       // Only count this user's own orders
       if (o.createdBy !== myUid) return;
       if (o.status === 'draft') return;
+      // paidAmount already includes collectionCharge — do NOT add colCharge separately
       if (o.payMode === 'split' && o.splitPayments) {
         cashCollected += (o.splitPayments.cash || 0);
       } else if (o.payMode === 'cash') {
         cashCollected += (o.paidAmount || 0);
       }
-      // Collection charge is cash held by the collecting staff member
-      if (o.source !== 'Walk-in') cashCollected += (o.collectionCharge || 0);
+      // UPI/card payments on today's orders collected by this user (for due portion)
+      if (o.dueCollectedAmt > 0 && o.dueCollectedBy === myUid && o.dueCollectedMode === 'cash') {
+        if (o.payMode !== 'cash') cashCollected += (o.dueCollectedAmt || 0);
+      }
       // Due collections on today's own orders (e.g. partial paid at booking, rest collected now)
       if (o.dueCollectedAmt > 0 && o.dueCollectedBy === myUid && o.dueCollectedMode === 'cash') {
         // Only add the due portion if the original payMode wasn't cash (avoid double-count)
@@ -9057,7 +9119,7 @@ function loadEOD() {
     var cash=0,upi=0,card=0,credit=0,total=0,coll=0;
     snap.forEach(function(doc){ var o=doc.data(); var paid=o.paidAmount||0; total+=paid; if(o.source!=='Walk-in') coll+=(o.collectionCharge||0);
       if(o.payMode==='split'&&o.splitPayments){ cash+=(o.splitPayments.cash||0); upi+=(o.splitPayments.upi||0); card+=(o.splitPayments.card||0); }
-      else if(o.payMode==='cash') cash+=paid; else if(o.payMode==='upi') upi+=paid; else if(o.payMode==='card') card+=paid; else if(o.payMode==='credit') credit+=(o.totalAmount||0); });
+      else if(o.payMode==='cash') cash+=paid; else if(o.payMode==='upi') upi+=paid; else if(o.payMode==='card') card+=paid; else if(o.payMode==='credit') credit+=(o.netAmount||o.totalAmount||0); });
     var fmt=function(n){ return 'Rs.'+n.toLocaleString('en-IN'); };
     document.getElementById('eod-orders').textContent=snap.size;
     document.getElementById('eod-cash').textContent=fmt(cash);

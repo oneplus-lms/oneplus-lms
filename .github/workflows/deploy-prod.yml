@@ -1,7 +1,7 @@
-name: Deploy Production
+name: Deploy Dev
 on:
   push:
-    branches: [main]
+    branches: [dev]
   workflow_dispatch:
 permissions:
   contents: write
@@ -10,14 +10,45 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Copy files
+
+      - name: Build dev version
         run: |
           mkdir -p deploy
-          cp index.html sw.js manifest.json dashboard.html deploy/
+
+          sed \
+            -e 's|AIzaSyChTDf2CdK4fBomsYlFlL5Uvsb-eUFaNkE|AIzaSyCZ_Hu56lCVoZezJux4tnARahP6t3r3C90|g' \
+            -e "s|authDomain: \"oneplus-lms.firebaseapp.com\"|authDomain: \"oneplus-lms-dev.firebaseapp.com\"|g" \
+            -e "s|projectId: \"oneplus-lms\"|projectId: \"oneplus-lms-dev\"|g" \
+            -e "s|storageBucket: \"oneplus-lms.firebasestorage.app\"|storageBucket: \"oneplus-lms-dev.firebasestorage.app\"|g" \
+            -e 's|messagingSenderId: "869836991266"|messagingSenderId: "290972087596"|g' \
+            -e 's|appId: "1:869836991266:web:a754fb93663b2a65c4137b"|appId: "1:290972087596:web:b51ab559740296c0692889"|g' \
+            -e "s|/oneplus-lms/sw.js|/oplus-lms-dev/sw.js|g" \
+            -e "s|var base = '/oneplus-lms/'|var base = '/oplus-lms-dev/'|g" \
+            -e "s|APP_VERSION = 'v|APP_VERSION = 'DEV-v|g" \
+            index.html > deploy/index.html
+
+          sed \
+            -e 's|labflow-v|labflow-dev-v|g' \
+            -e 's|/oneplus-lms/|/oplus-lms-dev/|g' \
+            sw.js > deploy/sw.js
+
+          sed \
+            -e 's|AIzaSyChTDf2CdK4fBomsYlFlL5Uvsb-eUFaNkE|AIzaSyCZ_Hu56lCVoZezJux4tnARahP6t3r3C90|g' \
+            -e 's|authDomain:"oneplus-lms.firebaseapp.com"|authDomain:"oneplus-lms-dev.firebaseapp.com"|g' \
+            -e 's|projectId:"oneplus-lms"|projectId:"oneplus-lms-dev"|g' \
+            -e 's|storageBucket:"oneplus-lms.firebasestorage.app"|storageBucket:"oneplus-lms-dev.firebasestorage.app"|g' \
+            dashboard.html > deploy/dashboard.html
+
+          printf '{"name":"oPLUS LMS (Dev)","short_name":"oPLUS Dev","start_url":"/oplus-lms-dev/","scope":"/oplus-lms-dev/","display":"standalone","background_color":"#3B0764","theme_color":"#7C3AED","icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icon-512.png","sizes":"512x512","type":"image/png"}]}' > deploy/manifest.json
+
           cp catalogue.json panels.json preanalytical.json doctors.json deploy/
           cp icon-192.png icon-512.png deploy/
-      - uses: peaceiris/actions-gh-pages@v3
+
+      - name: Deploy to oplus-lms-dev
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          personal_token: ${{ secrets.DEV_DEPLOY_TOKEN }}
+          external_repository: onepluslms/oplus-lms-dev
+          publish_branch: gh-pages
           publish_dir: ./deploy
           keep_files: false

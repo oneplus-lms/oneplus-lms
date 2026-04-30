@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.07 — OnePLUS</title>
+<title>LabFlow Dashboard v20.19 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -166,7 +166,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.07</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.19</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -613,9 +613,10 @@ function renderStats(){
 function updateCash(){
   var cashTotal=allOrders.reduce(function(s,o){
     var c=0;
+    // paidAmount already includes collectionCharge — do NOT add separately
     if(o.payMode==='split'&&o.splitPayments)c=o.splitPayments.cash||0;
     else if(o.payMode==='cash')c=o.paidAmount||0;
-    return s+c+(o.collectionCharge||0);
+    return s+c;
   },0);
   var ho=allHandovers.filter(function(h){return h.custodyStatus==='ACCEPTED';}).reduce(function(s,h){return s+(h.amount||0);},0);
   set('scash',fmt(Math.max(0,cashTotal-ho)));
@@ -810,6 +811,20 @@ function renderHandovers(){
   }).map(function(h){
     var st=h.custodyStatus||'ACCEPTED';
     var bc=st==='PENDING'?'bpend':st==='REJECTED'?'brej':'bacc';
+    var patientRows='';
+    if(h.orders&&h.orders.length){
+      patientRows='<div style="margin-top:6px;border-top:0.5px solid var(--border);padding-top:6px">'
+        +h.orders.map(function(o){
+          return '<div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);color:var(--text3);padding:2px 0">'
+            +'<span>'+esc(o.patientName||o.name||'-')+(o.orderId||o.id?' #'+esc(o.orderId||o.id):'')+'</span>'
+            +'<span style="color:var(--accent)">'+fmt(o.cashAmt||o.amt||0)+'</span>'
+            +'</div>';
+        }).join('')
+        +'<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:600;padding-top:4px;border-top:0.5px solid var(--border);margin-top:2px">'
+        +'<span style="color:var(--text3)">'+h.orders.length+' patient'+(h.orders.length!==1?'s':'')+'</span>'
+        +'<span style="color:var(--accent)">'+fmt(h.orders.reduce(function(s,o){return s+(o.cashAmt||o.amt||0);},0))+'</span>'
+        +'</div></div>';
+    }
     return '<div class="li" style="flex-direction:column;align-items:stretch">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
         +'<div style="flex:1;min-width:0">'
@@ -823,6 +838,7 @@ function renderHandovers(){
           +'<span class="b '+bc+'">'+st+'</span>'
         +'</div>'
       +'</div>'
+      +patientRows
     +'</div>';
   }).join('');
 }

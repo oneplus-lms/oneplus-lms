@@ -1004,6 +1004,11 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       </div>
     </div>
 
+    <!-- WA Verify button — shown only in Complete Booking mode -->
+    <button id="cb-wa-verify-btn" onclick="cbSendVerifyWA()" style="display:none;width:100%;margin-top:6px;padding:11px;background:#25D366;color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer">
+      &#128172; Send Booking Details to Patient for Verification
+    </button>
+
     <button class="btn btn-primary" id="edit-save-btn" style="width:100%;margin-top:6px" onclick="submitEditOrder()">Save Changes</button>
   </div>
 </div>
@@ -3239,7 +3244,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.13';
+var APP_VERSION = 'v20.15';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4197,6 +4202,114 @@ function paeApplyAll(suggested) {
 }
 // ─────────────────────────────────────────────────────────────────────────
 
+
+// ── ITDOSE LIS ENTRY CARD ─────────────────────────────────────────────────
+function buildLISCard(o) {
+  var payLine = (function() {
+    var parts = [];
+    if (o.payMode === 'split' && o.splitPayments) {
+      if (o.splitPayments.cash > 0) parts.push('Cash Rs.' + o.splitPayments.cash.toLocaleString('en-IN'));
+      if (o.splitPayments.upi  > 0) parts.push('UPI Rs.'  + o.splitPayments.upi.toLocaleString('en-IN'));
+      if (o.splitPayments.card > 0) parts.push('Card Rs.' + o.splitPayments.card.toLocaleString('en-IN'));
+    } else if (o.payMode === 'credit') {
+      parts.push('Credit (Not collected)');
+    } else {
+      parts.push((o.payMode || 'Cash').toUpperCase() + ' Rs.' + (o.paidAmount || 0).toLocaleString('en-IN'));
+    }
+    if (o.discount > 0) parts.push('Disc Rs.' + o.discount.toLocaleString('en-IN'));
+    if (o.dueAmount > 0) parts.push('Due Rs.' + o.dueAmount.toLocaleString('en-IN'));
+    return parts.join(' · ');
+  })();
+
+  var testRows = (o.tests || []).map(function(t, i) {
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:0.5px solid var(--border)">'
+      + '<div style="font-size:13px;color:var(--text1)">' + (i + 1) + '. ' + esc(t.name) + '</div>'
+      + '<div style="font-size:12px;font-family:var(--mono);color:var(--text2);white-space:nowrap;margin-left:8px">Rs.' + (t.rate || 0).toLocaleString('en-IN') + '</div>'
+      + '</div>';
+  }).join('');
+
+  var fields = [
+    { k: 'Patient Name', v: o.patientName || '-' },
+    { k: 'Age / Sex',    v: (o.age || '-') + ' yrs · ' + (o.sex || '-') },
+    { k: 'Mobile',       v: o.phone || '-' },
+    { k: 'Ref. Doctor',  v: o.refBy || '-' },
+  ];
+
+  var grid = fields.map(function(f) {
+    return '<div>'
+      + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">' + f.k + '</div>'
+      + '<div style="font-size:14px;font-weight:500;color:var(--text1)">' + esc(f.v) + '</div>'
+      + '</div>';
+  }).join('');
+
+  return '<div style="background:var(--surface2);border:1.5px solid #1A4A3A44;border-radius:var(--radius-lg);overflow:hidden;margin-bottom:12px">'
+    + '<div style="background:#1A4A3A;padding:8px 14px;display:flex;justify-content:space-between;align-items:center">'
+    + '<div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.06em">&#128197; ITDose Entry</div>'
+    + '<button onclick="shareLISWhatsApp()" style="font-size:11px;padding:4px 10px;background:#25D366;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:500">&#128172; Share</button>'
+    + '</div>'
+    + '<div style="padding:12px 14px">'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' + grid + '</div>'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px">Tests (' + (o.tests || []).length + ')</div>'
+    + testRows
+    + '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;margin-top:4px;border-top:0.5px solid var(--border)">'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">Payment</div>'
+    + '<div style="font-size:12px;font-weight:600;color:var(--accent);text-align:right">' + esc(payLine) + '</div>'
+    + '</div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px">'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase">Net Amount</div>'
+    + '<div style="font-size:16px;font-weight:700;color:#1A4A3A">Rs.' + (o.netAmount || o.totalAmount || 0).toLocaleString('en-IN') + '</div>'
+    + '</div>'
+    + '</div></div>';
+}
+
+function buildLISText(o) {
+  var lines = [
+    '*ITDose Entry — OnePLUS Lab*',
+    '───────────────────',
+    '*Patient:* ' + (o.patientName || '-'),
+    '*Age/Sex:* ' + (o.age || '-') + ' yrs / ' + (o.sex || '-'),
+    '*Mobile:* ' + (o.phone || '-'),
+    '*Ref. Doctor:* ' + (o.refBy || '-'),
+    '',
+    '*Tests:*'
+  ];
+  (o.tests || []).forEach(function(t, i) {
+    lines.push((i + 1) + '. ' + t.name + ' — Rs.' + (t.rate || 0).toLocaleString('en-IN'));
+  });
+  lines.push('');
+  lines.push('*Net Amount:* Rs.' + (o.netAmount || o.totalAmount || 0).toLocaleString('en-IN'));
+
+  var payParts = [];
+  if (o.payMode === 'split' && o.splitPayments) {
+    if (o.splitPayments.cash > 0) payParts.push('Cash Rs.' + o.splitPayments.cash.toLocaleString('en-IN'));
+    if (o.splitPayments.upi  > 0) payParts.push('UPI Rs.'  + o.splitPayments.upi.toLocaleString('en-IN'));
+    if (o.splitPayments.card > 0) payParts.push('Card Rs.' + o.splitPayments.card.toLocaleString('en-IN'));
+  } else if (o.payMode === 'credit') {
+    payParts.push('Credit — amount pending');
+  } else {
+    payParts.push((o.payMode || 'Cash').toUpperCase() + ' Rs.' + (o.paidAmount || 0).toLocaleString('en-IN'));
+  }
+  if (o.discount > 0) payParts.push('Discount Rs.' + o.discount.toLocaleString('en-IN'));
+  if (o.dueAmount > 0) payParts.push('⚠ Due Rs.' + o.dueAmount.toLocaleString('en-IN'));
+  lines.push('*Payment:* ' + payParts.join(' + '));
+
+  if (o.serial) lines.push('*Serial:* ' + o.serial);
+  lines.push('───────────────────');
+  lines.push('OnePLUS Ultrasound Lab, Pitampura');
+  return lines.join('\n');
+}
+
+function shareLISWhatsApp() {
+  var o = window._lisCurrentOrder;
+  if (!o) return;
+  var text = buildLISText(o);
+  var encoded = encodeURIComponent(text);
+  // Open WA with admin number pre-filled so receptionist can forward to self or LIS operator
+  var adminNum = '919312218812';
+  var url = 'https://wa.me/' + adminNum + '?text=' + encoded;
+  window.open(url, '_blank');
+}
+// ─────────────────────────────────────────────────────────────────────────
 
 // ── PATIENT INSTRUCTION SUMMARY (s-done screen) ──────────────────────────
 function buildPatientInstructions(tests) {
@@ -6032,7 +6145,9 @@ function submitOrder() {
     document.getElementById('done-id').textContent = order.patientName + ' — Saved ✓';
     logActivity('order_create', 'Order: ' + order.patientName + ' · Rs.' + (order.netAmount||0).toLocaleString('en-IN'));
     var instrEl = document.getElementById('done-instructions');
-    if (instrEl) instrEl.innerHTML = buildPatientInstructions(order.tests || selTests || []);
+    // Store order for LIS share
+    window._lisCurrentOrder = order;
+    if (instrEl) instrEl.innerHTML = buildLISCard(order) + buildPatientInstructions(order.tests || selTests || []);
     // Show WA prep button if patient has a phone number
     var prepWaEl = document.getElementById('done-prep-wa');
     if (prepWaEl) {
@@ -6283,6 +6398,8 @@ function openOrderDetail(orderId) {
 function renderOrderDetail(o) {
   var id = o.id.slice(-6).toUpperCase();
   document.getElementById('od-subtitle').textContent = '#' + id + ' · ' + (o.patientName||'');
+  // Store for LIS share button
+  window._lisCurrentOrder = o;
 
   // Build audit trail events
   var events = buildAuditTrail(o);
@@ -6309,8 +6426,11 @@ function renderOrderDetail(o) {
   }
 
   document.getElementById('od-body').innerHTML =
+    // ITDose LIS entry card
+    buildLISCard(o)
+
     // Patient summary card
-    '<div class="card" style="margin-bottom:12px">'
+    + '<div class="card" style="margin-bottom:12px">'
     + '<div class="card-title">Patient</div>'
     + '<div class="audit-summary-grid">'
     + '<div><div class="audit-kv-k">Name</div><div class="audit-kv-v">' + esc(o.patientName) + '</div></div>'
@@ -6688,6 +6808,9 @@ function closeEditModal() {
   if (saveBtn) { saveBtn.textContent = 'Save Changes'; saveBtn.style.background = ''; saveBtn.onclick = submitEditOrder; }
   var banner = document.getElementById('draft-completion-banner');
   if (banner) banner.remove();
+  // Hide WA verify button
+  var waBtn = document.getElementById('cb-wa-verify-btn');
+  if (waBtn) waBtn.style.display = 'none';
   // Reset CB history checklist
   _cbFasting = null; _cbMedComplied = null; _cbHasFast = false; _cbHasMed = false;
   var cbSec = document.getElementById('cb-history-section');
@@ -7007,6 +7130,8 @@ function closeEditModal() {
   var bg = document.getElementById('edit-modal-bg');
   bg.classList.remove('open');
   setTimeout(function() { bg.style.display = 'none'; }, 280);
+  var waBtn = document.getElementById('cb-wa-verify-btn');
+  if (waBtn) waBtn.style.display = 'none';
   resetVoiceReason();
 }
 
@@ -7727,6 +7852,10 @@ function completeBooking(orderId) {
       saveBtn.onclick = function() { completeBookingSubmit(orderId); };
     }
 
+    // Show WA verify button — only in complete booking mode
+    var waBtn = document.getElementById('cb-wa-verify-btn');
+    if (waBtn) waBtn.style.display = 'block';
+
     // Show a blue banner at top of edit modal
     var modal = document.getElementById('edit-modal');
     if (modal) {
@@ -7740,6 +7869,50 @@ function completeBooking(orderId) {
       }
     }
   }).catch(function(e) { toast('Error loading draft: ' + e.message, 'err'); });
+}
+
+function cbSendVerifyWA() {
+  // Read current state of the edit modal form fields
+  var name  = (document.getElementById('edit-name').value.trim())  || (curDetailOrder && curDetailOrder.patientName) || '-';
+  var phone = (document.getElementById('edit-phone').value.trim()) || (curDetailOrder && curDetailOrder.phone) || '';
+  var age   = (document.getElementById('edit-age').value.trim())   || (curDetailOrder && curDetailOrder.age) || '-';
+  var sex   = (document.getElementById('edit-sex').value)          || (curDetailOrder && curDetailOrder.sex) || '-';
+  var ref   = (document.getElementById('edit-ref').value.trim())   || (curDetailOrder && curDetailOrder.refBy) || '-';
+
+  // Tests from live editSelTests (what phlebo has selected/confirmed)
+  var tests = (editSelTests && editSelTests.length) ? editSelTests : (curDetailOrder && curDetailOrder.tests) || [];
+
+  if (!phone) { toast('No mobile number on this order', 'warn'); return; }
+
+  var testLines = tests.map(function(t, i) {
+    return (i + 1) + '. ' + t.name;
+  }).join('\n');
+
+  var msg = [
+    '🔬 *OnePLUS Ultrasound Lab — Booking Verification*',
+    '47, Harsh Vihar, Pitampura, Delhi-34',
+    '────────────────────',
+    '',
+    'Dear *' + name + '*,',
+    'Please verify your booking details below before sample collection.',
+    '',
+    '*Patient:* ' + name,
+    '*Age / Sex:* ' + age + ' yrs / ' + sex,
+    '*Ref. Doctor:* ' + ref,
+    '',
+    '*Tests Booked:*',
+    testLines,
+    '',
+    'If any details are incorrect, please inform our phlebotomist immediately.',
+    '',
+    'Thank you',
+    'OnePLUS Ultrasound Lab | +91 93122 18812'
+  ].join('\n');
+
+  var waNum = phone.replace(/\D/g, '');
+  if (waNum.length === 10) waNum = '91' + waNum;
+  var url = 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
 }
 
 function completeBookingSubmit(orderId) {

@@ -1185,9 +1185,9 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
           <option value="">Select staff member...</option>
         </select>
       </div>
-      <div class="field"><label>Cash Amount (Rs.)</label><input type="number" id="ho-amt" placeholder="0" inputmode="numeric"></div>
-      <!-- Order preview — populated by loadHO -->
+      <!-- Order preview — populated by loadHO — shown above amount field -->
       <div id="ho-order-preview" style="display:none;margin-bottom:12px"></div>
+      <div class="field"><label>Cash Amount (Rs.)</label><input type="number" id="ho-amt" placeholder="0" inputmode="numeric"></div>
       <div class="field"><label>Notes</label><input type="text" id="ho-notes" placeholder="Shift end, remarks..."></div>
       <button class="btn btn-primary" id="ho-submit-btn" onclick="submitHandover()">Initiate Handover →</button>
     </div>
@@ -1528,9 +1528,9 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <div class="field"><label>&#128683; Avoid Food / Drink</label><textarea id="pae-diet-avoid" rows="2" style="width:100%;padding:9px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);resize:vertical"></textarea></div>
       <div class="field"><label>&#129367; Dietary Note</label><textarea id="pae-diet-note" rows="2" style="width:100%;padding:9px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);resize:vertical"></textarea></div>
       <div style="margin-bottom:12px">
-        <button class="btn" id="pae-ai-btn" onclick="paeAISuggest()"
-          style="width:100%;background:#7C3AED;color:#fff;font-size:13px;padding:10px;border:none;border-radius:var(--radius)">
-          &#129302; Suggest Latest Guidelines (AI)
+        <button class="btn" id="pae-ai-btn" onclick="paeStaticSuggest()"
+          style="width:100%;background:#059669;color:#fff;font-size:13px;padding:10px;border:none;border-radius:var(--radius)">
+          &#128196; Load from PA Guidelines
         </button>
         <div id="pae-ai-status" style="font-size:11px;color:var(--text3);margin-top:6px;display:none"></div>
         <div id="pae-ai-result" style="display:none;background:var(--surface2);border:0.5px solid #7C3AED44;border-radius:var(--radius);padding:10px;margin-top:8px;font-size:12px;color:var(--text2)"></div>
@@ -3239,7 +3239,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.11';
+var APP_VERSION = 'v20.13';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4111,79 +4111,68 @@ function paeClearOverride() {
   }).catch(function(e) { toast('Failed: ' + e.message, 'err'); });
 }
 
-// ── AI SUGGEST (Claude API) ───────────────────────────────────────────────
-async function paeAISuggest() {
+// ── STATIC PA GUIDELINES SUGGEST ─────────────────────────────────────────
+function paeStaticSuggest() {
   if (!paeCurrentTest) return;
   var btn    = document.getElementById('pae-ai-btn');
   var status = document.getElementById('pae-ai-status');
   var result = document.getElementById('pae-ai-result');
   btn.disabled = true;
-  btn.textContent = '⏳ Consulting AI...';
-  status.style.display = 'block';
-  status.textContent = 'Searching for latest Indian/NABL-aligned guidelines...';
+  status.style.display = 'none';
   result.style.display = 'none';
 
-  var testName = paeCurrentTest.name;
-  var dept     = paeCurrentTest.dept || '';
-    var prompt = 'You are a clinical pathology expert advising an NABL-accredited diagnostic lab in India.'
-    + ' Provide current preanalytical guidelines for: ' + testName + ' (' + dept + ').'
-    + ' Respond ONLY with a JSON object (no markdown fences, no text outside JSON) with these keys:'
-    + ' prep, timing, med_avoid, med_note, diet_avoid, diet_note, sources.'
-    + ' Base on ICMR guidelines, NABL requirements, CLSI standards, and current Indian lab practice.'
-    + ' Be specific and practical for a phlebotomist. If no restriction applies, write None.';
-
-  try {
-    var resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    var data = await resp.json();
-    var text = (data.content||[]).filter(function(b){ return b.type==='text'; }).map(function(b){ return b.text; }).join('');
-    // Strip any markdown fences
-    text = text.replace(/```json|```/g,'').trim();
-    var suggested;
-    try { suggested = JSON.parse(text); } catch(pe) {
-      result.style.display = 'block';
-      result.innerHTML = '<b>AI response (raw — could not parse as JSON):</b><br><pre style="white-space:pre-wrap;font-size:11px">'+esc(text)+'</pre>';
-      status.textContent = 'Received (manual copy needed)';
-      btn.disabled = false; btn.textContent = '🤖 Suggest Latest Guidelines (AI)';
-      return;
-    }
-    // Show result with apply buttons
-    var fields = [
-      {key:'prep',        label:'Prep'},
-      {key:'timing',      label:'Timing'},
-      {key:'med_avoid',   label:'Stop Before Test'},
-      {key:'med_note',    label:'Medication Note'},
-      {key:'diet_avoid',  label:'Avoid Food/Drink'},
-      {key:'diet_note',   label:'Dietary Note'}
-    ];
-    var html = '<div style="font-size:11px;font-family:var(--mono);color:#7C3AED;margin-bottom:8px">AI SUGGESTION — review carefully before applying</div>';
-    if (suggested.sources) html += '<div style="font-size:10px;color:var(--text3);margin-bottom:8px">Sources: '+esc(suggested.sources)+'</div>';
-    fields.forEach(function(f) {
-      if (!suggested[f.key] || suggested[f.key] === 'None') return;
-      html += '<div style="margin-bottom:8px">'
-        + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:3px">'+f.label+'</div>'
-        + '<div style="font-size:12px;color:var(--text);margin-bottom:4px">'+esc(suggested[f.key])+'</div>'
-        + '<button data-field="'+f.key+'" onclick="paeApplyFieldBtn(this)" '
-        + 'style="font-size:11px;padding:3px 10px;border:0.5px solid var(--accent);border-radius:4px;background:transparent;color:var(--accent);cursor:pointer">Apply &#8595;</button>'   + '</div>';
-    });
-    html += '<button id="pae-apply-all-btn" class="btn btn-primary" style="width:100%;margin-top:4px;font-size:12px" onclick="paeApplyAllCurrent()">Apply All Fields</button>';
-    window._paeLastSuggested = suggested;
-    result.innerHTML = html;
-    result.style.display = 'block';
-    status.textContent = 'Suggestion ready — review and apply fields individually or all at once';
-  } catch(e) {
-    status.textContent = 'Error: ' + e.message;
-    result.style.display = 'none';
+  // Look up from local PA_DATA (already loaded) — no API call, works offline
+  var pa = getMergedPA(paeCurrentTest);
+  if (!pa) {
+    status.style.display = 'block';
+    status.textContent = 'No PA guidelines found for this test/department.';
+    btn.disabled = false;
+    return;
   }
+
+  var fields = [
+    {key:'prep',       label:'Prep Instructions'},
+    {key:'timing',     label:'Timing'},
+    {key:'med_avoid',  label:'Stop Before Test'},
+    {key:'med_note',   label:'Medication Note'},
+    {key:'diet_avoid', label:'Avoid Food / Drink'},
+    {key:'diet_note',  label:'Dietary Note'}
+  ];
+  var hasAny = fields.some(function(f){ return pa[f.key] && pa[f.key] !== 'None'; });
+  if (!hasAny) {
+    status.style.display = 'block';
+    status.textContent = 'No specific guidelines for this test — department defaults apply.';
+    btn.disabled = false;
+    return;
+  }
+
+  var dept = (paeCurrentTest.dept || '').toUpperCase();
+  var src  = 'preanalytical.json';
+  var isOverridden = paOverridesCache[(paeCurrentTest.name||'').toLowerCase().replace(/[^a-z0-9]/g,'_')];
+  var srcLabel = isOverridden
+    ? 'Firestore override + ' + src
+    : src;
+
+  var html = '<div style="font-size:11px;font-family:var(--mono);color:#059669;margin-bottom:6px">&#128196; FROM PA GUIDELINES ('
+    + esc(dept) + ') — verify before applying</div>'
+    + '<div style="font-size:10px;color:var(--text3);margin-bottom:10px">Source: ' + esc(srcLabel) + '</div>';
+
+  fields.forEach(function(f) {
+    var val = pa[f.key];
+    if (!val || val === 'None') return;
+    html += '<div style="margin-bottom:10px">'
+      + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:3px">' + f.label + '</div>'
+      + '<div style="font-size:12px;color:var(--text);margin-bottom:4px;line-height:1.5">' + esc(val) + '</div>'
+      + '<button data-field="' + f.key + '" onclick="paeApplyFieldBtn(this)" '
+      + 'style="font-size:11px;padding:3px 10px;border:0.5px solid #059669;border-radius:4px;background:transparent;color:#059669;cursor:pointer">Apply &#8595;</button>'
+      + '</div>';
+  });
+  html += '<button class="btn btn-primary" style="width:100%;margin-top:4px;font-size:12px" onclick="paeApplyAllCurrent()">Apply All Fields</button>';
+
+  window._paeLastSuggested = pa;
+  result.innerHTML = html;
+  result.style.display = 'block';
   btn.disabled = false;
-  btn.textContent = '🤖 Suggest Latest Guidelines (AI)';
 }
 
 function paeApplyFieldBtn(btn) {
@@ -8571,48 +8560,21 @@ function loadHO() {
         if (h.custodyStatus === 'ACCEPTED') alreadyOut += (h.amount||0);
       });
       var netCash = Math.max(0, cash - alreadyOut);
-      document.getElementById('ho-amt').value = netCash;
 
       previewOrders.sort(function(a,b){ return (b.serial||'').localeCompare(a.serial||''); });
+      // Store globally so submitHandover can read selections
+      window._hoPreviewOrders = previewOrders;
+      window._hoAlreadyOut    = alreadyOut;
+
       var prev = document.getElementById('ho-order-preview');
       if (!previewOrders.length) {
         prev.style.display = 'none';
+        document.getElementById('ho-amt').value = netCash;
       } else {
-        var rows = previewOrders.map(function(o) {
-          var tag = o.dueRow
-            ? '<span style="font-size:9px;background:#FEF3C7;color:#92400E;border-radius:3px;padding:1px 5px;margin-left:4px">DUE COLL.</span>'
-            : (o.payMode === 'split' ? '<span style="font-size:9px;background:#EDE9FE;color:#5B21B6;border-radius:3px;padding:1px 5px;margin-left:4px">SPLIT</span>' : '');
-          var colLine = o.colCharge > 0
-            ? ' <span style="color:var(--text3);font-size:10px">+Rs.'+o.colCharge+' coll.</span>' : '';
-          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border)">'
-            + '<div style="flex:1;min-width:0">'
-            + '<div style="font-size:12px;font-weight:500;color:var(--text1)">'+esc(o.name)+tag+'</div>'
-            + '<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(o.tests||'-')+'</div>'
-            + '</div>'
-            + '<div style="font-size:13px;font-weight:600;color:var(--accent);margin-left:10px;white-space:nowrap">'
-            + (o.total > 0 ? 'Rs.'+o.total.toLocaleString('en-IN') : o.payMode.toUpperCase())
-            + colLine+'</div>'
-            + '</div>';
-        }).join('');
-        var alreadyOutLine = alreadyOut > 0
-          ? '<div style="display:flex;justify-content:space-between;padding-top:6px;font-size:12px;color:#DC2626">'
-            + '<span>Already handed over</span><span>− Rs.'+alreadyOut.toLocaleString('en-IN')+'</span></div>'
-          : '';
-        prev.innerHTML = '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
-          + '&#128196; Cash collected ('+previewOrders.length+' orders)</div>'
-          + rows
-          + '<div style="display:flex;justify-content:space-between;padding-top:6px;font-size:12px;font-weight:600;border-top:0.5px solid var(--border);margin-top:4px">'
-          + '<span style="color:var(--text2)">Total collected</span>'
-          + '<span style="color:var(--accent)">Rs.'+cash.toLocaleString('en-IN')+'</span>'
-          + '</div>'
-          + alreadyOutLine
-          + (alreadyOut > 0
-            ? '<div style="display:flex;justify-content:space-between;padding-top:4px;font-size:13px;font-weight:700">'
-              + '<span style="color:var(--text1)">Cash in hand</span>'
-              + '<span style="color:#059669">Rs.'+netCash.toLocaleString('en-IN')+'</span>'
-              + '</div>'
-            : '');
+        renderHOPatientChecklist(previewOrders, alreadyOut, cash, netCash);
         prev.style.display = 'block';
+        // Amount auto-set to sum of all selected (all pre-checked) minus already out
+        hoUpdateAmtFromSelection();
       }
     }).catch(function(){
       // fallback: just set full cash if handover fetch fails
@@ -8635,6 +8597,79 @@ function loadHO() {
 function renderOrdersInHandover(orders) {
   if (!orders || !orders.length) return '';
   return '<div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:8px">'    + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:6px">Patients included</div>'    + orders.map(function(o){        return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px">'          + '<div style="flex:1;min-width:0">'            + '<div style="font-weight:500">'+esc(o.patientName)+(o.age?' · '+o.age+'yr':'')+(o.sex?' '+esc(o.sex):'')+'</div>'            + '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(o.tests||'-')+'</div>'          + '</div>'          + '<div style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-left:8px;white-space:nowrap">Rs.'+o.cashAmt.toLocaleString('en-IN')+'</div>'          + '</div>';      }).join('')    + '</div>';}
+
+// ── PATIENT SELECTION CHECKLIST for Cash Handover ────────────────────────
+function renderHOPatientChecklist(orders, alreadyOut, totalCash, netCash) {
+  var prev = document.getElementById('ho-order-preview');
+  var alreadyOutLine = alreadyOut > 0
+    ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#DC2626;border-top:0.5px solid var(--border);margin-top:4px">'
+      + '<span>Already handed over</span><span>− Rs.'+alreadyOut.toLocaleString('en-IN')+'</span></div>'
+    : '';
+
+  var rows = orders.map(function(o, i) {
+    var tag = o.dueRow
+      ? '<span style="font-size:9px;background:#FEF3C7;color:#92400E;border-radius:3px;padding:1px 5px;margin-left:4px">DUE</span>'
+      : (o.payMode === 'split' ? '<span style="font-size:9px;background:#EDE9FE;color:#5B21B6;border-radius:3px;padding:1px 5px;margin-left:4px">SPLIT</span>' : '');
+    return '<label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:0.5px solid var(--border);cursor:pointer">'
+      + '<input type="checkbox" data-idx="'+i+'" data-amt="'+o.total+'" checked'
+      + ' onchange="hoUpdateAmtFromSelection()"'
+      + ' style="width:17px;height:17px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">'
+      + '<div style="flex:1;min-width:0">'
+      + '<div style="font-size:12px;font-weight:500;color:var(--text1)">'+esc(o.name)+tag+'</div>'
+      + '<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(o.tests||'-')+'</div>'
+      + '</div>'
+      + '<div style="font-size:13px;font-weight:600;color:var(--accent);white-space:nowrap">Rs.'+o.total.toLocaleString('en-IN')+'</div>'
+      + '</label>';
+  }).join('');
+
+  prev.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">&#9745; Select patients to include</div>'
+    + '<button onclick="hoToggleAll(this)" data-all="1"'
+    + ' style="font-size:10px;color:var(--accent);background:none;border:none;cursor:pointer;padding:2px 4px">Deselect All</button>'
+    + '</div>'
+    + rows
+    + '<div id="ho-sel-totals" style="margin-top:6px">'
+    + buildHOTotalsHTML(totalCash, alreadyOut, netCash)
+    + '</div>';
+}
+
+function buildHOTotalsHTML(selTotal, alreadyOut, netAmt) {
+  var html = '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;font-weight:600;border-top:0.5px solid var(--border)">'
+    + '<span style="color:var(--text2)">Selected cash</span>'
+    + '<span style="color:var(--accent)">Rs.'+selTotal.toLocaleString('en-IN')+'</span>'
+    + '</div>';
+  if (alreadyOut > 0) {
+    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;color:#DC2626">'
+      + '<span>Already handed over</span><span>− Rs.'+alreadyOut.toLocaleString('en-IN')+'</span></div>'
+      + '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;font-weight:700">'
+      + '<span style="color:var(--text1)">Net to hand over</span>'
+      + '<span style="color:#059669">Rs.'+Math.max(0,netAmt).toLocaleString('en-IN')+'</span></div>';
+  }
+  return html;
+}
+
+function hoUpdateAmtFromSelection() {
+  var checks = document.querySelectorAll('#ho-order-preview input[type=checkbox]');
+  var selTotal = 0;
+  checks.forEach(function(cb){ if (cb.checked) selTotal += parseFloat(cb.dataset.amt)||0; });
+  var alreadyOut = window._hoAlreadyOut || 0;
+  var net = Math.max(0, selTotal - alreadyOut);
+  document.getElementById('ho-amt').value = net;
+  // Update totals display
+  var totalsEl = document.getElementById('ho-sel-totals');
+  if (totalsEl) totalsEl.innerHTML = buildHOTotalsHTML(selTotal, alreadyOut, net);
+}
+
+function hoToggleAll(btn) {
+  var allSelected = btn.dataset.all === '1';
+  var checks = document.querySelectorAll('#ho-order-preview input[type=checkbox]');
+  checks.forEach(function(cb){ cb.checked = !allSelected; });
+  btn.dataset.all = allSelected ? '0' : '1';
+  btn.textContent = allSelected ? 'Select All' : 'Deselect All';
+  hoUpdateAmtFromSelection();
+}
+// ─────────────────────────────────────────────────────────────────────────
 
 function renderHOPending(rows) {
   var myName = (curProfile&&curProfile.name)||'';
@@ -8800,20 +8835,40 @@ function submitHandover() {
       return;
     }
 
+    // Build orders list from the patient checklist selection (if checklist exists)
+    // Falls back to auto-building from all cash orders if checklist not rendered
     var myOrders = [];
-    orderSnap.forEach(function(d) {
-      var o = d.data();
-      if (o.createdBy === myUid && (o.payMode === 'cash' || o.payMode === 'split')) {
-        var cashAmt = o.payMode === 'split' && o.splitPayments ? (o.splitPayments.cash||0) : (o.paidAmount||0);
-        if (cashAmt > 0) {
-          myOrders.push({
-            patientName: o.patientName||'', age: o.age||'', sex: o.sex||'',
-            tests: (o.tests||[]).map(function(t){ return t.name; }).join(', '),
-            cashAmt: cashAmt, orderId: d.id.slice(-6).toUpperCase()
-          });
+    var checks = document.querySelectorAll('#ho-order-preview input[type=checkbox]');
+    if (checks.length > 0 && window._hoPreviewOrders) {
+      // Use selections from the checklist
+      checks.forEach(function(cb) {
+        if (!cb.checked) return;
+        var idx = parseInt(cb.dataset.idx);
+        var po = window._hoPreviewOrders[idx];
+        if (!po) return;
+        myOrders.push({
+          patientName: po.name || '',
+          tests: po.tests || '',
+          cashAmt: po.total || 0,
+          orderId: po.serial || ''
+        });
+      });
+    } else {
+      // Fallback: include all cash/split orders from today
+      orderSnap.forEach(function(d) {
+        var o = d.data();
+        if (o.createdBy === myUid && (o.payMode === 'cash' || o.payMode === 'split')) {
+          var cashAmt = o.payMode === 'split' && o.splitPayments ? (o.splitPayments.cash||0) : (o.paidAmount||0);
+          if (cashAmt > 0) {
+            myOrders.push({
+              patientName: o.patientName||'', age: o.age||'', sex: o.sex||'',
+              tests: (o.tests||[]).map(function(t){ return t.name; }).join(', '),
+              cashAmt: cashAmt, orderId: d.id.slice(-6).toUpperCase()
+            });
+          }
         }
-      }
-    });
+      });
+    }
 
     var now = new Date();
     db.collection('handovers').add({

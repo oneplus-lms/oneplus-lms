@@ -1561,10 +1561,24 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <input type="date" id="act-to" style="flex:1;min-width:110px;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface)">
       <button class="btn btn-primary" style="padding:7px 12px;width:auto;font-size:12px" onclick="loadActivityLog()">Go</button>
     </div>
-    <div style="margin-bottom:10px">
-      <select id="act-staff-filter" style="width:100%;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)">
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <select id="act-staff-filter" style="flex:1;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)">
         <option value="">All Staff</option>
       </select>
+      <select id="act-action-filter" onchange="filterActivityLog()" style="flex:1;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)">
+        <option value="">All Actions</option>
+        <option value="order_create">Orders Created</option>
+        <option value="order_edit">Order Edits</option>
+        <option value="handover_out">Handover Out</option>
+        <option value="handover_in">Handover Accepted</option>
+        <option value="handover_rej">Handover Rejected</option>
+        <option value="due_collect">Due Collections</option>
+        <option value="login">Logins</option>
+      </select>
+    </div>
+    <div style="margin-bottom:10px">
+      <input type="text" id="act-patient-filter" placeholder="&#128269; Search patient name..." oninput="filterActivityLog()"
+        style="width:100%;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)">
     </div>
     <div id="activity-list"><div class="empty">Select a date range to view activity</div></div>
   </div>
@@ -3244,7 +3258,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.15';
+var APP_VERSION = 'v20.18';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4383,11 +4397,11 @@ var ACT_ICONS = {
   staff_edit:   '⚙️', eod_save:     '📋'
 };
 
-function logActivity(action, detail) {
+function logActivity(action, detail, extra) {
   try {
     if (!curUser || !curUser.uid) return;
     var now = new Date();
-    db.collection('activity_logs').add({
+    var entry = {
       uid:       curUser.uid,
       name:      (curProfile && curProfile.name) || curUser.email || '',
       role:      (curProfile && curProfile.role) || '',
@@ -4396,7 +4410,9 @@ function logActivity(action, detail) {
       date:      todayStr(),
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
       timeStr:   now.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'})
-    });
+    };
+    if (extra && typeof extra === 'object') Object.assign(entry, extra);
+    db.collection('activity_logs').add(entry);
   } catch(e) { /* never block user action on log failure */ }
 }
 
@@ -4406,6 +4422,12 @@ function initActivityScreen() {
   var toEl   = document.getElementById('act-to');
   if (!fromEl.value) fromEl.value = today;
   if (!toEl.value)   toEl.value   = today;
+  // Reset client-side filters
+  var actionEl = document.getElementById('act-action-filter');
+  var patientEl = document.getElementById('act-patient-filter');
+  if (actionEl) actionEl.value = '';
+  if (patientEl) patientEl.value = '';
+  _activityRows = [];
   var sel = document.getElementById('act-staff-filter');
   if (sel.options.length <= 1) {
     db.collection('staff').where('active','==',true).get().then(function(snap) {
@@ -4421,6 +4443,8 @@ function initActivityScreen() {
   loadActivityLog();
 }
 
+var _activityRows = []; // cached for client-side filtering
+
 function loadActivityLog() {
   var fromVal  = document.getElementById('act-from').value;
   var toVal    = document.getElementById('act-to').value;
@@ -4435,7 +4459,7 @@ function loadActivityLog() {
   if (staffUid) q = q.where('uid','==',staffUid);
   q.orderBy('date','desc').get().then(function(snap) {
     document.getElementById('activity-sub').textContent = snap.size + ' events';
-    if (snap.empty) { el.innerHTML = '<div class="empty">No activity in this range</div>'; return; }
+    if (snap.empty) { _activityRows = []; el.innerHTML = '<div class="empty">No activity in this range</div>'; return; }
     var rows = [];
     snap.forEach(function(d) { rows.push(d.data()); });
     rows.sort(function(a,b) {
@@ -4443,34 +4467,81 @@ function loadActivityLog() {
       var tb = b.timestamp ? b.timestamp.toMillis() : 0;
       return tb - ta;
     });
-    var byDate = {};
-    rows.forEach(function(r) {
-      if (!byDate[r.date]) byDate[r.date] = [];
-      byDate[r.date].push(r);
-    });
-    var html = '';
-    Object.keys(byDate).sort(function(a,b){ return b.localeCompare(a); }).forEach(function(date) {
-      var parts = date.split('-');
-      html += '<div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;'
-            + 'letter-spacing:0.06em;margin:12px 0 6px">'
-            + parts[2]+'/'+parts[1]+'/'+parts[0]+'</div>';
-      byDate[date].forEach(function(r) {
-        var icon = ACT_ICONS[r.action] || '•';
-        var roleChip = '<span style="font-size:9px;font-family:var(--mono);background:var(--border);'
-                     + 'color:var(--text3);padding:1px 5px;border-radius:3px;text-transform:uppercase;'
-                     + 'margin-left:4px">'+(r.role||'')+'</span>';
-        html += '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:0.5px solid var(--border)">'
-              + '<div style="font-size:16px;flex-shrink:0;width:22px;text-align:center;margin-top:1px">'+icon+'</div>'
-              + '<div style="flex:1;min-width:0">'
-              +   '<div style="font-size:13px;font-weight:500">'+esc(r.name||'-')+roleChip+'</div>'
-              +   '<div style="font-size:12px;color:var(--text2);margin-top:1px">'+esc(r.detail||r.action)+'</div>'
-              + '</div>'
-              + '<div style="font-size:11px;font-family:var(--mono);color:var(--text3);flex-shrink:0;margin-top:2px">'+esc(r.timeStr||'')+'</div>'
-              + '</div>';
-      });
-    });
-    el.innerHTML = html;
+    _activityRows = rows;
+    filterActivityLog();
   }).catch(function(e) { el.innerHTML = '<div class="empty">Error: '+e.message+'</div>'; });
+}
+
+function filterActivityLog() {
+  var el = document.getElementById('activity-list');
+  var actionFilter  = (document.getElementById('act-action-filter').value || '').toLowerCase();
+  var patientFilter = (document.getElementById('act-patient-filter').value || '').toLowerCase().trim();
+
+  var rows = _activityRows.filter(function(r) {
+    // Action filter
+    if (actionFilter && r.action !== actionFilter) return false;
+    // Patient name filter — check detail string and handoverOrders array
+    if (patientFilter) {
+      var inDetail = (r.detail || '').toLowerCase().indexOf(patientFilter) >= 0;
+      var inOrders = r.handoverOrders && r.handoverOrders.some(function(o) {
+        return (o.name || '').toLowerCase().indexOf(patientFilter) >= 0;
+      });
+      if (!inDetail && !inOrders) return false;
+    }
+    return true;
+  });
+
+  document.getElementById('activity-sub').textContent = rows.length + ' of ' + _activityRows.length + ' events';
+
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">No matching events</div>';
+    return;
+  }
+
+  var byDate = {};
+  rows.forEach(function(r) {
+    if (!byDate[r.date]) byDate[r.date] = [];
+    byDate[r.date].push(r);
+  });
+  var html = '';
+  Object.keys(byDate).sort(function(a,b){ return b.localeCompare(a); }).forEach(function(date) {
+    var parts = date.split('-');
+    html += '<div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;'
+          + 'letter-spacing:0.06em;margin:12px 0 6px">'
+          + parts[2]+'/'+parts[1]+'/'+parts[0]+'</div>';
+    byDate[date].forEach(function(r) {
+      var icon = ACT_ICONS[r.action] || '•';
+      var roleChip = '<span style="font-size:9px;font-family:var(--mono);background:var(--border);'
+                   + 'color:var(--text3);padding:1px 5px;border-radius:3px;text-transform:uppercase;'
+                   + 'margin-left:4px">'+(r.role||'')+'</span>';
+      html += '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:0.5px solid var(--border)">'
+            + '<div style="font-size:16px;flex-shrink:0;width:22px;text-align:center;margin-top:1px">'+icon+'</div>'
+            + '<div style="flex:1;min-width:0">'
+            +   '<div style="font-size:13px;font-weight:500">'+esc(r.name||'-')+roleChip+'</div>'
+            +   '<div style="font-size:12px;color:var(--text2);margin-top:1px">'+esc(r.detail||r.action)+'</div>'
+            +   (function(){
+                  if ((r.action==='handover_out'||r.action==='handover_in') && r.handoverOrders && r.handoverOrders.length) {
+                    var total = r.handoverOrders.reduce(function(s,o){ return s+(o.amt||0); },0);
+                    return '<div style="margin-top:5px;background:var(--surface2);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px">'
+                      + r.handoverOrders.map(function(o){
+                          return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:0.5px solid var(--border);color:var(--text2)">'
+                            + '<span>'+esc(o.name||'-')+(o.id?' <span style="color:var(--text3);font-family:var(--mono)">#'+esc(o.id)+'</span>':'')+'</span>'
+                            + '<span style="font-family:var(--mono);color:var(--accent)">Rs.'+(o.amt||0).toLocaleString('en-IN')+'</span>'
+                            + '</div>';
+                        }).join('')
+                      + '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:600;padding-top:4px">'
+                      + '<span style="color:var(--text3)">Total</span>'
+                      + '<span style="color:var(--accent)">Rs.'+total.toLocaleString('en-IN')+'</span>'
+                      + '</div></div>';
+                  }
+                  return '';
+                })()
+            + '</div>'
+            + '<div style="font-size:11px;font-family:var(--mono);color:var(--text3);flex-shrink:0;margin-top:2px">'+esc(r.timeStr||'')+'</div>'
+            + '</div>';
+    });
+  });
+  el.innerHTML = html;
 }
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -8615,18 +8686,15 @@ function loadHO() {
   }).catch(function(){});
 
   // Load today's cash totals from orders
-  // Phlebotomists see only their own orders; other roles see all
+  // Summary strip (Cash/UPI/Credit) shows ALL orders for admin/manager for visibility
+  // BUT the patient checklist and handover amount always show ONLY this user's own cash
   var _hoMyUid = curUser && curUser.uid;
   var _hoRole = curProfile && curProfile.role || '';
   var _hoIsPhlebo = _hoRole === 'phlebotomist';
-  var _hoQ = _hoIsPhlebo
-    ? db.collection('orders').where('date','==',today).where('createdBy','==',_hoMyUid)
-    : db.collection('orders').where('date','==',today);
-  // Also fetch due collections made TODAY on orders from any date
-  // dueCollectedBy + dueCollectedAt — these are on older orders not in today's date query
-  var _dueQ = _hoIsPhlebo
-    ? db.collection('orders').where('dueCollectedBy','==',_hoMyUid)
-    : db.collection('orders').where('dueCollectedAmt','>',0);
+  // Always query own orders for the handover form — admin cannot initiate handover for others' cash
+  var _hoQ = db.collection('orders').where('date','==',today).where('createdBy','==',_hoMyUid);
+  // Due collections: always own only
+  var _dueQ = db.collection('orders').where('dueCollectedBy','==',_hoMyUid);
 
   Promise.all([_hoQ.get(), _dueQ.get()]).then(function(results) {
     var todaySnap = results[0];
@@ -8643,7 +8711,7 @@ function loadHO() {
     todaySnap.forEach(function(d){
       var o=d.data();
       if (o.status==='draft') return;
-      if (_hoIsPhlebo && o.createdBy !== _hoMyUid) return;
+      // Query already filtered by createdBy===_hoMyUid — no extra guard needed
 
       // paidAmount already includes collectionCharge (totalAmount = testTotal + cc)
       // so we just split by payMode — no separate colCharge addition needed
@@ -8677,7 +8745,7 @@ function loadHO() {
       if (todayIds[d.id]) return; // already counted above
       var o = d.data();
       if (!o.dueCollectedAmt || o.dueCollectedAmt <= 0) return;
-      if (_hoIsPhlebo && o.dueCollectedBy !== _hoMyUid) return;
+      // Query already filtered by dueCollectedBy===_hoMyUid
       // Only count if collected today
       var collAt = o.dueCollectedAt && o.dueCollectedAt.toDate ? o.dueCollectedAt.toDate() : null;
       if (!collAt) return;
@@ -8691,7 +8759,7 @@ function loadHO() {
           if (!p.at) return;
           var pDate = p.at.substring(0,10); // ISO date YYYY-MM-DD
           if (pDate !== today) return;
-          if (_hoIsPhlebo && p.byUid !== _hoMyUid) return;
+          // byUid already guaranteed by dueCollectedBy query filter
           todayInstalments.push(p);
           if (p.mode === 'cash')           cash += (p.amt||0);
           else if (p.mode === 'upi' || p.mode === 'card') upi += (p.amt||0);
@@ -8939,8 +9007,9 @@ function submitHandover() {
 
   // NORMAL HANDOVER MODE
   // Guard: compute actual cash in hand before allowing transfer
+  // Always query own orders only — regardless of role
   Promise.all([
-    db.collection('orders').where('date','==',today).get(),
+    db.collection('orders').where('date','==',today).where('createdBy','==',myUid).get(),
     db.collection('handovers').where('date','==',today).get(),
     db.collection('orders').where('dueCollectedBy','==',myUid).get()
   ]).then(function(results) {
@@ -9054,7 +9123,10 @@ function submitHandover() {
       orders: myOrders
     }).then(function(){
       toast('Handover initiated — awaiting acceptance by '+toName,'ok');
-      logActivity('handover_out', 'Handed over Rs.'+amt.toLocaleString('en-IN')+' to '+toName);
+      logActivity('handover_out', 'Handed over Rs.'+amt.toLocaleString('en-IN')+' to '+toName, {
+        handoverOrders: myOrders.map(function(o){ return {name: o.patientName, amt: o.cashAmt, id: o.orderId}; }),
+        handoverTo: toName, handoverAmt: amt
+      });
       sel.value='';
       document.getElementById('ho-notes').value='';
       loadStats();
@@ -9150,7 +9222,15 @@ async function hoConfirmExecute() {
       tx.update(ref, updateData);
     });
   }).then(function(){
-    if (action==='accept') { toast('Cash accepted — PIN verified ✓','ok'); logActivity('handover_in', 'Accepted handover Rs.'+(hoPendingAction&&hoPendingAction.amount?hoPendingAction.amount.toLocaleString('en-IN'):'?')+' from '+(hoPendingAction&&hoPendingAction.recordedByName||'?')); loadStats(); }
+    if (action==='accept') {
+      toast('Cash accepted — PIN verified ✓','ok');
+      var _hoOrders = (hoPendingAction && hoPendingAction.orders) || [];
+      logActivity('handover_in', 'Accepted handover Rs.'+(hoPendingAction&&hoPendingAction.amount?hoPendingAction.amount.toLocaleString('en-IN'):'?')+' from '+(hoPendingAction&&hoPendingAction.recordedByName||'?'), {
+        handoverOrders: _hoOrders.map(function(o){ return {name: o.patientName, amt: o.cashAmt, id: o.orderId}; }),
+        handoverFrom: hoPendingAction&&hoPendingAction.recordedByName, handoverAmt: hoPendingAction&&hoPendingAction.amount
+      });
+      loadStats();
+    }
     else { toast('Handover rejected','warn'); logActivity('handover_rej', 'Rejected handover from '+(hoPendingAction&&hoPendingAction.recordedByName||'?')); }
   }).catch(function(err){
     if (err.message === 'already_actioned') toast('Already accepted or rejected by another session','warn');

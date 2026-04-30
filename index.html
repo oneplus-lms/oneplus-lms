@@ -3258,7 +3258,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.18';
+var APP_VERSION = 'v20.19';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3489,6 +3489,11 @@ function toggleEye(id, btn) {
 
 function goBack() {
   var cur = stack[stack.length-1];
+  // Already at root — do nothing, never exit the app
+  if (cur === 's-dash' || stack.length <= 1) {
+    history.replaceState({appNav: true}, '', '');
+    return;
+  }
   // If mid-order, swipe/back navigates between steps — never discards
   if (cur === 's-order') {
     if (_curStep === 3)  { showStep(2); return; }
@@ -3532,6 +3537,9 @@ window.addEventListener('popstate', function(e) {
 
   if (stack.length > 1) {
     goBack();
+  } else {
+    // Already at root — keep sentinel alive so app never exits
+    history.replaceState({appNav: true}, '', '');
   }
   // If at root (stack.length === 1) just swallow — app stays open.
 });

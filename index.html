@@ -3294,7 +3294,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.20';
+var APP_VERSION = 'v20.22';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4230,18 +4230,29 @@ function initAttendScreen() {
 }
 
 function loadMyAttendance(uid, today) {
-  db.collection('attendance').doc(uid + '_' + today).get().then(function(doc) {
+  db.collection('attendance').doc(uid + '_' + today).get({ source: 'server' }).then(function(doc) {
     _attendToday = doc.exists ? doc.data() : null;
     renderMyAttendance(_attendToday, uid, today, false);
   }).catch(function() {
-    renderMyAttendance(null, uid, today, false);
+    // Fallback to cache if server unreachable
+    db.collection('attendance').doc(uid + '_' + today).get().then(function(doc) {
+      _attendToday = doc.exists ? doc.data() : null;
+      renderMyAttendance(_attendToday, uid, today, false);
+    }).catch(function() {
+      renderMyAttendance(null, uid, today, false);
+    });
   });
 }
 
 function loadStaffAttendance(uid, name, today) {
-  db.collection('attendance').doc(uid + '_' + today).get().then(function(doc) {
+  db.collection('attendance').doc(uid + '_' + today).get({ source: 'server' }).then(function(doc) {
     _attendAdminDoc = doc.exists ? doc.data() : null;
     renderStaffAttendance(_attendAdminDoc, uid, name, today);
+  }).catch(function() {
+    db.collection('attendance').doc(uid + '_' + today).get().then(function(doc) {
+      _attendAdminDoc = doc.exists ? doc.data() : null;
+      renderStaffAttendance(_attendAdminDoc, uid, name, today);
+    });
   });
 }
 
@@ -4364,15 +4375,16 @@ function attendLogRow(label, point) {
   if (!point) return '';
   var gpsLink = (point.lat && point.lng)
     ? ' <a href="https://maps.google.com/?q='+point.lat+','+point.lng+'" target="_blank" '
-      + 'style="font-size:10px;color:var(--accent);text-decoration:none">&#128205; Map</a>'
+      + 'style="font-size:10px;color:var(--accent);text-decoration:none;display:inline-block;margin-top:2px">&#128205; Map</a>'
     : '';
-  return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px">'
-    + '<div style="flex:1;min-width:0">'
+  return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px;gap:8px">'
+    + '<div style="flex:1;min-width:0;overflow:hidden">'
     +   '<div style="font-weight:500;color:var(--text1)">' + label + '</div>'
-    +   (point.address ? '<div style="font-size:11px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(point.address)+'</div>' : '')
+    +   (point.address ? '<div style="font-size:11px;color:var(--text3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(point.address)+'</div>' : '')
+    +   gpsLink
     + '</div>'
-    + '<div style="font-family:var(--mono);font-size:11px;color:var(--text3);white-space:nowrap;margin-left:8px">'
-    +   esc(point.time||'') + gpsLink
+    + '<div style="font-family:var(--mono);font-size:11px;color:var(--text3);white-space:nowrap;flex-shrink:0">'
+    +   esc(point.time||'')
     + '</div>'
     + '</div>';
 }
@@ -4392,12 +4404,12 @@ function renderTeam(records) {
     var onBreak = lastBreak && lastBreak.start && !lastBreak.end;
     var state = co ? 'Out' : onBreak ? 'Break' : ci ? 'In' : '—';
     var stateColor = co ? '#6B7280' : onBreak ? '#D97706' : ci ? '#059669' : 'var(--text3)';
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border)">'
-      + '<div style="flex:1;min-width:0">'
-      +   '<div style="font-size:13px;font-weight:500;color:var(--text1)">'+esc(r.name||'-')+'</div>'
-      +   '<div style="font-size:11px;color:var(--text3)">'+esc(r.role||'')+(ci?' · In: '+esc(ci.time):'')+(co?' · Out: '+esc(co.time):'')+'</div>'
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border);gap:8px">'
+      + '<div style="flex:1;min-width:0;overflow:hidden">'
+      +   '<div style="font-size:13px;font-weight:500;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name||'-')+'</div>'
+      +   '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.role||'')+(ci?' · In: '+esc(ci.time):'')+(co?' · Out: '+esc(co.time):'')+'</div>'
       + '</div>'
-      + '<div style="font-size:12px;font-weight:600;color:'+stateColor+';white-space:nowrap;margin-left:8px">'+state+'</div>'
+      + '<div style="font-size:12px;font-weight:600;color:'+stateColor+';white-space:nowrap;flex-shrink:0">'+state+'</div>'
       + '</div>';
   }).join('');
 }
@@ -4485,11 +4497,13 @@ async function attendAction(action, uid, today, isAdmin) {
     toast('Break ended', 'ok');
   }
 
-  // Refresh display
-  var today2 = todayStr();
-  if (!isAdmin) loadMyAttendance(uid, today2);
-  else loadStaffAttendance(uid, _attendAdminTarget && _attendAdminTarget.name || '', today2);
-  if (btn) { btn.disabled=false; btn.style.opacity='1'; }
+  // Small delay to let Firestore propagate before re-fetching
+  setTimeout(function() {
+    var today2 = todayStr();
+    if (!isAdmin) loadMyAttendance(uid, today2);
+    else loadStaffAttendance(uid, _attendAdminTarget && _attendAdminTarget.name || '', today2);
+    if (btn) { btn.disabled=false; btn.style.opacity='1'; }
+  }, 600);
 }
 
 async function captureAttendPoint() {

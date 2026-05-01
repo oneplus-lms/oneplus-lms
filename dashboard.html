@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.21 — OnePLUS</title>
+<title>LabFlow Dashboard v20.23 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -166,7 +166,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.21</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.23</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -314,6 +314,31 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <div class="card">
           <div class="ch"><div class="ct">Activity Feed</div><span class="cc2" id="afc">0</span></div>
           <div id="afeed" style="max-height:420px;overflow-y:auto"><div class="empty">Loading...</div></div>
+        </div>
+
+        <!-- Attendance Today + Export -->
+        <div class="card">
+          <div class="ch"><div class="ct">&#128203; Attendance</div><span class="cc2" id="att-count">0</span></div>
+
+          <!-- Export controls -->
+          <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:0.5px solid var(--border)">
+            <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+              <input type="date" id="att-from" style="flex:1;min-width:110px;padding:5px 8px;border:0.5px solid var(--border-strong);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
+              <input type="date" id="att-to"   style="flex:1;min-width:110px;padding:5px 8px;border:0.5px solid var(--border-strong);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
+              <select id="att-export-staff" style="flex:1;min-width:120px;padding:5px 8px;border:0.5px solid var(--border-strong);border-radius:6px;font-size:12px;background:var(--surface);color:var(--text)">
+                <option value="">All Staff</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button onclick="attExportCSV()" style="flex:1;padding:6px 8px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">&#128196; CSV</button>
+              <button onclick="attExportWhatsApp()" style="flex:1;padding:6px 8px;background:#25D366;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">&#128172; WhatsApp</button>
+              <button onclick="attExportPrint()" style="flex:1;padding:6px 8px;background:#1D4ED8;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">&#128438; Print</button>
+            </div>
+          </div>
+
+          <!-- Today's live list -->
+          <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Today — Live</div>
+          <div id="att-list"><div class="empty">No records yet</div></div>
         </div>
       </div>
     </div>
@@ -509,6 +534,12 @@ function loadRange(from,to){
         snap.forEach(function(doc){allHandovers.push(Object.assign({id:doc.id},doc.data()));});
         renderHandovers();updateCash();
       });
+      // Attendance real-time listener
+      db.collection('attendance').where('date','==',from).onSnapshot(function(snap){
+        var recs=[];
+        snap.forEach(function(d){recs.push(d.data());});
+        renderDashAttendance(recs);
+      });
     }
   } else {
     set('drefresh','Loading…');
@@ -524,6 +555,7 @@ function loadRange(from,to){
 }
 
 function renderAll(){
+  initAttendExport();
   renderStats();
   applyTableFilter();
   renderDepts();
@@ -794,6 +826,212 @@ function renderField(){
 }
 
 // ── Transfers ─────────────────────────────────────────────────────────────
+// ── ATTENDANCE EXPORT ─────────────────────────────────────────────────────
+function initAttendExport() {
+  // Set default date range to current month
+  var now = new Date();
+  var y = now.getFullYear(), m = now.getMonth()+1;
+  var mm = m < 10 ? '0'+m : ''+m;
+  var lastDay = new Date(y, m, 0).getDate();
+  var fromEl = document.getElementById('att-from');
+  var toEl   = document.getElementById('att-to');
+  if (fromEl && !fromEl.value) fromEl.value = y+'-'+mm+'-01';
+  if (toEl   && !toEl.value)   toEl.value   = y+'-'+mm+'-'+lastDay;
+  // Populate staff selector
+  var sel = document.getElementById('att-export-staff');
+  if (sel && sel.options.length <= 1) {
+    db.collection('staff').where('active','==',true).get().then(function(snap) {
+      snap.forEach(function(d) {
+        var s = d.data();
+        var opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = (s.name||d.id) + ' ('+( s.role||'')+')';
+        sel.appendChild(opt);
+      });
+    });
+  }
+}
+
+async function fetchAttendData() {
+  var from = document.getElementById('att-from').value;
+  var to   = document.getElementById('att-to').value;
+  var uid  = document.getElementById('att-export-staff').value;
+  if (!from || !to) { alert('Select a date range first'); return null; }
+  var q = db.collection('attendance').where('date','>=',from).where('date','<=',to);
+  if (uid) q = q.where('uid','==',uid);
+  var snap = await q.get();
+  var recs = [];
+  snap.forEach(function(d) { recs.push(d.data()); });
+  recs.sort(function(a,b){
+    return (a.name||'').localeCompare(b.name||'') || (a.date||'').localeCompare(b.date||'');
+  });
+  return recs;
+}
+
+function calcBreakMin(breaks) {
+  return (breaks||[]).reduce(function(s,b) {
+    if (b.start && b.end) {
+      var sm = timeToMin(b.start.time), em = timeToMin(b.end.time);
+      return s + Math.max(0, em - sm);
+    }
+    return s;
+  }, 0);
+}
+
+function timeToMin(t) {
+  if (!t) return 0;
+  var m = t.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+  if (!m) return 0;
+  var h = parseInt(m[1]), min = parseInt(m[2]);
+  var ap = (m[3]||'').toUpperCase();
+  if (ap === 'PM' && h !== 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  return h*60 + min;
+}
+
+async function attExportCSV() {
+  var recs = await fetchAttendData();
+  if (!recs) return;
+  if (!recs.length) { alert('No attendance records in selected range'); return; }
+  var rows = [['Name','Role','Date','Check-In','Check-In Location','Check-Out','Check-Out Location','Break (min)','Total Hours','Marked By']];
+  recs.forEach(function(r) {
+    var ci = r.checkIn || {}, co = r.checkOut || {};
+    var breakMin = calcBreakMin(r.breaks);
+    rows.push([
+      r.name||'', r.role||'', r.date||'',
+      ci.time||'', ci.address||'',
+      co.time||'', co.address||'',
+      breakMin > 0 ? breakMin : '',
+      r.totalHours||'',
+      r.markedBy||'self'
+    ]);
+  });
+  var csv = rows.map(function(row) {
+    return row.map(function(v) {
+      var s = String(v).replace(/"/g,'""');
+      return s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0 ? '"'+s+'"' : s;
+    }).join(',');
+  }).join('\n');
+  var from = document.getElementById('att-from').value;
+  var to   = document.getElementById('att-to').value;
+  var blob = new Blob([csv], {type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'OnePLUS_Attendance_'+from+'_to_'+to+'.csv';
+  a.click();
+}
+
+async function attExportWhatsApp() {
+  var recs = await fetchAttendData();
+  if (!recs) return;
+  if (!recs.length) { alert('No attendance records in selected range'); return; }
+  var from = document.getElementById('att-from').value;
+  var to   = document.getElementById('att-to').value;
+  var lines = [
+    '*OnePLUS Lab — Attendance Report*',
+    from === to ? from : from + ' to ' + to,
+    '─────────────────────',
+    ''
+  ];
+  // Group by staff
+  var byStaff = {};
+  recs.forEach(function(r) {
+    if (!byStaff[r.name]) byStaff[r.name] = [];
+    byStaff[r.name].push(r);
+  });
+  Object.keys(byStaff).sort().forEach(function(name) {
+    var days = byStaff[name];
+    lines.push('*' + name + '* (' + (days[0].role||'') + ')');
+    var presentDays = days.filter(function(d){return d.checkIn;});
+    var totalMin = 0;
+    days.forEach(function(d) {
+      var ci = d.checkIn, co = d.checkOut;
+      var status = !ci ? 'Absent' : !co ? 'No check-out' : d.totalHours;
+      lines.push('  ' + d.date + ': '
+        + (ci ? ci.time : '—') + ' → '
+        + (co ? co.time : '—')
+        + ' | ' + status);
+    });
+    lines.push('  Present: ' + presentDays.length + '/' + days.length + ' days');
+    lines.push('');
+  });
+  lines.push('─────────────────────');
+  lines.push('OnePLUS Ultrasound Lab | +91 93122 18812');
+  var url = 'https://wa.me/919312218812?text=' + encodeURIComponent(lines.join('\n'));
+  window.open(url, '_blank');
+}
+
+async function attExportPrint() {
+  var recs = await fetchAttendData();
+  if (!recs) return;
+  if (!recs.length) { alert('No attendance records in selected range'); return; }
+  var from = document.getElementById('att-from').value;
+  var to   = document.getElementById('att-to').value;
+  var rows = recs.map(function(r) {
+    var ci = r.checkIn||{}, co = r.checkOut||{};
+    var breakMin = calcBreakMin(r.breaks);
+    return '<tr>'
+      +'<td>'+esc(r.name||'')+'</td>'
+      +'<td>'+esc(r.role||'')+'</td>'
+      +'<td>'+esc(r.date||'')+'</td>'
+      +'<td>'+esc(ci.time||'—')+'</td>'
+      +'<td style="font-size:10px;max-width:140px;white-space:normal">'+esc(ci.address||'—')+'</td>'
+      +'<td>'+esc(co.time||'—')+'</td>'
+      +'<td style="font-size:10px;max-width:140px;white-space:normal">'+esc(co.address||'—')+'</td>'
+      +'<td style="text-align:center">'+(breakMin>0?breakMin:'—')+'</td>'
+      +'<td style="text-align:center">'+esc(r.totalHours||'—')+'</td>'
+      +'</tr>';
+  }).join('');
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+    +'<title>Attendance Report</title>'
+    +'<style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px}'
+    +'h2{font-size:14px;margin:0 0 4px}p{margin:0 0 12px;color:#666;font-size:11px}'
+    +'table{width:100%;border-collapse:collapse}'
+    +'th{background:#1A4A3A;color:#fff;padding:6px 8px;text-align:left;font-size:10px}'
+    +'td{padding:5px 8px;border-bottom:0.5px solid #ddd;vertical-align:top}'
+    +'tr:nth-child(even){background:#f9f9f9}'
+    +'@media print{button{display:none}}</style></head><body>'
+    +'<h2>OnePLUS Ultrasound & Laboratory — Attendance Report</h2>'
+    +'<p>Period: '+esc(from)+' to '+esc(to)+'&nbsp;&nbsp;|&nbsp;&nbsp;NABL MC-6036&nbsp;&nbsp;|&nbsp;&nbsp;Generated: '+new Date().toLocaleString('en-IN')+'</p>'
+    +'<table><thead><tr>'
+    +'<th>Name</th><th>Role</th><th>Date</th><th>In</th><th>In Location</th>'
+    +'<th>Out</th><th>Out Location</th><th>Break (min)</th><th>Total Hours</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<p style="margin-top:16px">Dr. Nitin Agarwal MBBS MD &nbsp;|&nbsp; Pathologist</p>'
+    +'</body></html>';
+  var w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(function(){ w.print(); }, 600);
+}
+// ─────────────────────────────────────────────────────────────────────────
+
+function renderDashAttendance(recs){
+  var el=document.getElementById('att-list');
+  var countEl=document.getElementById('att-count');
+  if(!el)return;
+  if(countEl)countEl.textContent=recs.length;
+  if(!recs.length){el.innerHTML='<div class="empty">No attendance today</div>';return;}
+  recs.sort(function(a,b){return(a.name||'').localeCompare(b.name||'');});
+  el.innerHTML=recs.map(function(r){
+    var ci=r.checkIn,co=r.checkOut;
+    var breaks=r.breaks||[];
+    var lb=breaks.length?breaks[breaks.length-1]:null;
+    var onBreak=lb&&lb.start&&!lb.end;
+    var state=co?'Out':onBreak?'Break':ci?'In':'—';
+    var stateColor=co?'#6B7280':onBreak?'#D97706':ci?'#059669':'var(--text3)';
+    var gpsLink=ci&&ci.lat?'<a href="https://maps.google.com/?q='+ci.lat+','+ci.lng+'" target="_blank" style="font-size:10px;color:var(--accent);text-decoration:none;margin-left:4px">&#128205;</a>':'';
+    return '<div class="li">'
+      +'<div style="flex:1;min-width:0">'
+        +'<div class="lin">'+esc(r.name||'-')+'<span style="font-size:9px;font-family:var(--mono);background:var(--border);color:var(--text3);padding:1px 5px;border-radius:3px;text-transform:uppercase;margin-left:4px">'+esc(r.role||'')+'</span></div>'
+        +'<div class="lim">'+(ci?'In: '+esc(ci.time):'—')+(co?' · Out: '+esc(co.time):'')+(r.totalHours?' · '+esc(r.totalHours):'')+gpsLink+'</div>'
+      +'</div>'
+      +'<div style="font-size:12px;font-weight:600;color:'+stateColor+';white-space:nowrap;margin-left:8px">'+state+'</div>'
+    +'</div>';
+  }).join('');
+}
+
 function renderTransfers(){
   var pend=allOrders.filter(function(o){return o.fieldTransferPending;});
   var card=document.getElementById('tcard');

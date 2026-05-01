@@ -323,6 +323,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div class="quick-actions">
       <button class="qa-btn" onclick="goTo('s-order')"><div class="qa-icon">&#129514;</div><div class="qa-label">New Order</div><div class="qa-sub">Register patient</div></button>
       <button class="qa-btn" onclick="goTo('s-orders')"><div class="qa-icon">&#128203;</div><div class="qa-label">All Orders / TRF</div><div class="qa-sub">View, print TRF</div></button>
+      <button class="qa-btn" onclick="goTo('s-attend')"><div class="qa-icon">&#128203;</div><div class="qa-label">Attendance</div><div class="qa-sub">Check-in / Check-out</div></button>
       <button class="qa-btn" onclick="goTo('s-estimate')"><div class="qa-icon">&#128179;</div><div class="qa-label">Estimate</div><div class="qa-sub">Quote &amp; convert</div></button>
       <button class="qa-btn" onclick="goTo('s-ho')"><div class="qa-icon">&#128176;</div><div class="qa-label">Cash Handover</div><div class="qa-sub">EOD settlement</div></button>
       <button class="qa-btn" id="eod-btn" style="display:none" onclick="goTo('s-eod')"><div class="qa-icon">&#128202;</div><div class="qa-label">EOD Report</div><div class="qa-sub">WhatsApp summary</div></button>
@@ -1596,6 +1597,41 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
 </div>
 
 <!-- ADMIN SCREEN -->
+<!-- ── ATTENDANCE SCREEN ─────────────────────────────────────────────── -->
+<div id="s-attend" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="goBack()">&#8592;</button>
+    <div style="flex:1"><div class="topbar-title">Attendance</div><div class="topbar-sub" id="attend-sub">Today</div></div>
+  </div>
+  <div class="screen-body">
+
+    <!-- My Status Card -->
+    <div class="card" id="attend-my-card" style="margin-bottom:12px">
+      <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">My Attendance Today</div>
+      <div id="attend-my-status" style="text-align:center;padding:16px 0;color:var(--text3);font-size:13px">Loading...</div>
+      <div id="attend-action-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div>
+      <div id="attend-my-log" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Admin: Mark for others -->
+    <div class="card" id="attend-admin-card" style="display:none;margin-bottom:12px">
+      <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Mark for Staff Member</div>
+      <select id="attend-staff-sel" style="width:100%;padding:8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text);margin-bottom:8px">
+        <option value="">Select staff member...</option>
+      </select>
+      <div id="attend-staff-status" style="font-size:12px;color:var(--text3);margin-bottom:8px"></div>
+      <div id="attend-staff-btns" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+    </div>
+
+    <!-- Today's Team Overview (admin/manager/pathologist) -->
+    <div id="attend-team-card" style="display:none">
+      <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Team — Today</div>
+      <div id="attend-team-list"></div>
+    </div>
+
+  </div>
+</div>
+
 <div id="s-admin" class="screen">
   <div class="topbar">
     <button class="back-btn" onclick="goBack()">&#8592;</button>
@@ -3258,7 +3294,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.19';
+var APP_VERSION = 'v20.20';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3418,6 +3454,7 @@ function showScreen(id) {
   if (id === 's-orders') { ordersDateOffset=0; loadOrders(); }
   if (id === 's-order-detail') {} // loaded by openOrderDetail()
   if (id === 's-ho') loadHO();
+  if (id === 's-attend') initAttendScreen();
   if (id === 's-eod') {
     var _eodRole = curProfile && curProfile.role || '';
     if (_eodRole !== 'admin' && _eodRole !== 'manager' && _eodRole !== 'pathologist') {
@@ -4138,6 +4175,361 @@ function paeClearOverride() {
   }).catch(function(e) { toast('Failed: ' + e.message, 'err'); });
 }
 
+// ── ATTENDANCE MODULE ─────────────────────────────────────────────────────
+var _attendToday = null;        // current user's today doc
+var _attendAdminTarget = null;  // uid of staff selected in admin panel
+var _attendAdminDoc = null;     // that staff member's today doc
+var _attendTeamUnsub = null;
+
+function initAttendScreen() {
+  var today = todayStr();
+  document.getElementById('attend-sub').textContent = today;
+  var myUid = curUser && curUser.uid;
+  var role = curProfile && curProfile.role || '';
+  var canManage = ['admin','manager','pathologist'].indexOf(role) >= 0;
+
+  // Show/hide admin cards
+  var adminCard = document.getElementById('attend-admin-card');
+  var teamCard = document.getElementById('attend-team-card');
+  if (adminCard) adminCard.style.display = canManage ? 'block' : 'none';
+  if (teamCard)  teamCard.style.display  = canManage ? 'block' : 'none';
+
+  // Load my own record
+  loadMyAttendance(myUid, today);
+
+  // Admin: populate staff selector
+  if (canManage) {
+    loadAttendTeam(today);
+    var sel = document.getElementById('attend-staff-sel');
+    if (sel && sel.options.length <= 1) {
+      db.collection('staff').where('active','==',true).get().then(function(snap) {
+        snap.forEach(function(d) {
+          if (d.id === myUid) return; // skip self
+          var s = d.data();
+          var opt = document.createElement('option');
+          opt.value = d.id;
+          opt.dataset.name = s.name || '';
+          opt.textContent = (s.name || d.id) + ' (' + (s.role || '') + ')';
+          sel.appendChild(opt);
+        });
+      });
+    }
+    sel.onchange = function() {
+      var uid = sel.value;
+      var name = sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].dataset.name || uid;
+      if (!uid) {
+        document.getElementById('attend-staff-status').textContent = '';
+        document.getElementById('attend-staff-btns').innerHTML = '';
+        _attendAdminTarget = null; _attendAdminDoc = null;
+        return;
+      }
+      _attendAdminTarget = { uid: uid, name: name };
+      loadStaffAttendance(uid, name, today);
+    };
+  }
+}
+
+function loadMyAttendance(uid, today) {
+  db.collection('attendance').doc(uid + '_' + today).get().then(function(doc) {
+    _attendToday = doc.exists ? doc.data() : null;
+    renderMyAttendance(_attendToday, uid, today, false);
+  }).catch(function() {
+    renderMyAttendance(null, uid, today, false);
+  });
+}
+
+function loadStaffAttendance(uid, name, today) {
+  db.collection('attendance').doc(uid + '_' + today).get().then(function(doc) {
+    _attendAdminDoc = doc.exists ? doc.data() : null;
+    renderStaffAttendance(_attendAdminDoc, uid, name, today);
+  });
+}
+
+function loadAttendTeam(today) {
+  if (_attendTeamUnsub) { _attendTeamUnsub(); _attendTeamUnsub = null; }
+  _attendTeamUnsub = db.collection('attendance').where('date','==',today)
+    .onSnapshot(function(snap) {
+      var records = [];
+      snap.forEach(function(d) { records.push(d.data()); });
+      renderTeam(records);
+    });
+}
+
+function renderMyAttendance(rec, uid, today, isAdmin) {
+  var statusEl = document.getElementById('attend-my-status');
+  var btnsEl   = document.getElementById('attend-action-btns');
+  var logEl    = document.getElementById('attend-my-log');
+  if (!rec) {
+    statusEl.innerHTML = '<div style="font-size:28px;margin-bottom:6px">&#128336;</div>'
+      + '<div style="font-size:14px;font-weight:500;color:var(--text2)">Not checked in</div>';
+    btnsEl.innerHTML = attendBtn('check-in', '&#9989; Check In', '#059669', 'attendAction(\'check-in\',\''+uid+'\',\''+today+'\',false)');
+    logEl.innerHTML = '';
+    return;
+  }
+  var ci = rec.checkIn, co = rec.checkOut;
+  var breaks = rec.breaks || [];
+  var lastBreak = breaks.length ? breaks[breaks.length-1] : null;
+  var onBreak = lastBreak && lastBreak.start && !lastBreak.end;
+
+  // Status line
+  var statusHTML = '';
+  if (co) {
+    statusHTML = '<div style="font-size:22px;margin-bottom:4px">&#127968;</div>'
+      + '<div style="font-size:14px;font-weight:600;color:#059669">Checked Out</div>'
+      + '<div style="font-size:12px;color:var(--text3);margin-top:2px">at ' + esc(co.time) + '</div>';
+    if (rec.totalHours) statusHTML += '<div style="font-size:11px;color:var(--text3);margin-top:2px">Total: ' + rec.totalHours + '</div>';
+  } else if (onBreak) {
+    statusHTML = '<div style="font-size:22px;margin-bottom:4px">&#9749;</div>'
+      + '<div style="font-size:14px;font-weight:600;color:'+AMBER_COLOR+'">On Break</div>'
+      + '<div style="font-size:12px;color:var(--text3);margin-top:2px">since ' + esc(lastBreak.start.time) + '</div>';
+  } else if (ci) {
+    statusHTML = '<div style="font-size:22px;margin-bottom:4px">&#9989;</div>'
+      + '<div style="font-size:14px;font-weight:600;color:#059669">Checked In</div>'
+      + '<div style="font-size:12px;color:var(--text3);margin-top:2px">at ' + esc(ci.time) + '</div>';
+  }
+  statusEl.innerHTML = statusHTML;
+
+  // Action buttons
+  var btns = '';
+  if (!co) {
+    if (onBreak) {
+      btns += attendBtn('end-break', '&#9749; End Break', '#D97706', 'attendAction(\'end-break\',\''+uid+'\',\''+today+'\',false)');
+    } else if (ci) {
+      btns += attendBtn('start-break', '&#9749; Start Break', '#D97706', 'attendAction(\'start-break\',\''+uid+'\',\''+today+'\',false)');
+      btns += attendBtn('check-out', '&#128682; Check Out', '#DC2626', 'attendAction(\'check-out\',\''+uid+'\',\''+today+'\',false)');
+    }
+  }
+  btnsEl.innerHTML = btns;
+
+  // Log
+  logEl.innerHTML = buildAttendLog(rec);
+}
+
+function renderStaffAttendance(rec, uid, name, today) {
+  var statusEl = document.getElementById('attend-staff-status');
+  var btnsEl   = document.getElementById('attend-staff-btns');
+  if (!rec) {
+    statusEl.textContent = name + ' — Not checked in';
+    btnsEl.innerHTML = attendBtn('check-in', '&#9989; Check In for '+esc(name), '#059669',
+      'attendAction(\'check-in\',\''+uid+'\',\''+today+'\',true)');
+    return;
+  }
+  var ci = rec.checkIn, co = rec.checkOut;
+  var breaks = rec.breaks || [];
+  var lastBreak = breaks.length ? breaks[breaks.length-1] : null;
+  var onBreak = lastBreak && lastBreak.start && !lastBreak.end;
+  var state = co ? 'Checked Out' : onBreak ? 'On Break' : ci ? 'Checked In' : 'Not checked in';
+  statusEl.textContent = name + ' — ' + state + (ci ? ' at ' + ci.time : '');
+  var btns = '';
+  if (!co) {
+    if (!ci) {
+      btns += attendBtn('check-in','&#9989; Check In','#059669','attendAction(\'check-in\',\''+uid+'\',\''+today+'\',true)');
+    } else if (onBreak) {
+      btns += attendBtn('end-break','&#9749; End Break','#D97706','attendAction(\'end-break\',\''+uid+'\',\''+today+'\',true)');
+    } else {
+      btns += attendBtn('start-break','&#9749; Start Break','#D97706','attendAction(\'start-break\',\''+uid+'\',\''+today+'\',true)');
+      btns += attendBtn('check-out','&#128682; Check Out','#DC2626','attendAction(\'check-out\',\''+uid+'\',\''+today+'\',true)');
+    }
+  }
+  btnsEl.innerHTML = btns;
+}
+
+function attendBtn(id, label, color, onclick) {
+  return '<button onclick="'+onclick+'" style="flex:1;min-width:120px;padding:10px 8px;background:'+color
+    +';color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer">'+label+'</button>';
+}
+
+var AMBER_COLOR = '#D97706';
+
+function buildAttendLog(rec) {
+  if (!rec) return '';
+  var rows = [];
+  if (rec.checkIn) {
+    rows.push(attendLogRow('&#9989; Check In', rec.checkIn));
+  }
+  (rec.breaks||[]).forEach(function(b, i) {
+    rows.push(attendLogRow('&#9749; Break '+(i+1)+' start', b.start));
+    if (b.end) rows.push(attendLogRow('&#9749; Break '+(i+1)+' end', b.end));
+  });
+  if (rec.checkOut) {
+    rows.push(attendLogRow('&#128682; Check Out', rec.checkOut));
+  }
+  if (!rows.length) return '';
+  return '<div style="border-top:0.5px solid var(--border);padding-top:8px;margin-top:4px">'
+    + rows.join('')
+    + '</div>';
+}
+
+function attendLogRow(label, point) {
+  if (!point) return '';
+  var gpsLink = (point.lat && point.lng)
+    ? ' <a href="https://maps.google.com/?q='+point.lat+','+point.lng+'" target="_blank" '
+      + 'style="font-size:10px;color:var(--accent);text-decoration:none">&#128205; Map</a>'
+    : '';
+  return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px">'
+    + '<div style="flex:1;min-width:0">'
+    +   '<div style="font-weight:500;color:var(--text1)">' + label + '</div>'
+    +   (point.address ? '<div style="font-size:11px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(point.address)+'</div>' : '')
+    + '</div>'
+    + '<div style="font-family:var(--mono);font-size:11px;color:var(--text3);white-space:nowrap;margin-left:8px">'
+    +   esc(point.time||'') + gpsLink
+    + '</div>'
+    + '</div>';
+}
+
+function renderTeam(records) {
+  var el = document.getElementById('attend-team-list');
+  if (!el) return;
+  if (!records.length) {
+    el.innerHTML = '<div class="empty">No attendance recorded today</div>';
+    return;
+  }
+  records.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  el.innerHTML = records.map(function(r) {
+    var co = r.checkOut, ci = r.checkIn;
+    var breaks = r.breaks || [];
+    var lastBreak = breaks.length ? breaks[breaks.length-1] : null;
+    var onBreak = lastBreak && lastBreak.start && !lastBreak.end;
+    var state = co ? 'Out' : onBreak ? 'Break' : ci ? 'In' : '—';
+    var stateColor = co ? '#6B7280' : onBreak ? '#D97706' : ci ? '#059669' : 'var(--text3)';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border)">'
+      + '<div style="flex:1;min-width:0">'
+      +   '<div style="font-size:13px;font-weight:500;color:var(--text1)">'+esc(r.name||'-')+'</div>'
+      +   '<div style="font-size:11px;color:var(--text3)">'+esc(r.role||'')+(ci?' · In: '+esc(ci.time):'')+(co?' · Out: '+esc(co.time):'')+'</div>'
+      + '</div>'
+      + '<div style="font-size:12px;font-weight:600;color:'+stateColor+';white-space:nowrap;margin-left:8px">'+state+'</div>'
+      + '</div>';
+  }).join('');
+}
+
+async function attendAction(action, uid, today, isAdmin) {
+  var btn = event && event.target;
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+
+  // Capture GPS
+  var point = await captureAttendPoint();
+
+  var docId = uid + '_' + today;
+  var ref = db.collection('attendance').doc(docId);
+  var snap = await ref.get();
+  var rec = snap.exists ? snap.data() : null;
+  var now = new Date();
+  var timeStr = now.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', hour12: true});
+
+  var update = {};
+
+  if (action === 'check-in') {
+    if (rec && rec.checkIn) { toast('Already checked in', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
+    var name = isAdmin ? (_attendAdminTarget && _attendAdminTarget.name) : ((curProfile && curProfile.name) || '');
+    var role = isAdmin ? '' : ((curProfile && curProfile.role) || '');
+    if (isAdmin && _attendAdminTarget) {
+      // fetch role from staff doc
+      try {
+        var staffSnap = await db.collection('staff').doc(uid).get();
+        if (staffSnap.exists) role = staffSnap.data().role || '';
+      } catch(e) {}
+    }
+    update = {
+      uid: uid, name: name, role: role, date: today,
+      checkIn: point, breaks: [], checkOut: null, totalHours: null,
+      markedBy: isAdmin ? ((curProfile&&curProfile.name)||'admin') : 'self'
+    };
+    await ref.set(update);
+    logActivity('attend_in', (isAdmin?'Marked check-in for '+name:''+'Checked in') + ' at ' + point.time, { attendPoint: point });
+    toast('Checked in ✓', 'ok');
+
+  } else if (action === 'check-out') {
+    if (!rec || !rec.checkIn) { toast('Not checked in', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
+    if (rec.checkOut) { toast('Already checked out', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
+    // Close any open break first
+    var breaks = (rec.breaks || []).slice();
+    var lastBreak = breaks.length ? breaks[breaks.length-1] : null;
+    if (lastBreak && lastBreak.start && !lastBreak.end) {
+      breaks[breaks.length-1] = Object.assign({}, lastBreak, { end: point });
+    }
+    // Compute total hours
+    var inMs = parseAttendTime(rec.checkIn.time);
+    var outMs = parseAttendTime(point.time);
+    var diffMin = Math.max(0, Math.round((outMs - inMs) / 60000));
+    // Subtract break time
+    var breakMin = breaks.reduce(function(s,b) {
+      if (b.start && b.end) {
+        return s + Math.max(0, Math.round((parseAttendTime(b.end.time) - parseAttendTime(b.start.time)) / 60000));
+      }
+      return s;
+    }, 0);
+    var netMin = Math.max(0, diffMin - breakMin);
+    var totalHours = Math.floor(netMin/60) + 'h ' + (netMin%60) + 'm';
+    await ref.update({ checkOut: point, breaks: breaks, totalHours: totalHours });
+    logActivity('attend_out', 'Checked out at ' + point.time + ' · ' + totalHours, { attendPoint: point });
+    toast('Checked out ✓ · ' + totalHours, 'ok');
+
+  } else if (action === 'start-break') {
+    if (!rec || !rec.checkIn || rec.checkOut) { toast('Cannot start break', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
+    var breaks2 = (rec.breaks || []).slice();
+    var lb = breaks2.length ? breaks2[breaks2.length-1] : null;
+    if (lb && lb.start && !lb.end) { toast('Already on break', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
+    breaks2.push({ start: point, end: null });
+    await ref.update({ breaks: breaks2 });
+    logActivity('attend_break', 'Break started at ' + point.time);
+    toast('Break started', 'ok');
+
+  } else if (action === 'end-break') {
+    if (!rec) { if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
+    var breaks3 = (rec.breaks || []).slice();
+    var lb2 = breaks3.length ? breaks3[breaks3.length-1] : null;
+    if (!lb2 || !lb2.start || lb2.end) { toast('No active break', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
+    breaks3[breaks3.length-1] = Object.assign({}, lb2, { end: point });
+    await ref.update({ breaks: breaks3 });
+    logActivity('attend_break', 'Break ended at ' + point.time);
+    toast('Break ended', 'ok');
+  }
+
+  // Refresh display
+  var today2 = todayStr();
+  if (!isAdmin) loadMyAttendance(uid, today2);
+  else loadStaffAttendance(uid, _attendAdminTarget && _attendAdminTarget.name || '', today2);
+  if (btn) { btn.disabled=false; btn.style.opacity='1'; }
+}
+
+async function captureAttendPoint() {
+  var now = new Date();
+  var timeStr = now.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', hour12: true});
+  var point = { time: timeStr, lat: null, lng: null, address: null };
+  try {
+    var pos = await new Promise(function(res, rej) {
+      navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000, maximumAge: 0 });
+    });
+    point.lat = parseFloat(pos.coords.latitude.toFixed(6));
+    point.lng = parseFloat(pos.coords.longitude.toFixed(6));
+    // Reverse geocode via Nominatim (free, no key)
+    try {
+      var resp = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='
+        + point.lat + '&lon=' + point.lng + '&zoom=17&addressdetails=0',
+        { headers: { 'Accept-Language': 'en' } });
+      var geo = await resp.json();
+      point.address = geo.display_name ? geo.display_name.split(',').slice(0,3).join(', ') : null;
+    } catch(e) { point.address = point.lat + ', ' + point.lng; }
+  } catch(e) {
+    point.address = 'GPS unavailable';
+    toast('GPS not available — time recorded only', 'warn');
+  }
+  return point;
+}
+
+function parseAttendTime(timeStr) {
+  // Parse "hh:mm AM/PM" to ms since midnight
+  if (!timeStr) return 0;
+  var m = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+  if (!m) return 0;
+  var h = parseInt(m[1]), min = parseInt(m[2]);
+  var ap = (m[3]||'').toUpperCase();
+  if (ap === 'PM' && h !== 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  return (h * 60 + min) * 60000;
+}
+// ─────────────────────────────────────────────────────────────────────────
+
 // ── STATIC PA GUIDELINES SUGGEST ─────────────────────────────────────────
 function paeStaticSuggest() {
   if (!paeCurrentTest) return;
@@ -4401,6 +4793,7 @@ var ACT_ICONS = {
   order_create: '🧾', order_edit:   '✏️',
   due_collect:  '💰', handover_out: '↑',
   handover_in:  '↓',  handover_rej: '✗',
+  attend_in:    '✅', attend_out:   '🏁', attend_break: '☕',
   pin_change:   '🔑', staff_create: '👤',
   staff_edit:   '⚙️', eod_save:     '📋'
 };

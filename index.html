@@ -1603,7 +1603,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <button class="back-btn" onclick="goBack()">&#8592;</button>
     <div style="flex:1"><div class="topbar-title">Attendance</div><div class="topbar-sub" id="attend-sub">Today</div></div>
   </div>
-  <div class="screen-body">
+  <div class="scroll-body">
 
     <!-- GPS warning banner — shown if location unavailable -->
     <div id="attend-gps-warn" style="display:none;background:#FEF3C7;border:1px solid #F59E0B;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px">
@@ -1633,9 +1633,29 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     </div>
 
     <!-- Today's Team Overview (admin/manager/pathologist) -->
-    <div id="attend-team-card" style="display:none">
-      <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Team — Today</div>
-      <div id="attend-team-list"></div>
+    <div id="attend-team-card" style="display:none;margin-bottom:12px">
+      <div class="card">
+        <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Team — Today</div>
+        <div id="attend-team-list"></div>
+      </div>
+    </div>
+
+    <!-- Export (admin/manager/pathologist only) -->
+    <div id="attend-export-card" style="display:none;margin-bottom:24px">
+      <div class="card">
+        <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Export Attendance</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+          <input type="date" id="attend-exp-from" style="flex:1;min-width:120px;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)">
+          <input type="date" id="attend-exp-to" style="flex:1;min-width:120px;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)">
+        </div>
+        <select id="attend-exp-staff" style="width:100%;padding:7px 8px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text);margin-bottom:8px">
+          <option value="">All Staff</option>
+        </select>
+        <div style="display:flex;gap:6px">
+          <button onclick="attendMobileExportWA()" style="flex:1;padding:9px;background:#25D366;color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer">&#128172; WhatsApp</button>
+          <button onclick="attendMobileExportCSV()" style="flex:1;padding:9px;background:#059669;color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer">&#128196; CSV</button>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -3303,7 +3323,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.26';
+var APP_VERSION = 'v20.27';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4235,13 +4255,38 @@ function initAttendScreen() {
   loadMyAttendance(myUid, today);
 
   // Admin: populate staff selector
+  var exportCard = document.getElementById('attend-export-card');
+  if (exportCard) exportCard.style.display = canManage ? 'block' : 'none';
+
   if (canManage) {
+    // Set default export date range to current month
+    var now = new Date();
+    var y = now.getFullYear(), m = now.getMonth()+1;
+    var mm = m < 10 ? '0'+m : ''+m;
+    var lastDay = new Date(y, m, 0).getDate();
+    var expFrom = document.getElementById('attend-exp-from');
+    var expTo   = document.getElementById('attend-exp-to');
+    if (expFrom && !expFrom.value) expFrom.value = y+'-'+mm+'-01';
+    if (expTo   && !expTo.value)   expTo.value   = y+'-'+mm+'-'+lastDay;
+    // Populate export staff selector
+    var expSel = document.getElementById('attend-exp-staff');
+    if (expSel && expSel.options.length <= 1) {
+      db.collection('staff').where('active','==',true).get().then(function(snap) {
+        snap.forEach(function(d) {
+          var s = d.data();
+          var opt = document.createElement('option');
+          opt.value = d.id;
+          opt.textContent = (s.name||d.id) + ' ('+( s.role||'')+')';
+          expSel.appendChild(opt);
+        });
+      });
+    }
     loadAttendTeam(today);
     var sel = document.getElementById('attend-staff-sel');
     if (sel && sel.options.length <= 1) {
       db.collection('staff').where('active','==',true).get().then(function(snap) {
         snap.forEach(function(d) {
-          if (d.id === myUid) return; // skip self
+          if (d.id === myUid) return;
           var s = d.data();
           var opt = document.createElement('option');
           opt.value = d.id;
@@ -4618,6 +4663,64 @@ function parseAttendTime(timeStr) {
   if (ap === 'PM' && h !== 12) h += 12;
   if (ap === 'AM' && h === 12) h = 0;
   return (h * 60 + min) * 60000;
+}
+
+async function attendMobileFetchData() {
+  var from  = document.getElementById('attend-exp-from').value;
+  var to    = document.getElementById('attend-exp-to').value;
+  var uid   = document.getElementById('attend-exp-staff').value;
+  if (!from || !to) { toast('Select a date range', 'warn'); return null; }
+  var q = db.collection('attendance').where('date','>=',from).where('date','<=',to);
+  if (uid) q = q.where('uid','==',uid);
+  var snap = await q.get();
+  var recs = [];
+  snap.forEach(function(d){ recs.push(d.data()); });
+  recs.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'') || (a.date||'').localeCompare(b.date||''); });
+  return recs;
+}
+
+async function attendMobileExportWA() {
+  var recs = await attendMobileFetchData();
+  if (!recs) return;
+  if (!recs.length) { toast('No records in selected range', 'warn'); return; }
+  var from = document.getElementById('attend-exp-from').value;
+  var to   = document.getElementById('attend-exp-to').value;
+  var lines = ['*OnePLUS Lab — Attendance Report*', from === to ? from : from+' to '+to, '─────────────────────', ''];
+  var byStaff = {};
+  recs.forEach(function(r){ if (!byStaff[r.name]) byStaff[r.name]=[]; byStaff[r.name].push(r); });
+  Object.keys(byStaff).sort().forEach(function(name) {
+    var days = byStaff[name];
+    lines.push('*'+name+'* ('+(days[0].role||'')+')');
+    days.forEach(function(d) {
+      var ci=d.checkIn, co=d.checkOut;
+      lines.push('  '+d.date+': '+(ci?ci.time:'—')+' → '+(co?co.time:'—')+(d.totalHours?' | '+d.totalHours:''));
+    });
+    lines.push('  Present: '+days.filter(function(d){return d.checkIn;}).length+'/'+days.length+' days');
+    lines.push('');
+  });
+  lines.push('OnePLUS Ultrasound Lab | +91 93122 18812');
+  window.open('https://wa.me/919312218812?text='+encodeURIComponent(lines.join('\n')), '_blank');
+}
+
+async function attendMobileExportCSV() {
+  var recs = await attendMobileFetchData();
+  if (!recs) return;
+  if (!recs.length) { toast('No records in selected range', 'warn'); return; }
+  var rows = [['Name','Role','Date','Check-In','Check-Out','Break (min)','Total Hours']];
+  recs.forEach(function(r) {
+    var ci=r.checkIn||{}, co=r.checkOut||{};
+    var bMin=(r.breaks||[]).reduce(function(s,b){
+      if(b.start&&b.end){var sm=parseAttendTime(b.start.time),em=parseAttendTime(b.end.time);return s+Math.max(0,Math.round((em-sm)/60000));}return s;},0);
+    rows.push([r.name||'',r.role||'',r.date||'',ci.time||'',co.time||'',bMin>0?bMin:'',r.totalHours||'']);
+  });
+  var csv = rows.map(function(r){ return r.map(function(v){ var s=String(v); return s.indexOf(',')>=0?'"'+s+'"':s; }).join(','); }).join('\n');
+  var from = document.getElementById('attend-exp-from').value;
+  var to   = document.getElementById('attend-exp-to').value;
+  var blob = new Blob([csv],{type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Attendance_'+from+'_to_'+to+'.csv';
+  a.click();
 }
 // ─────────────────────────────────────────────────────────────────────────
 

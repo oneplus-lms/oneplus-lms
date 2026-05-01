@@ -1609,8 +1609,8 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div id="attend-gps-warn" style="display:none;background:#FEF3C7;border:1px solid #F59E0B;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px">
       <div style="font-size:18px;flex-shrink:0">&#128993;</div>
       <div>
-        <div style="font-size:13px;font-weight:600;color:#92400E">Location is off</div>
-        <div style="font-size:12px;color:#92400E;margin-top:2px">Turn on Location in your phone's quick settings before checking in. Your check-in time will still be recorded but GPS coordinates will be missing.</div>
+        <div style="font-size:13px;font-weight:600;color:#92400E">Location unavailable</div>
+        <div class="gps-warn-msg" style="font-size:12px;color:#92400E;margin-top:2px">Turn on Location in your phone's quick settings before checking in. Your check-in time will still be recorded but GPS coordinates will be missing.</div>
       </div>
     </div>
 
@@ -3303,7 +3303,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.23';
+var APP_VERSION = 'v20.26';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4197,23 +4197,22 @@ function checkGPSStatus() {
     warn.style.display = 'flex';
     return;
   }
-  navigator.permissions.query({ name: 'geolocation' }).then(function(result) {
-    if (result.state === 'denied') {
+  // Quick position attempt with network-based fallback (fast, low accuracy)
+  navigator.geolocation.getCurrentPosition(
+    function() { warn.style.display = 'none'; },
+    function(err) {
       warn.style.display = 'flex';
-      warn.querySelector('div:last-child').children[0].textContent = 'Location permission denied';
-      warn.querySelector('div:last-child').children[1].textContent = 'Go to Chrome Settings → Site Settings → Location → Allow for this site.';
-    } else {
-      // Permission granted or prompt — do a quick position check
-      navigator.geolocation.getCurrentPosition(
-        function() { warn.style.display = 'none'; },
-        function() { warn.style.display = 'flex'; },
-        { timeout: 5000, maximumAge: 60000, enableHighAccuracy: false }
-      );
-    }
-  }).catch(function() {
-    // permissions API not supported — skip warning
-    warn.style.display = 'none';
-  });
+      var msgEl = warn.querySelector('.gps-warn-msg');
+      if (msgEl) {
+        if (err.code === 1) { // PERMISSION_DENIED
+          msgEl.textContent = 'Location permission denied. Go to phone Settings → Apps → Chrome → Permissions → Location → Allow.';
+        } else { // POSITION_UNAVAILABLE or TIMEOUT
+          msgEl.textContent = 'GPS / Location is off. Turn on Location in your phone\'s quick settings before checking in.';
+        }
+      }
+    },
+    { timeout: 6000, maximumAge: 60000, enableHighAccuracy: false }
+  );
 }
 
 function initAttendScreen() {
@@ -4434,30 +4433,48 @@ function renderTeam(records) {
     el.innerHTML = '<div class="empty">No attendance recorded today</div>';
     return;
   }
-  records.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
-  el.innerHTML = records.map(function(r) {
+  // Deduplicate by uid — keep most recent (highest checkIn time)
+  var byUid = {};
+  records.forEach(function(r) {
+    var key = r.uid || r.name;
+    if (!byUid[key]) { byUid[key] = r; return; }
+    var existTime = byUid[key].checkIn ? byUid[key].checkIn.time : '';
+    var newTime   = r.checkIn ? r.checkIn.time : '';
+    if (newTime > existTime) byUid[key] = r;
+  });
+  var deduped = Object.values(byUid);
+  deduped.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  el.innerHTML = deduped.map(function(r) {
     var co = r.checkOut, ci = r.checkIn;
     var breaks = r.breaks || [];
     var lastBreak = breaks.length ? breaks[breaks.length-1] : null;
     var onBreak = lastBreak && lastBreak.start && !lastBreak.end;
     var state = co ? 'Out' : onBreak ? 'Break' : ci ? 'In' : '—';
     var stateColor = co ? '#6B7280' : onBreak ? '#D97706' : ci ? '#059669' : 'var(--text3)';
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border);gap:8px">'
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px 7px 0;border-bottom:0.5px solid var(--border);gap:12px">'
       + '<div style="flex:1;min-width:0;overflow:hidden">'
       +   '<div style="font-size:13px;font-weight:500;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name||'-')+'</div>'
       +   '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.role||'')+(ci?' · In: '+esc(ci.time):'')+(co?' · Out: '+esc(co.time):'')+'</div>'
       + '</div>'
-      + '<div style="font-size:12px;font-weight:600;color:'+stateColor+';white-space:nowrap;flex-shrink:0">'+state+'</div>'
+      + '<div style="font-size:12px;font-weight:600;color:'+stateColor+';white-space:nowrap;flex-shrink:0;padding-right:4px">'+state+'</div>'
       + '</div>';
   }).join('');
 }
 
 async function attendAction(action, uid, today, isAdmin) {
   var btn = event && event.target;
-  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+    btn.dataset.origText = btn.innerHTML;
+    if (action === 'check-in' || action === 'check-out' || action === 'start-break' || action === 'end-break') {
+      btn.innerHTML = '&#128205; Acquiring GPS...';
+    }
+  }
 
   // Capture GPS
   var point = await captureAttendPoint();
+  if (btn) btn.innerHTML = btn.dataset.origText || btn.innerHTML;
 
   var docId = uid + '_' + today;
   var ref = db.collection('attendance').doc(docId);
@@ -4485,6 +4502,7 @@ async function attendAction(action, uid, today, isAdmin) {
       markedBy: isAdmin ? ((curProfile&&curProfile.name)||'admin') : 'self'
     };
     await ref.set(update);
+    captureGPSBackground(ref, 'checkIn');
     logActivity('attend_in', (isAdmin?'Marked check-in for '+name:''+'Checked in') + ' at ' + point.time, { attendPoint: point });
     toast('Checked in ✓', 'ok');
 
@@ -4511,6 +4529,7 @@ async function attendAction(action, uid, today, isAdmin) {
     var netMin = Math.max(0, diffMin - breakMin);
     var totalHours = Math.floor(netMin/60) + 'h ' + (netMin%60) + 'm';
     await ref.update({ checkOut: point, breaks: breaks, totalHours: totalHours });
+    captureGPSBackground(ref, 'checkOut');
     logActivity('attend_out', 'Checked out at ' + point.time + ' · ' + totalHours, { attendPoint: point });
     toast('Checked out ✓ · ' + totalHours, 'ok');
 
@@ -4521,6 +4540,7 @@ async function attendAction(action, uid, today, isAdmin) {
     if (lb && lb.start && !lb.end) { toast('Already on break', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
     breaks2.push({ start: point, end: null });
     await ref.update({ breaks: breaks2 });
+    captureGPSBackground(ref, 'breaks.'+(breaks2.length-1)+'.start');
     logActivity('attend_break', 'Break started at ' + point.time);
     toast('Break started', 'ok');
 
@@ -4531,6 +4551,7 @@ async function attendAction(action, uid, today, isAdmin) {
     if (!lb2 || !lb2.start || lb2.end) { toast('No active break', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
     breaks3[breaks3.length-1] = Object.assign({}, lb2, { end: point });
     await ref.update({ breaks: breaks3 });
+    captureGPSBackground(ref, 'breaks.'+(breaks3.length-1)+'.end');
     logActivity('attend_break', 'Break ended at ' + point.time);
     toast('Break ended', 'ok');
   }
@@ -4545,28 +4566,46 @@ async function attendAction(action, uid, today, isAdmin) {
 }
 
 async function captureAttendPoint() {
+  // Returns immediately with time — GPS captured in background
   var now = new Date();
   var timeStr = now.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', hour12: true});
-  var point = { time: timeStr, lat: null, lng: null, address: null };
-  try {
-    var pos = await new Promise(function(res, rej) {
-      navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000, maximumAge: 0 });
-    });
-    point.lat = parseFloat(pos.coords.latitude.toFixed(6));
-    point.lng = parseFloat(pos.coords.longitude.toFixed(6));
-    // Reverse geocode via Nominatim (free, no key)
-    try {
-      var resp = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='
-        + point.lat + '&lon=' + point.lng + '&zoom=17&addressdetails=0',
-        { headers: { 'Accept-Language': 'en' } });
-      var geo = await resp.json();
-      point.address = geo.display_name ? geo.display_name.split(',').slice(0,3).join(', ') : null;
-    } catch(e) { point.address = point.lat + ', ' + point.lng; }
-  } catch(e) {
-    point.address = 'GPS unavailable';
-    toast('GPS not available — time recorded only', 'warn');
-  }
-  return point;
+  return { time: timeStr, lat: null, lng: null, address: 'Acquiring GPS...' };
+}
+
+// Called after Firestore write — updates GPS fields in background
+function captureGPSBackground(docRef, fieldPath) {
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    var lat = parseFloat(pos.coords.latitude.toFixed(6));
+    var lng = parseFloat(pos.coords.longitude.toFixed(6));
+    fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&zoom=17&addressdetails=0',
+      { headers: { 'Accept-Language': 'en' } })
+      .then(function(r){ return r.json(); })
+      .then(function(geo) {
+        var address = geo.display_name ? geo.display_name.split(',').slice(0,3).join(', ') : lat+', '+lng;
+        var update = {};
+        update[fieldPath+'.lat'] = lat;
+        update[fieldPath+'.lng'] = lng;
+        update[fieldPath+'.address'] = address;
+        docRef.update(update).then(function(){
+          // Refresh display after GPS arrives
+          var today = todayStr();
+          var uid = curUser && curUser.uid;
+          if (uid) loadMyAttendance(uid, today);
+        }).catch(function(){});
+      })
+      .catch(function() {
+        var update = {};
+        update[fieldPath+'.lat'] = lat;
+        update[fieldPath+'.lng'] = lng;
+        update[fieldPath+'.address'] = lat+', '+lng;
+        docRef.update(update).catch(function(){});
+      });
+  }, function() {
+    // GPS truly unavailable — update address
+    var update = {};
+    update[fieldPath+'.address'] = 'GPS unavailable';
+    docRef.update(update).catch(function(){});
+  }, { timeout: 25000, maximumAge: 0, enableHighAccuracy: true });
 }
 
 function parseAttendTime(timeStr) {
@@ -11054,13 +11093,14 @@ async function loadAbsences() {
     var snap = await db.collection('temp_roles')
       .where('type','==','absence')
       .where('active','==',true)
-      .orderBy('fromDate')
       .get();
     var items = [];
     snap.forEach(function(d) {
       var a = d.data();
       if (a.toDate >= today) items.push({ id: d.id, data: a });
     });
+    // Sort client-side — avoids composite index requirement
+    items.sort(function(a,b){ return (a.data.fromDate||'').localeCompare(b.data.fromDate||''); });
     if (!items.length) { el.innerHTML = '<div class="empty">No active or upcoming absences</div>'; return; }
     var html = '';
     items.forEach(function(item) {

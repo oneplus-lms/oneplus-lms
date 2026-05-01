@@ -1605,6 +1605,15 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   </div>
   <div class="screen-body">
 
+    <!-- GPS warning banner — shown if location unavailable -->
+    <div id="attend-gps-warn" style="display:none;background:#FEF3C7;border:1px solid #F59E0B;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px">
+      <div style="font-size:18px;flex-shrink:0">&#128993;</div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#92400E">Location is off</div>
+        <div style="font-size:12px;color:#92400E;margin-top:2px">Turn on Location in your phone's quick settings before checking in. Your check-in time will still be recorded but GPS coordinates will be missing.</div>
+      </div>
+    </div>
+
     <!-- My Status Card -->
     <div class="card" id="attend-my-card" style="margin-bottom:12px">
       <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">My Attendance Today</div>
@@ -3294,7 +3303,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.22';
+var APP_VERSION = 'v20.23';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4181,12 +4190,41 @@ var _attendAdminTarget = null;  // uid of staff selected in admin panel
 var _attendAdminDoc = null;     // that staff member's today doc
 var _attendTeamUnsub = null;
 
+function checkGPSStatus() {
+  var warn = document.getElementById('attend-gps-warn');
+  if (!warn) return;
+  if (!navigator.geolocation) {
+    warn.style.display = 'flex';
+    return;
+  }
+  navigator.permissions.query({ name: 'geolocation' }).then(function(result) {
+    if (result.state === 'denied') {
+      warn.style.display = 'flex';
+      warn.querySelector('div:last-child').children[0].textContent = 'Location permission denied';
+      warn.querySelector('div:last-child').children[1].textContent = 'Go to Chrome Settings → Site Settings → Location → Allow for this site.';
+    } else {
+      // Permission granted or prompt — do a quick position check
+      navigator.geolocation.getCurrentPosition(
+        function() { warn.style.display = 'none'; },
+        function() { warn.style.display = 'flex'; },
+        { timeout: 5000, maximumAge: 60000, enableHighAccuracy: false }
+      );
+    }
+  }).catch(function() {
+    // permissions API not supported — skip warning
+    warn.style.display = 'none';
+  });
+}
+
 function initAttendScreen() {
   var today = todayStr();
   document.getElementById('attend-sub').textContent = today;
   var myUid = curUser && curUser.uid;
   var role = curProfile && curProfile.role || '';
   var canManage = ['admin','manager','pathologist'].indexOf(role) >= 0;
+
+  // Check GPS availability and show warning if unavailable
+  checkGPSStatus();
 
   // Show/hide admin cards
   var adminCard = document.getElementById('attend-admin-card');

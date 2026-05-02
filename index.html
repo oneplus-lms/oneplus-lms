@@ -3323,7 +3323,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.28';
+var APP_VERSION = 'v20.30';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4871,6 +4871,11 @@ function buildLISCard(o) {
 }
 
 function buildLISText(o) {
+  var testTotal = (o.tests||[]).reduce(function(s,t){ return s+(t.rate||0); }, 0);
+  var cc = o.collectionCharge || 0;
+  var disc = o.discount || 0;
+  var net = o.netAmount || o.totalAmount || (testTotal + cc - disc);
+
   var lines = [
     '*ITDose Entry — OnePLUS Lab*',
     '───────────────────',
@@ -4885,7 +4890,9 @@ function buildLISText(o) {
     lines.push((i + 1) + '. ' + t.name + ' — Rs.' + (t.rate || 0).toLocaleString('en-IN'));
   });
   lines.push('');
-  lines.push('*Net Amount:* Rs.' + (o.netAmount || o.totalAmount || 0).toLocaleString('en-IN'));
+  if (cc > 0) lines.push('*Collection Charge:* Rs.' + cc.toLocaleString('en-IN'));
+  if (disc > 0) lines.push('*Discount:* Rs.' + disc.toLocaleString('en-IN'));
+  lines.push('*Net Amount:* Rs.' + net.toLocaleString('en-IN'));
 
   var payParts = [];
   if (o.payMode === 'split' && o.splitPayments) {
@@ -4893,15 +4900,14 @@ function buildLISText(o) {
     if (o.splitPayments.upi  > 0) payParts.push('UPI Rs.'  + o.splitPayments.upi.toLocaleString('en-IN'));
     if (o.splitPayments.card > 0) payParts.push('Card Rs.' + o.splitPayments.card.toLocaleString('en-IN'));
   } else if (o.payMode === 'credit') {
-    payParts.push('Credit — amount pending');
+    payParts.push('Credit — billed to institution');
   } else {
     payParts.push((o.payMode || 'Cash').toUpperCase() + ' Rs.' + (o.paidAmount || 0).toLocaleString('en-IN'));
   }
-  if (o.discount > 0) payParts.push('Discount Rs.' + o.discount.toLocaleString('en-IN'));
   if (o.dueAmount > 0) payParts.push('⚠ Due Rs.' + o.dueAmount.toLocaleString('en-IN'));
   lines.push('*Payment:* ' + payParts.join(' + '));
 
-  if (o.serial) lines.push('*Serial:* ' + o.serial);
+  if (o.serialNo) lines.push('*Serial:* ' + o.serialNo);
   lines.push('───────────────────');
   lines.push('OnePLUS Ultrasound Lab, Pitampura');
   return lines.join('\n');
@@ -4911,10 +4917,8 @@ function shareLISWhatsApp() {
   var o = window._lisCurrentOrder;
   if (!o) return;
   var text = buildLISText(o);
-  var encoded = encodeURIComponent(text);
-  // Open WA with admin number pre-filled so receptionist can forward to self or LIS operator
-  var adminNum = '919312218812';
-  var url = 'https://wa.me/' + adminNum + '?text=' + encoded;
+  // Send directly to ITDose operator
+  var url = 'https://wa.me/919599913051?text=' + encodeURIComponent(text);
   window.open(url, '_blank');
 }
 // ─────────────────────────────────────────────────────────────────────────
@@ -6920,12 +6924,14 @@ function loadOrders(loadMore) {
     if (snap.empty || snap.docs.length < _ordersPageSize) _ordersAllLoaded = true;
     if (!snap.empty) _ordersCursor = snap.docs[snap.docs.length - 1];
     snap.forEach(function(d){ allOrders.push(Object.assign({id:d.id},d.data())); });
-    // Re-sort after every page: createdAt desc, fallback to seq desc
+    // Sort by serial number descending (newest first)
     allOrders.sort(function(a,b){
+      var seqA = parseInt((a.serialNo||'').split('-').pop()) || a.seq || 0;
+      var seqB = parseInt((b.serialNo||'').split('-').pop()) || b.seq || 0;
+      if (seqB !== seqA) return seqB - seqA;
       var ta = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
       var tb = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
-      if (tb !== ta) return tb - ta;
-      return (b.seq||0) - (a.seq||0);
+      return tb - ta;
     });
     renderOrders(allOrders);
     updateOrdersRevenue();
@@ -8086,23 +8092,38 @@ function downloadTRFpdf() {
   y += 4;
 
   // Billing summary
+  var testTotal = (o.tests||[]).reduce(function(s,t){ return s+(t.rate||0); }, 0);
+  var cc = o.collectionCharge || 0;
+  var disc = o.discount || 0;
+  var net = o.netAmount || o.totalAmount || (testTotal + cc - disc);
+  var paid = o.paidAmount || 0;
+  var due = o.dueAmount || 0;
+  var billingH = 16 + (cc > 0 ? 5 : 0) + (disc > 0 ? 5 : 0) + (due > 0 ? 5 : 0);
   doc.setFillColor(26,74,58);
-  doc.roundedRect(ml, y, cw, 16, 2, 2, 'F');
+  doc.roundedRect(ml, y, cw, billingH, 2, 2, 'F');
   doc.setTextColor(255,255,255); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  var ly = y + 6;
+  // Left column — breakdown
+  doc.text('Tests (' + (o.tests&&o.tests.length||0) + '): Rs.' + testTotal.toLocaleString('en-IN'), ml+4, ly);
+  ly += 5;
+  if (cc > 0) { doc.text('Collection Charge: Rs.' + cc.toLocaleString('en-IN'), ml+4, ly); ly += 5; }
+  if (disc > 0) { doc.text('Discount: Rs.' + disc.toLocaleString('en-IN'), ml+4, ly); ly += 5; }
   var pdfPayLabel = '';
   if (o.splitPayments) {
     var pp=[]; if(o.splitPayments.cash>0) pp.push('Cash Rs.'+o.splitPayments.cash); if(o.splitPayments.upi>0) pp.push('UPI Rs.'+o.splitPayments.upi); if(o.splitPayments.card>0) pp.push('Card Rs.'+o.splitPayments.card);
     pdfPayLabel = pp.join(' + ');
-  } else { pdfPayLabel = (o.payMode||'').toUpperCase(); }
-  if (o.discount>0) pdfPayLabel += ' | Discount: Rs.'+o.discount;
-  doc.text('Payment: '+pdfPayLabel, ml+4, y+7);
-  doc.setFont('helvetica','bold'); doc.setFontSize(13);
-  if (o.dueAmount > 0) {
-    doc.text('Rs. '+(o.paidAmount||0).toLocaleString('en-IN') + ' | DUE Rs.'+(o.dueAmount||0).toLocaleString('en-IN'), pw-mr-4, y+10, {align:'right'});
-  } else {
-    doc.text('Rs. '+(o.paidAmount||0).toLocaleString('en-IN'), pw-mr-4, y+10, {align:'right'});
+  } else if (o.payMode === 'credit') { pdfPayLabel = 'Credit'; } else { pdfPayLabel = (o.payMode||'CASH').toUpperCase(); }
+  doc.text('Payment: ' + pdfPayLabel, ml+4, ly);
+  // Right column — net amount + due
+  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  var ry = y + 8;
+  doc.text('Net: Rs.' + net.toLocaleString('en-IN'), pw-mr-4, ry, {align:'right'});
+  if (due > 0) {
+    doc.setFontSize(9); doc.setTextColor(255,160,160);
+    doc.text('DUE Rs.' + due.toLocaleString('en-IN'), pw-mr-4, ry+6, {align:'right'});
+    doc.setTextColor(255,255,255);
   }
-  y += 22;
+  y += billingH + 6;
 
   // Clinical history
   var h = o.history||{};

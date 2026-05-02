@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.30 — OnePLUS</title>
+<title>LabFlow Dashboard v20.31 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -166,7 +166,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.30</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.31</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -524,12 +524,12 @@ function loadRange(from,to){
     uO=db.collection('orders').where('date','==',from).onSnapshot(function(snap){
       allOrders=[];
       snap.forEach(function(doc){allOrders.push(Object.assign({id:doc.id},doc.data()));});
-      allOrders.sort(function(a,b){(function(){
+      allOrders.sort(function(a,b){
         var seqA=parseInt((a.serialNo||'').split('-').pop())||a.seq||0;
         var seqB=parseInt((b.serialNo||'').split('-').pop())||b.seq||0;
         if(seqB!==seqA)return seqB-seqA;
         return(b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0);
-      })()});
+      });
       renderAll();
       set('drefresh','Updated '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}));
     });
@@ -551,12 +551,12 @@ function loadRange(from,to){
     db.collection('orders').where('date','>=',from).where('date','<=',to).get().then(function(snap){
       allOrders=[];
       snap.forEach(function(doc){allOrders.push(Object.assign({id:doc.id},doc.data()));});
-      allOrders.sort(function(a,b){(function(){
+      allOrders.sort(function(a,b){
         var seqA=parseInt((a.serialNo||'').split('-').pop())||a.seq||0;
         var seqB=parseInt((b.serialNo||'').split('-').pop())||b.seq||0;
         if(seqB!==seqA)return seqB-seqA;
         return(b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0);
-      })()});
+      });
       allHandovers=[];
       renderAll();
       set('drefresh',allOrders.length+' orders · '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}));

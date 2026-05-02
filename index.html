@@ -3323,7 +3323,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.27';
+var APP_VERSION = 'v20.28';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -10406,9 +10406,27 @@ function openTRF() {
     + '<thead><tr style="background:#f5f5f5"><th style="padding:6px 8px;font-size:10px;color:#999;text-align:left">Test</th><th style="padding:6px 8px;font-size:10px;color:#999;text-align:left">Dept</th><th style="padding:6px 8px;font-size:10px;color:#999;text-align:right">Rate</th></tr></thead>'
     + '<tbody>' + rows + '</tbody>'
     + '</table></div>'
-    + '<div style="background:#1A4A3A;border-radius:12px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
-    + '<div><div style="font-size:11px;color:rgba(255,255,255,0.6)">Total · ' + esc(o.payMode||'') + (o.discount > 0 ? ' · Discount: Rs.' + o.discount : '') + '</div></div>'
-    + '<div style="font-size:24px;font-weight:500;color:#fff">Rs.' + (o.paidAmount||0).toLocaleString('en-IN') + '</div>'
+    + '<div style="background:#1A4A3A;border-radius:12px;padding:12px 16px;margin-bottom:12px">'
+    + (function() {
+        var testTotal = (o.tests||[]).reduce(function(s,t){ return s+(t.rate||0); }, 0);
+        var cc = o.collectionCharge || 0;
+        var disc = o.discount || 0;
+        var net = o.netAmount || (testTotal + cc - disc);
+        var paid = o.paidAmount || 0;
+        var due = o.dueAmount || Math.max(0, net - paid);
+        var lines = '';
+        lines += '<div style="display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.7);margin-bottom:4px"><span>Tests (' + (o.tests&&o.tests.length||0) + ')</span><span>Rs.' + testTotal.toLocaleString('en-IN') + '</span></div>';
+        if (cc > 0) lines += '<div style="display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.7);margin-bottom:4px"><span>Collection Charge</span><span>Rs.' + cc.toLocaleString('en-IN') + '</span></div>';
+        if (disc > 0) lines += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#FCA5A5;margin-bottom:4px"><span>Discount</span><span>\u2212 Rs.' + disc.toLocaleString('en-IN') + '</span></div>';
+        lines += '<div style="display:flex;justify-content:space-between;font-size:18px;font-weight:700;color:#fff;border-top:0.5px solid rgba(255,255,255,0.2);padding-top:8px;margin-top:4px"><span>Net Amount</span><span>Rs.' + net.toLocaleString('en-IN') + '</span></div>';
+        if (o.payMode === 'credit') {
+          lines += '<div style="font-size:11px;color:rgba(255,255,255,0.6);margin-top:4px;text-align:right">Credit \u2014 billed to institution</div>';
+        } else {
+          lines += '<div style="display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.7);margin-top:6px"><span>Paid (' + (o.payMode||'cash').toUpperCase() + ')</span><span>Rs.' + paid.toLocaleString('en-IN') + '</span></div>';
+          if (due > 0) lines += '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;color:#FCA5A5;margin-top:4px"><span>Due</span><span>Rs.' + due.toLocaleString('en-IN') + '</span></div>';
+        }
+        return lines;
+      })()
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'
     + '<div style="background:#fff;border:0.5px solid #ddd;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#999">Collected by</div><div style="font-size:12px;margin-top:2px">' + esc(o.createdByName||'-') + '</div></div>'

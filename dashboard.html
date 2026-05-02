@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.23 — OnePLUS</title>
+<title>LabFlow Dashboard v20.28 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -166,7 +166,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.23</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.28</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -1011,10 +1011,20 @@ function renderDashAttendance(recs){
   var el=document.getElementById('att-list');
   var countEl=document.getElementById('att-count');
   if(!el)return;
-  if(countEl)countEl.textContent=recs.length;
-  if(!recs.length){el.innerHTML='<div class="empty">No attendance today</div>';return;}
-  recs.sort(function(a,b){return(a.name||'').localeCompare(b.name||'');});
-  el.innerHTML=recs.map(function(r){
+  // Deduplicate by uid — keep most recent record
+  var byUid={};
+  recs.forEach(function(r){
+    var key=r.uid||r.name;
+    if(!byUid[key]){byUid[key]=r;return;}
+    var et=byUid[key].checkIn?byUid[key].checkIn.time:'';
+    var nt=r.checkIn?r.checkIn.time:'';
+    if(nt>et)byUid[key]=r;
+  });
+  var deduped=Object.values(byUid);
+  if(countEl)countEl.textContent=deduped.length;
+  if(!deduped.length){el.innerHTML='<div class="empty">No attendance today</div>';return;}
+  deduped.sort(function(a,b){return(a.name||'').localeCompare(b.name||'');});
+  el.innerHTML=deduped.map(function(r){
     var ci=r.checkIn,co=r.checkOut;
     var breaks=r.breaks||[];
     var lb=breaks.length?breaks[breaks.length-1]:null;

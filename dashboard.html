@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.28 — OnePLUS</title>
+<title>LabFlow Dashboard v20.29 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -166,7 +166,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.28</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.29</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -265,7 +265,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
           <div style="overflow-x:auto">
             <table class="ot">
               <thead><tr>
-                <th>Patient</th><th>Serial</th><th>Tests</th><th>Source</th>
+                <th>Serial</th><th>Patient</th><th>Tests</th><th>Source</th>
                 <th>Amount</th><th>Due</th><th>+Coll.</th><th>Mode</th>
                 <th>Lab</th><th>By</th><th>Status</th><th>Time</th>
               </tr></thead>
@@ -731,7 +731,8 @@ function renderTable(orders){
         +'<span>'+(i+1)+'. '+esc(t.name)+'</span>'
         +(t.rate?'<span style="font-family:var(--mono);color:var(--text3)">Rs.'+t.rate+'</span>':'')+'</div>';
     }).join('');
-    var src=o.source&&o.source!=='Walk-in'?'<span class="b bb">'+(o.source==='Home Collection'?'Home':o.source==='Hospital Collection'?'Hosp':esc(o.source))+'</span>'+(o.gps?' 📍':''):'Walk-in';
+    var gpsLink = o.gps ? '<a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="text-decoration:none;font-size:11px"> 📍</a>' : '';
+    var src=o.source&&o.source!=='Walk-in'?'<span class="b bb">'+(o.source==='Home Collection'?'Home':o.source==='Hospital Collection'?'Hosp':esc(o.source))+'</span>'+gpsLink:'Walk-in';
     var ub=o.urgent?'<span class="b br">URG</span> ':'';
     var due=o.dueAmount||0;
     var isCredit=o.payMode==='credit'&&o.status==='pending';
@@ -752,8 +753,8 @@ function renderTable(orders){
     var panelBadge=(o.panel&&o.panel!=='standard'&&panelNames[o.panel])?'<span style="font-size:9px;font-family:var(--mono);background:#EEF2FF;color:#3730A3;border-radius:4px;padding:1px 5px;margin-left:3px">'+panelNames[o.panel]+'</span>':'';
     var dueCell=due>0?'<span style="font-size:11px;font-family:var(--mono);color:var(--amber)">'+fmt(due)+'</span>':'<span style="color:var(--text3)">—</span>';
     var mainRow='<tr>'
+      +'<td style="font-size:11px;font-family:var(--mono);font-weight:600;color:var(--accent)">'+esc(o.serialNo||'—')+'</td>'
       +'<td><div style="font-weight:500">'+ub+esc(o.patientName)+panelBadge+'</div><div style="font-size:10px;color:var(--text3)">'+(o.age?o.age+'yr ':'')+esc(o.sex||'')+'</div></td>'
-      +'<td style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(o.serialNo||'—')+'</td>'
       +'<td style="font-size:11px;color:var(--text2);max-width:180px">'+preview+moreBtn+'</td>'
       +'<td>'+src+'</td>'
       +'<td style="font-family:var(--mono);font-weight:500">'+fmt(o.paidAmount)+'</td>'

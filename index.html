@@ -719,7 +719,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       </div>
       <!-- Dual save buttons — shown based on source selection -->
       <div id="order-save-walkin" style="margin-bottom:0">
-        <button class="btn btn-primary" style="width:100%" onclick="submitOrder()">&#10003; Save Order</button>
+        <button class="btn btn-primary" id="save-order-btn" style="width:100%" onclick="submitOrder()">&#10003; Save Order</button>
       </div>
       <div id="order-save-field" style="display:none">
         <div style="background:#EFF6FF;border:0.5px solid #93C5FD;border-radius:var(--radius);padding:10px 12px;margin-bottom:10px">
@@ -728,7 +728,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <button class="btn" style="font-size:13px;border-color:#1D4ED8;color:#1D4ED8" onclick="submitDraft()">&#128664; Dispatch</button>
-          <button class="btn btn-primary" style="font-size:13px" onclick="submitOrder()">&#10003; Save Order</button>
+          <button class="btn btn-primary" id="save-order-btn2" style="font-size:13px" onclick="submitOrder()">&#10003; Save Order</button>
         </div>
       </div>
     </div>
@@ -3323,7 +3323,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.30';
+var APP_VERSION = 'v20.32';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -6699,7 +6699,26 @@ function submitDraft() {
 }
 // ─────────────────────────────────────────────────────────────────────────
 
+var _orderSubmitting = false;
+
+function _setOrderBtnState(loading) {
+  ['save-order-btn', 'save-order-btn2'].forEach(function(id) {
+    var btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.style.opacity = loading ? '0.7' : '1';
+    btn.innerHTML = loading
+      ? '&#9203; Saving...'
+      : '&#10003; Save Order';
+  });
+}
+
 function submitOrder() {
+  if (_orderSubmitting) { toast('Saving... please wait', 'warn'); return; }
+  _orderSubmitting = true;
+  _setOrderBtnState(true);
+  setTimeout(function(){ _orderSubmitting = false; _setOrderBtnState(false); }, 8000);
+
   // Read patient fields from DOM in case step1Next was skipped (e.g. estimate conversion)
   if (!curOrder.patientName) curOrder.patientName = (document.getElementById('pt-name').value||'').trim();
   if (!curOrder.phone)       curOrder.phone       = (document.getElementById('pt-phone').value||'').trim();
@@ -6832,7 +6851,9 @@ function submitOrder() {
     }
     goTo('s-done');
     loadStats();
-  }).catch(function(e) { toast('Save failed: ' + e.message, 'err'); });
+    _orderSubmitting = false;
+    _setOrderBtnState(false);
+  }).catch(function(e) { toast('Save failed: ' + e.message, 'err'); _orderSubmitting = false; _setOrderBtnState(false); });
 
 }
 function newOrder() {
@@ -8602,9 +8623,19 @@ function cbSendVerifyWA() {
   window.open(url, '_blank');
 }
 
+var _cbSubmitting = false;
+
 function completeBookingSubmit(orderId) {
+  if (_cbSubmitting) { toast('Saving... please wait', 'warn'); return; }
+  _cbSubmitting = true;
+  var saveBtn = document.getElementById('edit-save-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.style.opacity = '0.7'; saveBtn.textContent = '⏳ Saving...'; }
+  setTimeout(function(){
+    _cbSubmitting = false;
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.style.opacity = '1'; saveBtn.textContent = '✓ Complete Booking'; }
+  }, 8000);
   // Validate — now tests are required
-  if (!editSelTests.length) { toast('Select at least one test', 'warn'); return; }
+  if (!editSelTests.length) { _cbSubmitting = false; toast('Select at least one test', 'warn'); return; }
 
   var disc = parseFloat(document.getElementById('edit-discount').value || 0);
   var total = editSelTests.reduce(function(s, t) { return s + (t.rate || 0); }, 0);
@@ -8679,7 +8710,13 @@ function completeBookingSubmit(orderId) {
     toast('Booking completed ✓ — sample marked collected', 'ok');
     logActivity('order_create', 'Draft completed on site by ' + byName);
     loadStats();
-  }).catch(function(e) { toast('Completion failed: ' + e.message, 'err'); });
+    _cbSubmitting = false;
+  }).catch(function(e) {
+    toast('Completion failed: ' + e.message, 'err');
+    _cbSubmitting = false;
+    var saveBtn = document.getElementById('edit-save-btn');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.style.opacity = '1'; saveBtn.textContent = '✓ Complete Booking'; }
+  });
 }
 // ─────────────────────────────────────────────────────────────────────────
 

@@ -3323,7 +3323,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.32';
+var APP_VERSION = 'v20.34';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -9359,6 +9359,7 @@ function loadHO() {
 
     var cash=0, upi=0, credit=0;
     var previewOrders = [];
+    var allOrdersManifest = []; // ALL bookings (all pay modes) for reception verification
 
     // ── Today's orders ──
     todaySnap.forEach(function(d){
@@ -9378,11 +9379,10 @@ function loadHO() {
         else if (o.payMode==='card')   { upi  += _paid; } // card → non-cash
         else if (o.payMode==='credit') { credit += (o.netAmount||o.totalAmount||0); } // use netAmt (post-discount)
 
-      // Preview: cash amount only (what phlebo/reception holds physically)
+      // Preview checklist: cash amount only (what phlebo/reception holds physically)
       var cashAmt = 0;
       if (o.payMode === 'split' && o.splitPayments) cashAmt = o.splitPayments.cash || 0;
       else if (o.payMode === 'cash') cashAmt = _paid;
-      // colCharge is already inside paidAmount — show it as a note only, don't add again
       var cc = (o.source !== 'Walk-in') ? (o.collectionCharge || 0) : 0;
       if (cashAmt > 0) previewOrders.push({
         serial: o.serial || d.id.slice(-6).toUpperCase(),
@@ -9390,6 +9390,21 @@ function loadHO() {
         tests: (o.tests||[]).map(function(t){return t.shortCode||t.name;}).slice(0,3).join(', '),
         cashAmt: cashAmt, colCharge: cc, total: cashAmt,
         payMode: o.payMode || 'cash', dueRow: false
+      });
+      // Full manifest: ALL bookings regardless of payment mode — for reception verification
+      allOrdersManifest.push({
+        serial:    o.serial || d.id.slice(-6).toUpperCase(),
+        orderId:   d.id,
+        name:      o.patientName || '-',
+        age:       o.age || '',
+        sex:       o.sex || '',
+        tests:     (o.tests||[]).map(function(t){return t.shortCode||t.name;}).slice(0,4).join(', '),
+        payMode:   o.payMode || 'pending',
+        netAmount: o.netAmount || o.totalAmount || 0,
+        paidAmount:o.paidAmount || 0,
+        dueAmount: o.dueAmount || 0,
+        cashAmt:   cashAmt,
+        refDoctor: o.refDoctor || ''
       });
     });
 
@@ -9412,7 +9427,8 @@ function loadHO() {
           if (!p.at) return;
           var pDate = p.at.substring(0,10); // ISO date YYYY-MM-DD
           if (pDate !== today) return;
-          // byUid already guaranteed by dueCollectedBy query filter
+          // Guard: dueCollectedBy is the LAST collector — check each instalment's byUid
+          if (p.byUid && p.byUid !== _hoMyUid) return;
           todayInstalments.push(p);
           if (p.mode === 'cash')           cash += (p.amt||0);
           else if (p.mode === 'upi' || p.mode === 'card') upi += (p.amt||0);
@@ -9457,8 +9473,9 @@ function loadHO() {
 
       previewOrders.sort(function(a,b){ return (b.serial||'').localeCompare(a.serial||''); });
       // Store globally so submitHandover can read selections
-      window._hoPreviewOrders = previewOrders;
-      window._hoAlreadyOut    = alreadyOut;
+      window._hoPreviewOrders    = previewOrders;
+      window._hoAlreadyOut       = alreadyOut;
+      window._hoAllOrdersManifest = allOrdersManifest;
 
       var prev = document.getElementById('ho-order-preview');
       if (!previewOrders.length) {
@@ -9488,9 +9505,47 @@ function loadHO() {
     }, function(){ });
 }
 
-function renderOrdersInHandover(orders) {
-  if (!orders || !orders.length) return '';
-  return '<div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:8px">'    + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:6px">Patients included</div>'    + orders.map(function(o){        return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px">'          + '<div style="flex:1;min-width:0">'            + '<div style="font-weight:500">'+esc(o.patientName)+(o.age?' · '+o.age+'yr':'')+(o.sex?' '+esc(o.sex):'')+'</div>'            + '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(o.tests||'-')+'</div>'          + '</div>'          + '<div style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-left:8px;white-space:nowrap">Rs.'+o.cashAmt.toLocaleString('en-IN')+'</div>'          + '</div>';      }).join('')    + '</div>';}
+function renderOrdersInHandover(ordersArg, allOrdersArg) {
+  // Prefer allOrders (full manifest with all pay modes); fall back to cash-only orders
+  var list = (allOrdersArg && allOrdersArg.length) ? allOrdersArg : (ordersArg || []);
+  if (!list.length) return '';
+  var modeColor = {cash:'#059669',upi:'#7C3AED',card:'#2563EB',split:'#D97706',credit:'#DC2626',pending:'#6B7280'};
+  var modeLabel = {cash:'Cash',upi:'UPI',card:'Card',split:'Split',credit:'Credit',pending:'Pending'};
+  return '<div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:8px">'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">'
+    + list.length + ' booking' + (list.length!==1?'s':'') + ' included</div>'
+    + list.map(function(o) {
+        var pm  = o.payMode || 'pending';
+        var clr = modeColor[pm] || '#6B7280';
+        var lbl = modeLabel[pm] || pm;
+        var patName = o.name || o.patientName || '-';
+        var age = o.age || '';
+        var sex = o.sex || '';
+        var net = (o.netAmount != null ? o.netAmount : (o.cashAmt != null ? o.cashAmt : 0));
+        var due = o.dueAmount || 0;
+        return '<div style="padding:6px 0;border-bottom:0.5px solid var(--border)">'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+          + '<div style="flex:1;min-width:0">'
+          + '<div style="font-size:12px;font-weight:600;color:var(--text1)">'
+          + (o.serial?'<span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-right:5px">#'+esc(o.serial)+'</span>':'')
+          + esc(patName)
+          + (age?' <span style="color:var(--text3);font-weight:400">'+esc(age)+'yr</span>':'')
+          + (sex?' <span style="color:var(--text3);font-weight:400">'+esc(sex)+'</span>':'')
+          + '</div>'
+          + '<div style="font-size:10px;color:var(--text3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(o.tests||'-')+'</div>'
+          + (o.refDoctor?'<div style="font-size:10px;color:var(--text3)">Ref: '+esc(o.refDoctor)+'</div>':'')
+          + '</div>'
+          + '<div style="text-align:right;margin-left:8px;flex-shrink:0">'
+          + '<div style="font-size:12px;font-weight:700;color:var(--accent)">Rs.'+net.toLocaleString('en-IN')+'</div>'
+          + '<div style="font-size:10px;font-family:var(--mono);color:'+clr+';font-weight:600">'+lbl+'</div>'
+          + (due>0?'<div style="font-size:10px;color:#DC2626">Due Rs.'+due.toLocaleString('en-IN')+'</div>':'')
+          + '</div>'
+          + '</div>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+
 
 // ── PATIENT SELECTION CHECKLIST for Cash Handover ────────────────────────
 function renderHOPatientChecklist(orders, alreadyOut, totalCash, netCash) {
@@ -9587,7 +9642,7 @@ function renderHOPending(rows) {
       +(isRefund?'<div style="font-size:10px;font-family:var(--mono);color:#DC2626;font-weight:600;margin-bottom:4px">↓ REFUND REQUEST</div>':'')
       +'<div class="ho-pending-meta">'+(isRefund?'Refund requested by':'From')+' <strong>'+esc(h.recordedByName||'-')+'</strong> · '+esc(h.time||'')+'</div>'
       +'<div class="ho-pending-amt">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div>'
-      +'<div class="ho-pending-from">'+(h.notes?esc(h.notes):'No notes')+'</div>'      +renderOrdersInHandover(h.orders)      +'<div class="ho-pending-actions">'        +'<button class="btn-accept" onclick="hoConfirm(&quot;accept&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10003; Accept Custody</button>'        +'<button class="btn-reject" onclick="hoConfirm(&quot;reject&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10007; Reject</button>'      +'</div>'    +'</div>';  }).join('');
+      +'<div class="ho-pending-from">'+(h.notes?esc(h.notes):'No notes')+'</div>'      +renderOrdersInHandover(h.orders, h.allOrders)      +'<div class="ho-pending-actions">'        +'<button class="btn-accept" onclick="hoConfirm(&quot;accept&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10003; Accept Custody</button>'        +'<button class="btn-reject" onclick="hoConfirm(&quot;reject&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10007; Reject</button>'      +'</div>'    +'</div>';  }).join('');
 }
 
 function renderHOList(rows) {
@@ -9604,7 +9659,7 @@ function renderHOList(rows) {
     return '<div class="ho-handover-card">'      +'<div class="ho-card-header">'        +'<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">#'+h.id.slice(-6).toUpperCase()+'</span>'        +'<span class="ho-status-badge '+badgeClass+'">'+badgeLabel+'</span>'+refundBadge        +'<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(h.time||'')+'</span>'      +'</div>'      +'<div class="ho-card-body">'        +(h.type==='refund'
           ?'<div><div class="ho-card-k">Refund From</div><div class="ho-card-v" style="color:#DC2626">'+esc(h.refundRequestedFromName||h.handoverFrom||'-')+'</div></div>'
           +'<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>'
-          :'<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>')        +'<div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div></div>'        +'<div><div class="ho-card-k">By</div><div class="ho-card-v">'+esc(h.recordedByName||'-')+'</div></div>'        +'<div><div class="ho-card-k">Notes</div><div class="ho-card-v">'+esc(h.notes||'-')+'</div></div>'        +acceptedLine      +'</div>'      +renderOrdersInHandover(h.orders)    +'</div>';  }).join('');
+          :'<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>')        +'<div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div></div>'        +'<div><div class="ho-card-k">By</div><div class="ho-card-v">'+esc(h.recordedByName||'-')+'</div></div>'        +'<div><div class="ho-card-k">Notes</div><div class="ho-card-v">'+esc(h.notes||'-')+'</div></div>'        +acceptedLine      +'</div>'      +renderOrdersInHandover(h.orders, h.allOrders)    +'</div>';  }).join('');
 }
 function submitHandover() {
   var sel = document.getElementById('ho-to');
@@ -9628,12 +9683,14 @@ function submitHandover() {
   if (hoMode === 'refund') {
     // Check no pending refund already exists from us
     db.collection('handovers').where('date','==',today).get().then(function(hoSnap) {
-      var hasPending = false;
+      var hasPendingRefund = false;
       hoSnap.forEach(function(d) {
         var h = d.data();
-        if (h.recordedBy === myUid && h.custodyStatus === 'PENDING') hasPending = true;
+        // Only block if there's already a pending REFUND request from this user
+        // A pending normal handover should not block a separate refund request
+        if (h.recordedBy === myUid && h.custodyStatus === 'PENDING' && h.type === 'refund') hasPendingRefund = true;
       });
-      if (hasPending) { toast('You already have a pending handover. Wait for it to resolve first.','warn'); return; }
+      if (hasPendingRefund) { toast('You already have a pending refund request. Wait for it to resolve first.','warn'); return; }
       var now = new Date();
       db.collection('handovers').add({
         handoverTo: myName,   // refund goes TO the initiator
@@ -9680,13 +9737,19 @@ function submitHandover() {
       } else if (o.payMode === 'cash') {
         cashCollected += (o.paidAmount || 0);
       }
-      // UPI/card payments on today's orders collected by this user (for due portion)
-      if (o.dueCollectedAmt > 0 && o.dueCollectedBy === myUid && o.dueCollectedMode === 'cash') {
-        if (o.payMode !== 'cash') cashCollected += (o.dueCollectedAmt || 0);
-      }
-      // Due collections on today's own orders (e.g. partial paid at booking, rest collected now)
-      if (o.dueCollectedAmt > 0 && o.dueCollectedBy === myUid && o.dueCollectedMode === 'cash') {
-        // Only add the due portion if the original payMode wasn't cash (avoid double-count)
+      // Due cash collected on today's non-cash orders (e.g. partial paid pending, rest collected today)
+      // Use duePayments[] array to correctly sum only today's cash instalments by this user
+      if (Array.isArray(o.duePayments) && o.duePayments.length > 0) {
+        o.duePayments.forEach(function(p) {
+          if (!p.at) return;
+          if (p.byUid !== myUid) return;
+          var pDate = p.at.substring(0,10);
+          var todayDate = todayStr();
+          if (pDate !== todayDate) return;
+          if (p.mode === 'cash' && o.payMode !== 'cash') cashCollected += (p.amt||0);
+        });
+      } else if (o.dueCollectedAmt > 0 && o.dueCollectedBy === myUid && o.dueCollectedMode === 'cash') {
+        // Legacy scalar fallback — only if no duePayments array and payMode wasn't cash
         if (o.payMode !== 'cash') cashCollected += (o.dueCollectedAmt || 0);
       }
     });
@@ -9706,7 +9769,18 @@ function submitHandover() {
         if (!collAt) return;
         var collDate = collAt.getFullYear()+'-'+String(collAt.getMonth()+1).padStart(2,'0')+'-'+String(collAt.getDate()).padStart(2,'0');
         if (collDate !== today) return;
-        if ((o.dueCollectedMode || 'cash') === 'cash') cashCollected += o.dueCollectedAmt;
+        // Use duePayments[] for accurate per-instalment accounting
+        if (Array.isArray(o.duePayments) && o.duePayments.length > 0) {
+          o.duePayments.forEach(function(p) {
+            if (!p.at) return;
+            if (p.byUid !== myUid) return;
+            var pDate = p.at.substring(0,10);
+            if (pDate !== today) return;
+            if (p.mode === 'cash') cashCollected += (p.amt||0);
+          });
+        } else if ((o.dueCollectedMode || 'cash') === 'cash') {
+          cashCollected += o.dueCollectedAmt;
+        }
       });
     }
 
@@ -9765,6 +9839,9 @@ function submitHandover() {
       });
     }
 
+    // Full booking manifest (all pay modes) — for reception verification on accept
+    var allOrders = window._hoAllOrdersManifest || [];
+
     var now = new Date();
     db.collection('handovers').add({
       handoverTo: toName, amount: amt, notes: notes, date: today,
@@ -9773,7 +9850,8 @@ function submitHandover() {
       recordedBy: myUid, recordedByName: myName,
       custodyStatus: 'PENDING',
       type: 'normal',
-      orders: myOrders
+      orders: myOrders,       // cash-only list (backward compat, used for amount audit)
+      allOrders: allOrders    // complete manifest — all pay modes, full patient details
     }).then(function(){
       toast('Handover initiated — awaiting acceptance by '+toName,'ok');
       logActivity('handover_out', 'Handed over Rs.'+amt.toLocaleString('en-IN')+' to '+toName, {
@@ -9793,7 +9871,7 @@ var hoPendingAction = null;
 var hoPinBuf = '';
 
 function hoConfirm(action, hvid, fromName, amount) {
-  hoPendingAction = {action:action, hvid:hvid};
+  hoPendingAction = {action:action, hvid:hvid, amount:amount, recordedByName:fromName};
   hoPinBuf = '';
   hoUpdatePinDots();
   document.getElementById('ho-pin-err').textContent = '';

@@ -417,10 +417,10 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         </select>
       </div>
       <div id="home-collection-fields" style="display:none">
-        <div class="field"><label>Patient Address</label><input type="text" id="pt-address" placeholder="House no., street, locality"></div>
+        <div class="field"><label>Patient Address</label><input type="text" id="pt-address" placeholder="House no., street, locality" onblur="autoFillMapsFromAddress()"></div>
         <div class="field"><label>Google Maps Link <span style="font-size:10px;color:var(--text3)">(optional — paste link shared by patient)</span></label><input type="url" id="pt-maps-link" placeholder="https://maps.google.com/..."></div>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-          <button type="button" class="btn" style="flex:1;font-size:13px" onclick="captureGPS()">&#128205; Capture GPS Location</button>
+          <button type="button" class="btn" style="flex:1;font-size:13px" onclick="captureGPS()">&#128205; Capture GPS (at patient's location only)</button>
           <div id="gps-status" style="font-size:11px;font-family:var(--mono);color:var(--text3);flex:1;line-height:1.4">Not captured</div>
         </div>
         <div class="field">
@@ -2743,14 +2743,16 @@ async function submitQuickPay() {
 }
 
 function renderPhleboDash(orders) {
-  var drafts    = orders.filter(function(o){ return o.status==='draft'; });
-  var pending   = orders.filter(function(o){ return o.status!=='draft'&&(o.fieldStatus!=='collected')&&(o.fieldStatus!=='delivered')&&!o.fieldTransferPending; });
-  var collected = orders.filter(function(o){ return o.fieldStatus==='collected'; });
-  var delivered = orders.filter(function(o){ return o.fieldStatus==='delivered'; });
+  // Dispatched drafts: status==='draft' AND fieldAssignedToUid set — phlebo must go collect & complete booking
+  var dispatched = orders.filter(function(o){ return o.status==='draft' && o.fieldAssignedToUid; });
+  var drafts     = orders.filter(function(o){ return o.status==='draft' && !o.fieldAssignedToUid; }); // unassigned drafts (rare)
+  var pending    = orders.filter(function(o){ return o.status!=='draft'&&(o.fieldStatus!=='collected')&&(o.fieldStatus!=='delivered')&&!o.fieldTransferPending; });
+  var collected  = orders.filter(function(o){ return o.fieldStatus==='collected'; });
+  var delivered  = orders.filter(function(o){ return o.fieldStatus==='delivered'; });
 
   function setEl(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
-  setEl('ph-total', orders.length);
-  setEl('ph-pending', pending.length);
+  setEl('ph-total',     orders.length);
+  setEl('ph-pending',   pending.length + dispatched.length);
   setEl('ph-collected', collected.length);
   setEl('ph-delivered', delivered.length);
   var draftEl = document.getElementById('ph-drafts');
@@ -2775,8 +2777,43 @@ function renderPhleboDash(orders) {
     return;
   }
 
+  // ── Dispatched drafts — prominent "Go collect" banner at top ──
+  var dispatchedHtml = dispatched.map(function(o) {
+    var mapLink = '';
+    if (o.gps) mapLink = 'https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng;
+    else if (o.mapsLink) mapLink = o.mapsLink;
+    var navBtn = mapLink
+      ? '<a href="'+esc(mapLink)+'" target="_blank" style="flex:1;display:block;text-align:center;padding:11px;background:#1D4ED8;color:#fff;border-radius:9px;font-size:13px;font-weight:600;text-decoration:none">&#128205; Navigate</a>'
+      : '<a href="tel:'+esc(o.phone||'')+'" style="flex:1;display:block;text-align:center;padding:11px;background:#059669;color:#fff;border-radius:9px;font-size:13px;font-weight:600;text-decoration:none">&#128222; Call Patient</a>';
+    var urgentBar = o.urgent
+      ? '<div style="background:#EF4444;color:#fff;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;margin-bottom:8px">&#128680; URGENT — Priority collection</div>' : '';
+    return '<div style="background:#EFF6FF;border:2px solid #3B82F6;border-radius:12px;padding:14px 16px;margin-bottom:12px">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">'
+      + '<div style="font-size:11px;font-family:var(--mono);font-weight:700;color:#1D4ED8;text-transform:uppercase;letter-spacing:0.08em">&#128664; Home Collection \u2014 Go &amp; Complete</div>'
+      + '<span style="font-size:9px;font-family:var(--mono);background:#DBEAFE;color:#1D4ED8;border-radius:6px;padding:2px 7px;font-weight:700">DISPATCH</span>'
+      + '</div>'
+      + urgentBar
+      + '<div style="font-size:17px;font-weight:700;color:#1E3A8A;margin:6px 0 2px;cursor:pointer" onclick="openOrderDetail(\''+o.id+'\')">'
+      + esc(o.patientName||'-')+'</div>'
+      + '<div style="font-size:12px;color:#3B82F6;margin-bottom:4px">'
+      + (o.age?o.age+'yr ':'')+esc(o.sex||'')
+      + (o.phone?' \u00a0\u00b7\u00a0 <a href="tel:'+esc(o.phone)+'" style="color:#1D4ED8">&#128222; '+esc(o.phone)+'</a>':'')
+      + '</div>'
+      + (o.address?'<div style="font-size:12px;color:#1E40AF;margin-bottom:8px">&#128205; '+esc(o.address)+'</div>':'')
+      + (o.visitTime?'<div style="display:inline-flex;align-items:center;gap:5px;background:#F0FDF4;border:1px solid #86EFAC;border-radius:7px;padding:4px 10px;font-size:12px;font-weight:600;color:#15803D;margin-bottom:8px">&#9200; '+esc(visitWindow(o.visitTime))+'</div>':'')
+      + '<div style="font-size:11px;color:#3B82F6;margin-bottom:10px">'
+      + (o.refBy?'Ref: '+esc(o.refBy)+' \u00a0\u00b7\u00a0 ':'')
+      + (o.collectionCharge>0?'Collection charge: Rs.'+o.collectionCharge:'No tests assigned yet \u2014 complete on site')
+      + '</div>'
+      + '<div style="display:flex;gap:8px">'
+      + navBtn
+      + '<button style="flex:1;padding:11px;background:#fff;color:#1D4ED8;border:2px solid #3B82F6;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer" onclick="openOrderDetail(\''+o.id+'\')">&#128196; View / Complete</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+
   // ── Active tasks (pending + collected) — full card ──
-  var activeTasks = orders.filter(function(o){ return o.fieldStatus!=='delivered'; });
+  var activeTasks = orders.filter(function(o){ return o.status!=='draft' && o.fieldStatus!=='delivered'; });
   // ── Delivered — compact payment checklist ──
   var deliveredOrders = delivered;
 
@@ -2805,6 +2842,7 @@ function renderPhleboDash(orders) {
     var mapLink = '';
     if (o.gps) mapLink = '<a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="font-size:11px;color:#1D4ED8">&#128205; GPS Location</a>';
     else if (o.mapsLink) mapLink = '<a href="'+o.mapsLink+'" target="_blank" style="font-size:11px;color:#1D4ED8">&#128205; Open in Maps</a>';
+    else if (o.phone) mapLink = '<a href="tel:'+esc(o.phone)+'" style="font-size:11px;color:#059669">&#128222; Call '+esc(o.phone)+'</a>';
 
     var collectionGuide = buildCollectionGuide(o.tests||[], !isCollected);
 
@@ -2946,7 +2984,7 @@ function renderPhleboDash(orders) {
       + '</div>';
   }
 
-  el.innerHTML = activeHtml + checklistHtml;
+  el.innerHTML = dispatchedHtml + activeHtml + checklistHtml;
 }
 
 // ── TIME TRACKING: patch fieldConfirm to save timestamps ─────────────────
@@ -3184,7 +3222,8 @@ function loadAssignScreen() {
           var updatedBy = o.fieldUpdatedBy ? '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);margin-top:2px">Last update: '+esc(o.fieldUpdatedBy)+' · '+esc(o.fieldUpdatedAt||'')+'</div>' : '';
           var assignedTo = o.fieldAssignedToName ? '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">Assigned to: <b>'+esc(o.fieldAssignedToName)+'</b></div>' : '';
           var mapsBtn = o.gps ? '<a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="font-size:11px;color:#1D4ED8">&#128205; GPS</a>'
-            : (o.mapsLink ? '<a href="'+o.mapsLink+'" target="_blank" style="font-size:11px;color:#1D4ED8">&#128205; Maps</a>' : '');
+            : (o.mapsLink ? '<a href="'+o.mapsLink+'" target="_blank" style="font-size:11px;color:#1D4ED8">&#128205; Maps</a>'
+            : (o.phone ? '<a href="tel:'+esc(o.phone)+'" style="font-size:11px;color:#059669">&#128222; '+esc(o.phone)+'</a>' : ''));
           var payBadge = o.status==='paid'
             ? '<span style="font-size:10px;font-family:var(--mono);background:var(--accent-light);color:var(--accent);padding:2px 7px;border-radius:20px;margin-left:6px">PAID</span>'
             : (o.status==='draft' ? '<span style="font-size:10px;font-family:var(--mono);background:#EFF6FF;color:#1D4ED8;padding:2px 7px;border-radius:20px;margin-left:6px">DISPATCH</span>'
@@ -3323,7 +3362,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.34';
+var APP_VERSION = 'v20.37';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -5491,6 +5530,21 @@ function restoreStep1Inputs() {
   setPanelButtons();
 }
 
+function autoFillMapsFromAddress() {
+  var addrEl = document.getElementById('pt-address');
+  var mapsEl = document.getElementById('pt-maps-link');
+  if (!addrEl || !mapsEl) return;
+  var addr = addrEl.value.trim();
+  // Only auto-fill if maps link is empty or was previously auto-generated
+  var existing = mapsEl.value.trim();
+  var wasAutoGenerated = existing.startsWith('https://maps.google.com/maps?q=') || existing === '';
+  if (!wasAutoGenerated) return; // user pasted their own link — don't overwrite
+  if (addr) {
+    mapsEl.value = 'https://maps.google.com/maps?q=' + encodeURIComponent(addr);
+    document.getElementById('gps-status').textContent = 'Maps link set from address';
+  }
+}
+
 function toggleHomeCollection() {
   var src = document.getElementById('pt-source').value;
   var hcf = document.getElementById('home-collection-fields');
@@ -5501,8 +5555,11 @@ function toggleHomeCollection() {
   if (saveWalkin) saveWalkin.style.display = needsAddress ? 'none' : 'block';
   if (saveField)  saveField.style.display  = needsAddress ? 'block' : 'none';
   hcf.style.display = needsAddress ? 'block' : 'none';
-  if (src==='Home Collection') {
-    setTimeout(captureGPS, 300);
+  // Auto-generate Maps link from address when source = Home Collection.
+  // GPS auto-capture is intentionally skipped — booker's location ≠ patient's location.
+  // Phlebo can manually tap "Capture GPS" when physically at the patient's home.
+  if (src === 'Home Collection' || src === 'Hospital Collection') {
+    setTimeout(autoFillMapsFromAddress, 400);
   }
   // Auto-fill referring doctor from staff profile when Doctor Clinic selected
   if (src==='Doctor Clinic') {
@@ -8074,10 +8131,14 @@ function downloadTRFpdf() {
   if (o.address) { doc.setFontSize(8); doc.text('Address: '+o.address, ml+4, y+31); }
   y += 38;
 
-  // GPS if present
+  // GPS if present — only shown when manually captured at patient's location
   if (o.gps) {
     doc.setFontSize(8); doc.setTextColor(29,78,216);
-    doc.text('GPS: '+o.gps.lat+', '+o.gps.lng+' (±'+o.gps.accuracy+'m)', ml, y);
+    var gpsText = 'GPS: '+o.gps.lat+', '+o.gps.lng+' (±'+o.gps.accuracy+'m)';
+    doc.text(gpsText, ml, y);
+    // Clickable Maps hyperlink in PDF
+    var mapsUrl = 'https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng;
+    doc.link(ml, y-4, doc.getTextWidth(gpsText), 5, {url: mapsUrl});
     doc.setTextColor(30,30,30);
     y += 6;
   }
@@ -8756,7 +8817,8 @@ function renderFieldTasks(orders) {
 
     var mapLink = o.gps
       ? '<a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="font-size:12px;font-weight:500;color:#1D4ED8;display:inline-flex;align-items:center;gap:3px">&#128205; Open in Maps</a>'
-      : (o.mapsLink ? '<a href="'+o.mapsLink+'" target="_blank" style="font-size:12px;font-weight:500;color:#1D4ED8;display:inline-flex;align-items:center;gap:3px">&#128205; Open in Maps</a>' : '');
+      : (o.mapsLink ? '<a href="'+o.mapsLink+'" target="_blank" style="font-size:12px;font-weight:500;color:#1D4ED8;display:inline-flex;align-items:center;gap:3px">&#128205; Open in Maps</a>'
+      : (o.phone ? '<a href="tel:'+esc(o.phone)+'" style="font-size:12px;font-weight:500;color:#059669;display:inline-flex;align-items:center;gap:3px">&#128222; Call patient</a>' : ''));
 
     var locationBlock = '';
     if (o.address || mapLink) {

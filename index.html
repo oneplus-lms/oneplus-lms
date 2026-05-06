@@ -3365,7 +3365,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.38';
+var APP_VERSION = 'v21.02';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3377,7 +3377,7 @@ function onDataReady(fn) {
 
 function loadAppData() {
   if (_dataLoaded) return;
-  var base = '/oneplus-lms/';
+  var base = '/';
   Promise.all([
     fetch(base + 'catalogue.json').then(function(r){ return r.json(); }),
     fetch(base + 'panels.json').then(function(r){ return r.json(); }),
@@ -3448,7 +3448,7 @@ db.enablePersistence({ synchronizeTabs: true })
 
 // Register service worker for app shell caching (offline load)
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/oneplus-lms/sw.js')
+  navigator.serviceWorker.register('/sw.js')
     .then(function(reg) {
       console.log('SW registered');
       // Check for updates when app becomes visible (user switches back)
@@ -6060,7 +6060,7 @@ var DOCTOR_SYNC_KEY = 'doctor_last_sync'; // localStorage key — ISO timestamp
 function prewarmDoctorCache() {
   if (allDoctorsCache || doctorCacheLoading) return;
   doctorCacheLoading = true;
-  var base = '/oneplus-lms/';
+  var base = '/';
   // Tier 1: load bundled doctors.json (cached by SW — works offline)
   fetch(base + 'doctors.json')
     .then(function(r) { return r.json(); })
@@ -9572,6 +9572,87 @@ function loadHO() {
       renderHOList(rows);
       renderHOPending(rows);
     }, function(){ });
+      // Recompute cash tile to include incoming accepted handovers
+      var _incomingCash = 0;
+      var _myName = (curProfile&&curProfile.name)||'';
+      var _myFirst = _myName.split(' ')[0].toLowerCase();
+      rows.forEach(function(h) {
+        if (h.custodyStatus === 'ACCEPTED' && h.type !== 'refund'
+            && h.handoverTo && h.handoverTo.toLowerCase().indexOf(_myFirst) >= 0
+            && h.recordedBy !== (curUser&&curUser.uid)) {
+          _incomingCash += (h.amount||0);
+        }
+      });
+      if (_incomingCash > 0) {
+        var _cashEl = document.getElementById('ho-cash');
+        if (_cashEl) {
+          // Parse current cash value and add incoming
+          var _curCash = parseFloat((_cashEl.textContent||'0').replace(/[^\d.]/g,''))||0;
+          _cashEl.textContent = 'Rs.'+ (_curCash + _incomingCash).toLocaleString('en-IN');
+          _cashEl.title = 'Includes Rs.'+_incomingCash.toLocaleString('en-IN')+' received from handovers';
+        }
+      }
+
+  // ── Overdue pending handovers from previous days ──
+  // Query all PENDING handovers not from today — recipient may need to accept/reject
+  db.collection('handovers')
+    .where('custodyStatus','==','PENDING')
+    .get().then(function(snap) {
+      var myName = (curProfile&&curProfile.name)||'';
+      var myFirst = myName.split(' ')[0].toLowerCase();
+      var overdue = [];
+      snap.forEach(function(d) {
+        var h = Object.assign({id:d.id}, d.data());
+        if (h.date === today) return; // today's handled by real-time listener above
+        // Show to recipient (normal) or requester (refund)
+        var isForMe = h.type === 'refund'
+          ? (h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0)
+          : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0);
+        // Also show initiator their own stuck pending
+        var isMine = h.recordedBy === _hoMyUid;
+        if (isForMe || isMine) overdue.push(h);
+      });
+      renderHOOverdue(overdue);
+    }).catch(function(){});
+}
+
+function renderHOOverdue(overdue) {
+  // Inject overdue cards above the pending section
+  var sec = document.getElementById('ho-pending-section');
+  var existing = document.getElementById('ho-overdue-section');
+  if (existing) existing.remove();
+  if (!overdue.length) return;
+
+  var myName = (curProfile&&curProfile.name)||'';
+  var myFirst = myName.split(' ')[0].toLowerCase();
+
+  var html = overdue.map(function(h) {
+    var isForMe = h.type === 'refund'
+      ? (h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0)
+      : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0);
+    var isMine = h.recordedBy === _hoMyUid;
+    var actionBtns = isForMe
+      ? '<div class="ho-pending-actions">'
+        + '<button class="btn-accept" onclick="hoConfirm(&quot;accept&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10003; Accept</button>'
+        + '<button class="btn-reject" onclick="hoConfirm(&quot;reject&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10007; Reject</button>'
+        + '</div>'
+      : '<div style="font-size:11px;color:var(--text3);margin-top:8px">Awaiting acceptance by '+esc(h.handoverTo||'recipient')+'</div>';
+    return '<div class="ho-pending-card" style="border-color:#D97706;background:#FFFBEB">'
+      + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
+      + '<span style="font-size:10px;font-weight:700;background:#FEF3C7;color:#92400E;border:1px solid #D97706;border-radius:4px;padding:2px 7px;font-family:var(--mono);text-transform:uppercase">&#9888; Overdue · '+esc(h.date)+'</span>'
+      + '</div>'
+      + '<div class="ho-pending-from">From: <strong>'+esc(h.recordedByName||'Unknown')+'</strong> → <strong>'+esc(h.handoverTo||'?')+'</strong></div>'
+      + '<div style="font-size:20px;font-weight:700;color:#92400E;margin:4px 0">Rs.'+((h.amount||0).toLocaleString('en-IN'))+'</div>'
+      + '<div class="ho-pending-from">'+(h.notes?esc(h.notes):'No notes')+'</div>'
+      + renderOrdersInHandover(h.orders, h.allOrders)
+      + actionBtns
+      + '</div>';
+  }).join('');
+
+  var div = document.createElement('div');
+  div.id = 'ho-overdue-section';
+  div.innerHTML = '<div style="font-size:11px;font-family:var(--mono);color:#92400E;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">&#9888; Overdue Handovers</div>' + html;
+  if (sec) sec.parentNode.insertBefore(div, sec);
 }
 
 function renderOrdersInHandover(ordersArg, allOrdersArg) {

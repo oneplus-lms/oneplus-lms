@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.31 — OnePLUS</title>
+<title>LabFlow Dashboard v20.38 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -166,7 +166,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.31</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.38</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -290,7 +290,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <!-- Cash Handovers -->
         <div class="card">
           <div class="ch"><div class="ct">Cash Handovers</div><span class="cc2" id="hoc">0</span></div>
-          <div id="holist"><div class="empty">No handovers today</div></div>
+          <div id="holist"><div class="empty">No handovers recorded</div></div>
         </div>
       </div>
 
@@ -557,7 +557,13 @@ function loadRange(from,to){
         if(seqB!==seqA)return seqB-seqA;
         return(b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0);
       });
+      // Past date — fetch handovers once via get() (no real-time listener needed)
       allHandovers=[];
+      db.collection('handovers').where('date','==',from).get().then(function(snap){
+        allHandovers=[];
+        snap.forEach(function(doc){allHandovers.push(Object.assign({id:doc.id},doc.data()));});
+        renderHandovers();updateCash();
+      }).catch(function(){});
       renderAll();
       set('drefresh',allOrders.length+' orders · '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}));
     });
@@ -1071,7 +1077,7 @@ function renderTransfers(){
 function renderHandovers(){
   var el=document.getElementById('holist');
   set('hoc',allHandovers.length);
-  if(!allHandovers.length){el.innerHTML='<div class="empty">No handovers today</div>';return;}
+  if(!allHandovers.length){el.innerHTML='<div class="empty">No handovers recorded</div>';return;}
   el.innerHTML=allHandovers.slice().sort(function(a,b){
     (function(){
         var seqA=parseInt((a.serialNo||'').split('-').pop())||a.seq||0;

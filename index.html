@@ -3365,7 +3365,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.01';
+var APP_VERSION = 'v21.02';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -9572,6 +9572,26 @@ function loadHO() {
       renderHOList(rows);
       renderHOPending(rows);
     }, function(){ });
+      // Recompute cash tile to include incoming accepted handovers
+      var _incomingCash = 0;
+      var _myName = (curProfile&&curProfile.name)||'';
+      var _myFirst = _myName.split(' ')[0].toLowerCase();
+      rows.forEach(function(h) {
+        if (h.custodyStatus === 'ACCEPTED' && h.type !== 'refund'
+            && h.handoverTo && h.handoverTo.toLowerCase().indexOf(_myFirst) >= 0
+            && h.recordedBy !== (curUser&&curUser.uid)) {
+          _incomingCash += (h.amount||0);
+        }
+      });
+      if (_incomingCash > 0) {
+        var _cashEl = document.getElementById('ho-cash');
+        if (_cashEl) {
+          // Parse current cash value and add incoming
+          var _curCash = parseFloat((_cashEl.textContent||'0').replace(/[^\d.]/g,''))||0;
+          _cashEl.textContent = 'Rs.'+ (_curCash + _incomingCash).toLocaleString('en-IN');
+          _cashEl.title = 'Includes Rs.'+_incomingCash.toLocaleString('en-IN')+' received from handovers';
+        }
+      }
 
   // ── Overdue pending handovers from previous days ──
   // Query all PENDING handovers not from today — recipient may need to accept/reject

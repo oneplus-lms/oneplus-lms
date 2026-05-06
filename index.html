@@ -3365,7 +3365,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.03';
+var APP_VERSION = 'v21.04';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3458,14 +3458,29 @@ if ('serviceWorker' in navigator) {
       });
       // Also check every 4 hours as fallback
       setInterval(function() { reg.update(); }, 4 * 60 * 60 * 1000);
+      // Check every 30 min too — catch updates sooner
+      setInterval(function() { reg.update(); }, 30 * 60 * 1000);
+      // On load — if a SW is already waiting (e.g. update happened while offline), apply it
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
       // When a new SW is waiting — prompt user to update
       reg.addEventListener('updatefound', function() {
         var newWorker = reg.installing;
         newWorker.addEventListener('statechange', function() {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            // New version ready — show update banner
-            var banner = document.getElementById('update-banner');
-            if (banner) banner.style.display = 'flex';
+            // New version ready — auto-apply if on auth screen (not mid-booking)
+            var currentScreen = document.querySelector('.screen.active');
+            var screenId = currentScreen ? currentScreen.id : '';
+            var safeToAutoUpdate = !screenId || screenId === 's-auth' || screenId === 's-pin' || screenId === 's-dash';
+            if (safeToAutoUpdate) {
+              // Silent auto-update — reload immediately
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+            } else {
+              // Mid-session — show banner, let user decide
+              var banner = document.getElementById('update-banner');
+              if (banner) banner.style.display = 'flex';
+            }
           }
         });
       });

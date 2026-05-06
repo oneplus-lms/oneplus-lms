@@ -3365,7 +3365,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.02';
+var APP_VERSION = 'v21.03';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3377,7 +3377,8 @@ function onDataReady(fn) {
 
 function loadAppData() {
   if (_dataLoaded) return;
-  var base = '/';
+  // Detect hosting: GitHub Pages serves from /oneplus-lms/, Firebase from /
+  var base = location.hostname.includes('github.io') ? '/oneplus-lms/' : '/';
   Promise.all([
     fetch(base + 'catalogue.json').then(function(r){ return r.json(); }),
     fetch(base + 'panels.json').then(function(r){ return r.json(); }),
@@ -3448,7 +3449,7 @@ db.enablePersistence({ synchronizeTabs: true })
 
 // Register service worker for app shell caching (offline load)
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js')
+  navigator.serviceWorker.register(location.hostname.includes('github.io') ? '/oneplus-lms/sw.js' : '/sw.js')
     .then(function(reg) {
       console.log('SW registered');
       // Check for updates when app becomes visible (user switches back)
@@ -6060,7 +6061,7 @@ var DOCTOR_SYNC_KEY = 'doctor_last_sync'; // localStorage key — ISO timestamp
 function prewarmDoctorCache() {
   if (allDoctorsCache || doctorCacheLoading) return;
   doctorCacheLoading = true;
-  var base = '/';
+  var base = location.hostname.includes('github.io') ? '/oneplus-lms/' : '/';
   // Tier 1: load bundled doctors.json (cached by SW — works offline)
   fetch(base + 'doctors.json')
     .then(function(r) { return r.json(); })

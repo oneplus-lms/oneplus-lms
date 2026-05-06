@@ -1197,7 +1197,10 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <div class="field"><label>Notes</label><input type="text" id="ho-notes" placeholder="Shift end, remarks..."></div>
       <button class="btn btn-primary" id="ho-submit-btn" onclick="submitHandover()">Initiate Handover →</button>
     </div>
-    <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Today's Handover Log</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px">
+      <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Handover Log</div>
+      <input type="date" id="ho-log-date" style="font-size:12px;font-family:var(--mono);padding:4px 8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer" onchange="loadHOHistory(this.value)">
+    </div>
     <div id="ho-list"><div class="empty">No handovers recorded yet</div></div>
   </div>
 </div>
@@ -3362,7 +3365,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v20.37';
+var APP_VERSION = 'v20.38';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -9555,6 +9558,10 @@ function loadHO() {
     });
   }).catch(function(){});
 
+  // Set date picker to today
+  var _hoDatePicker = document.getElementById('ho-log-date');
+  if (_hoDatePicker) _hoDatePicker.value = today;
+
   // Real-time listener for today's handovers (for pending detection)
   if (hoUnsubscribe) hoUnsubscribe();
   hoUnsubscribe = db.collection('handovers').where('date','==',today)
@@ -9723,6 +9730,42 @@ function renderHOList(rows) {
           +'<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>'
           :'<div><div class="ho-card-k">To</div><div class="ho-card-v">'+esc(h.handoverTo)+'</div></div>')        +'<div><div class="ho-card-k">Amount</div><div class="ho-card-v amount">Rs.'+(h.amount||0).toLocaleString('en-IN')+'</div></div>'        +'<div><div class="ho-card-k">By</div><div class="ho-card-v">'+esc(h.recordedByName||'-')+'</div></div>'        +'<div><div class="ho-card-k">Notes</div><div class="ho-card-v">'+esc(h.notes||'-')+'</div></div>'        +acceptedLine      +'</div>'      +renderOrdersInHandover(h.orders, h.allOrders)    +'</div>';  }).join('');
 }
+function loadHOHistory(dateStr) {
+  if (!dateStr) return;
+  var today = todayStr();
+  var el = document.getElementById('ho-list');
+  if (el) el.innerHTML = '<div class="empty">Loading...</div>';
+
+  db.collection('handovers').where('date','==',dateStr).get().then(function(snap) {
+    var rows = [];
+    snap.forEach(function(d){ rows.push(Object.assign({id:d.id}, d.data())); });
+    // If viewing a past date, filter to current user's records only (phlebo/reception)
+    // Admin/pathologist/manager see all
+    var role = curProfile && curProfile.role;
+    var isAdmin = role==='admin'||role==='pathologist'||role==='manager';
+    if (!isAdmin && dateStr !== today) {
+      var myUid = curUser && curUser.uid;
+      rows = rows.filter(function(h){ return h.recordedBy===myUid || h.handoverTo===((curProfile&&curProfile.name)||''); });
+    }
+    rows.sort(function(a,b){
+      return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)
+           - (a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0);
+    });
+    renderHOList(rows);
+    // If switching back to today, re-render pending too
+    if (dateStr === today) {
+      renderHOPending(rows);
+    } else {
+      // Hide pending section for past dates — nothing to act on
+      var pendingEl = document.getElementById('ho-pending-list');
+      if (pendingEl) pendingEl.innerHTML = '';
+    }
+  }).catch(function(e){
+    var el = document.getElementById('ho-list');
+    if (el) el.innerHTML = '<div class="empty">Could not load — ' + e.message + '</div>';
+  });
+}
+
 function submitHandover() {
   var sel = document.getElementById('ho-to');
   var to = sel.value;

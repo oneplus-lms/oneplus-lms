@@ -6369,7 +6369,7 @@
         "dept": "HAEMATOLOGY",
         "name": "NT-Pro BNP",
         "short": "NT-Pro BNP",
-        "rate": 3800
+        "rate": 3500
     },
     {
         "dept": "HAEMATOLOGY",
@@ -6802,5 +6802,17 @@
         "name": "XRAY PNS Waters View",
         "short": "",
         "rate": 500
+    },
+    {
+        "dept": "PACKAGES",
+        "name": "OLMEC GAS",
+        "short": "OG1",
+        "rate": 2500
+    },
+    {
+        "dept": "PACKAGES",
+        "name": "OLMEC GAS 2",
+        "short": "OG2",
+        "rate": 3500
     }
 ]

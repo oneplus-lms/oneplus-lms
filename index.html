@@ -2222,7 +2222,13 @@ function routeAfterPin(role) {
     if (phReview) phReview.style.display = 'block';
     if (phField)  phField.style.display  = 'block';
     if (phAssign) phAssign.style.display = 'block';
-    if (phEod)    phEod.style.display    = 'block';
+    if (phEod) {
+      phEod.style.display = 'block';
+      // Override EOD button for phlebos — show personal daily summary instead
+      phEod.querySelector('.qa-label').textContent = 'My Day Summary';
+      phEod.querySelector('.qa-sub').textContent   = 'Send to admin';
+      phEod.setAttribute('onclick', 'showPhlebEOD()');
+    }
     startPhleboDash();
   } else if (role === 'senior_lab') {
     goTo('s-dash', false); stack=['s-dash'];
@@ -3365,7 +3371,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.06';
+var APP_VERSION = 'v21.07';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -10408,6 +10414,139 @@ function autoSendEOD() {
   });
 }
 // ─────────────────────────────────────────────────────────────────────────
+
+// ── PHLEBO PERSONAL EOD ──────────────────────────────────────────────────
+function showPhlebEOD() {
+  var today    = todayStr();
+  var myUid    = curUser && curUser.uid;
+  var myName   = (curProfile && curProfile.name) || curUser.email;
+  var d        = new Date();
+  var dateStr  = d.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+
+  // Show loading modal
+  var modal = document.getElementById('phlebo-eod-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'phlebo-eod-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:#0008;z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+    modal.innerHTML =
+      '<div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px;max-height:85vh;overflow-y:auto">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+          '<div style="font-size:16px;font-weight:700;color:var(--text1)">My Day Summary</div>' +
+          '<button onclick="document.getElementById(&quot;phlebo-eod-modal&quot;).remove()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">✕</button>' +
+        '</div>' +
+        '<div id="phlebo-eod-body" style="font-size:13px;color:var(--text2);line-height:1.7">Loading...</div>' +
+        '<div style="display:flex;gap:10px;margin-top:16px">' +
+          '<button onclick="phlebEODWhatsApp()" style="flex:1;padding:12px;background:#25D366;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">📲 Send to Admin</button>' +
+          '<button onclick="phlebEODSave()" style="flex:1;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">💾 Save</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+
+  // Fetch today's orders created by or assigned to this phlebo
+  Promise.all([
+    db.collection('orders').where('date','==',today).where('createdBy','==',myUid).get(),
+    db.collection('orders').where('date','==',today).where('fieldAssignedToUid','==',myUid).get(),
+    db.collection('handovers').where('date','==',today).where('recordedBy','==',myUid).get()
+  ]).then(function(results) {
+    var seen = {};
+    var orders = [];
+    results[0].forEach(function(d){ if(!seen[d.id]){seen[d.id]=true;orders.push(Object.assign({id:d.id},d.data()));} });
+    results[1].forEach(function(d){ if(!seen[d.id]){seen[d.id]=true;orders.push(Object.assign({id:d.id},d.data()));} });
+
+    var totalOrders = orders.filter(function(o){ return o.status!=='draft'; }).length;
+    var fieldOrders = orders.filter(function(o){ return o.source==='Home Collection'||o.source==='Hospital Collection'; }).length;
+    var walkIn      = totalOrders - fieldOrders;
+    var cashCollected=0, upiCollected=0, totalCollected=0;
+
+    orders.forEach(function(o){
+      if (o.status==='draft') return;
+      var paid = o.paidAmount||0;
+      totalCollected += paid;
+      if (o.payMode==='cash') cashCollected += paid;
+      else if (o.payMode==='upi'||o.payMode==='card') upiCollected += paid;
+      else if (o.payMode==='split'&&o.splitPayments) {
+        cashCollected += (o.splitPayments.cash||0);
+        upiCollected  += (o.splitPayments.upi||0)+(o.splitPayments.card||0);
+      }
+    });
+
+    // Handovers
+    var handedOver = 0;
+    results[2].forEach(function(d){
+      var h = d.data();
+      if (h.custodyStatus==='ACCEPTED') handedOver += (h.amount||0);
+    });
+
+    var cashInHand = Math.max(0, cashCollected - handedOver);
+
+    var fmt = function(n){ return 'Rs.'+n.toLocaleString('en-IN'); };
+
+    var report = [
+      '*OnePLUS Lab — Phlebo Day Summary*',
+      'Date: ' + dateStr,
+      'Staff: ' + myName,
+      '─────────────────────',
+      '*Orders*',
+      'Total: ' + totalOrders,
+      'Field (Home/Hospital): ' + fieldOrders,
+      'Walk-in: ' + walkIn,
+      '─────────────────────',
+      '*Collections*',
+      'Cash: ' + fmt(cashCollected),
+      'UPI / Card: ' + fmt(upiCollected),
+      'Total: ' + fmt(totalCollected),
+      '─────────────────────',
+      '*Cash Status*',
+      'Handed Over: ' + fmt(handedOver),
+      'Cash in Hand: ' + fmt(cashInHand),
+      '─────────────────────',
+      'Sent via LabFlow LMS'
+    ].join('\n');
+
+    window._phlebEODReport = report;
+    window._phlebEODData = {
+      date:today, report:report, uid:myUid, name:myName,
+      totalOrders, fieldOrders, cashCollected, upiCollected, handedOver, cashInHand
+    };
+
+    // Render in modal
+    document.getElementById('phlebo-eod-body').innerHTML =
+      '<div style="white-space:pre-wrap;font-family:var(--mono);font-size:12px;color:var(--text1);background:var(--surface2);border-radius:8px;padding:12px">'
+      + esc(report) + '</div>';
+
+  }).catch(function(e){
+    document.getElementById('phlebo-eod-body').textContent = 'Error: ' + e.message;
+  });
+}
+
+function phlebEODWhatsApp() {
+  var text = window._phlebEODReport || '';
+  var ADMIN_WA = '919312218812';
+  window.open('https://wa.me/'+ADMIN_WA+'?text='+encodeURIComponent(text),'_blank');
+}
+
+function phlebEODSave() {
+  var data = window._phlebEODData;
+  if (!data) return;
+  db.collection('eod_reports').doc(data.date + '_' + data.uid).set({
+    date: data.date, type: 'phlebo',
+    report: data.report,
+    uid: data.uid, name: data.name,
+    totalOrders: data.totalOrders,
+    fieldOrders: data.fieldOrders,
+    cashCollected: data.cashCollected,
+    upiCollected: data.upiCollected,
+    handedOver: data.handedOver,
+    cashInHand: data.cashInHand,
+    savedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function(){
+    toast('Day summary saved','ok');
+    logActivity('phlebo_eod_save','Phlebo EOD saved for '+data.date);
+  }).catch(function(){ toast('Save failed','err'); });
+}
 
 function loadEOD() {
   var today=todayStr();

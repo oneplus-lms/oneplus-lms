@@ -3365,7 +3365,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.04';
+var APP_VERSION = 'v21.06';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3379,10 +3379,18 @@ function loadAppData() {
   if (_dataLoaded) return;
   // Detect hosting: GitHub Pages serves from /oneplus-lms/, Firebase from /
   var base = location.hostname.includes('github.io') ? '/oneplus-lms/' : '/';
+  // Cache-bust with daily timestamp — forces CDN to serve fresh data files each day
+  // Falls back to plain URL if network unavailable (serves yesterday's SW cache)
+  var _cbust = '?v=' + new Date().toISOString().slice(0,10).replace(/-/g,'');
+  function fetchJson(path) {
+    return fetch(base + path + _cbust)
+      .catch(function() { return fetch(base + path); }) // offline fallback — no bust
+      .then(function(r) { return r.json(); });
+  }
   Promise.all([
-    fetch(base + 'catalogue.json').then(function(r){ return r.json(); }),
-    fetch(base + 'panels.json').then(function(r){ return r.json(); }),
-    fetch(base + 'preanalytical.json').then(function(r){ return r.json(); })
+    fetchJson('catalogue.json'),
+    fetchJson('panels.json'),
+    fetchJson('preanalytical.json')
   ]).then(function(results) {
     CATALOGUE = results[0];
     PANELS    = results[1];

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.38 — OnePLUS</title>
+<title>LabFlow Dashboard v20.39 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -166,7 +166,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.38</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.39</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -741,7 +741,11 @@ function renderTable(orders){
     var allTests=o.tests||[];
     var preview=allTests.slice(0,2).map(function(t){return esc(t.name);}).join(', ');
     var hasMore=allTests.length>2;
-    var moreBtn=hasMore?' <span id="xb-'+rid+'" onclick="toggleRow(\''+rid+'\')" style="cursor:pointer;color:var(--blue);font-size:10px;font-family:var(--mono)">▸ +'+(allTests.length-2)+'</span>':'';
+    var hh=o.history||{};
+    var hasClinical=!!(hh.diagnoses&&hh.diagnoses.length||hh.clinicalNotes||hh.fasting||hh.collectionTime||hh.orderingDoctor||hh.symptoms||hh.medications&&hh.medications.length);
+    var moreBtnLabel=hasMore?' +​'+(allTests.length-2):'';
+    var clinBadge=hasClinical?'<span style="font-size:9px;color:var(--blue);margin-left:3px" title="Clinical history">Hx</span>':'';
+    var moreBtn=(hasMore||hasClinical)?' <span id="xb-'+rid+'" onclick="toggleRow(\''+rid+'\')" style="cursor:pointer;color:var(--blue);font-size:10px;font-family:var(--mono)">▸'+moreBtnLabel+'</span>'+clinBadge:'';
     var fullTests=allTests.map(function(t,i){
       return '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid var(--border);font-size:11px">'
         +'<span>'+(i+1)+'. '+esc(t.name)+'</span>'
@@ -790,12 +794,31 @@ function renderTable(orders){
       +'<td>'+labBadge+'</td>'
       +'<td style="font-size:11px;color:var(--text2)">'+esc(o.createdByName||'-')+'</td>'
       +'<td>'+sb+'</td>'
-      +'<td style="font-size:11px;font-family:var(--mono);color:var(--text3)">'+time+'</td>'
+      +(function(){
+          var collTime=(o.history||{}).collectionTime||'';
+          var timeHtml='<div style="font-size:11px;font-family:var(--mono);color:var(--text3)">'+time+'</div>';
+          if(collTime)timeHtml+='<div style="font-size:10px;font-family:var(--mono);color:var(--blue)" title="Sample collection time">🧪 '+esc(collTime)+'</div>';
+          return '<td>'+timeHtml+'</td>';
+        })()
       +'</tr>';
-    var expandRow=hasMore
+    var clinicalHtml='';
+    if(hasClinical){
+      var clines=[];
+      if(hh.orderingDoctor)clines.push('<span style="color:var(--text2)">Ordered by:</span> '+esc(hh.orderingDoctor));
+      if(hh.fasting)clines.push('<span style="color:var(--text2)">Fasting:</span> '+esc(hh.fasting)+(hh.fastHours?' ('+esc(hh.fastHours)+' hrs)':''));
+      if(hh.collectionTime)clines.push('<span style="color:var(--blue)">Collection time:</span> '+esc(hh.collectionTime));
+      if(hh.diagnoses&&hh.diagnoses.length)clines.push('<span style="color:var(--text2)">Diagnosis:</span> '+esc(hh.diagnoses.join(', ')));
+      if(hh.symptoms)clines.push('<span style="color:var(--text2)">Symptoms:</span> '+esc(hh.symptoms));
+      if(hh.medications&&hh.medications.length)clines.push('<span style="color:var(--text2)">Medications:</span> '+esc(hh.medications.join(', ')));
+      if(hh.clinicalNotes)clines.push('<span style="color:var(--text2)">Notes:</span> '+esc(hh.clinicalNotes));
+      clinicalHtml='<div style="margin-top:8px;padding:6px 8px;background:var(--surface);border-left:3px solid var(--blue);border-radius:4px">'
+        +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:4px">Clinical History</div>'
+        +'<div style="font-size:11px;line-height:1.7">'+clines.join('<br>')+'</div></div>';
+    }
+    var expandRow=(hasMore||hasClinical)
       ?'<tr id="xr-'+rid+'" style="display:none"><td colspan="12" style="padding:0 12px 10px;background:var(--surface2)">'
-        +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;padding:6px 0 4px">All tests — '+esc(o.patientName)+'</div>'
-        +fullTests+'</td></tr>'
+        +(hasMore?'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;padding:6px 0 4px">All tests — '+esc(o.patientName)+'</div>'+fullTests:'')
+        +clinicalHtml+'</td></tr>'
       :'';
     return mainRow+expandRow;
   }).join('');

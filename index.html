@@ -1294,7 +1294,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <!-- Collection Charges tab -->
     <div id="eod-panel-charges" style="display:none">
       <!-- Period selector -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px">
         <button id="cc-tab-daily" onclick="showCCPeriod('daily')"
           style="padding:8px;border-radius:var(--radius);border:1.5px solid var(--accent);background:var(--accent);color:#fff;font-size:12px;font-family:var(--mono);cursor:pointer">
           Today
@@ -1302,6 +1302,10 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <button id="cc-tab-weekly" onclick="showCCPeriod('weekly')"
           style="padding:8px;border-radius:var(--radius);border:1.5px solid var(--border-strong);background:var(--surface);color:var(--text2);font-size:12px;font-family:var(--mono);cursor:pointer">
           This Week
+        </button>
+        <button id="cc-tab-lastweek" onclick="showCCPeriod('lastweek')"
+          style="padding:8px;border-radius:var(--radius);border:1.5px solid var(--border-strong);background:var(--surface);color:var(--text2);font-size:12px;font-family:var(--mono);cursor:pointer">
+          Last Week
         </button>
       </div>
       <div id="cc-loading" class="empty">Loading...</div>
@@ -3371,7 +3375,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.07';
+var APP_VERSION = 'v21.08';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -10205,14 +10209,13 @@ var ccPeriod = 'daily';
 
 function showCCPeriod(period) {
   ccPeriod = period;
-  var d = document.getElementById('cc-tab-daily');
-  var w = document.getElementById('cc-tab-weekly');
-  d.style.background = period==='daily'?'var(--accent)':'var(--surface)';
-  d.style.color = period==='daily'?'#fff':'var(--text2)';
-  d.style.borderColor = period==='daily'?'var(--accent)':'var(--border-strong)';
-  w.style.background = period==='weekly'?'var(--accent)':'var(--surface)';
-  w.style.color = period==='weekly'?'#fff':'var(--text2)';
-  w.style.borderColor = period==='weekly'?'var(--accent)':'var(--border-strong)';
+  ['daily','weekly','lastweek'].forEach(function(p) {
+    var el = document.getElementById('cc-tab-'+p);
+    if (!el) return;
+    el.style.background = period===p?'var(--accent)':'var(--surface)';
+    el.style.color = period===p?'#fff':'var(--text2)';
+    el.style.borderColor = period===p?'var(--accent)':'var(--border-strong)';
+  });
   loadCollectionCharges(period);
 }
 
@@ -10228,13 +10231,23 @@ function loadCollectionCharges(period) {
   var startStr;
   if (period === 'daily') {
     startStr = endStr;
-  } else {
+  } else if (period === 'weekly') {
     // This week — Monday to today
     var day = today.getDay(); // 0=Sun
     var diff = (day === 0) ? 6 : day - 1; // days since Monday
     var monday = new Date(today);
     monday.setDate(today.getDate() - diff);
     startStr = monday.getFullYear() + '-' + String(monday.getMonth()+1).padStart(2,'0') + '-' + String(monday.getDate()).padStart(2,'0');
+  } else {
+    // Last week — previous Mon to Sun
+    var day2 = today.getDay();
+    var diff2 = (day2 === 0) ? 6 : day2 - 1;
+    var lastSun = new Date(today);
+    lastSun.setDate(today.getDate() - diff2 - 1);
+    var lastMon = new Date(lastSun);
+    lastMon.setDate(lastSun.getDate() - 6);
+    startStr = lastMon.getFullYear() + '-' + String(lastMon.getMonth()+1).padStart(2,'0') + '-' + String(lastMon.getDate()).padStart(2,'0');
+    endStr   = lastSun.getFullYear() + '-' + String(lastSun.getMonth()+1).padStart(2,'0') + '-' + String(lastSun.getDate()).padStart(2,'0');
   }
 
   db.collection('orders')
@@ -10274,7 +10287,7 @@ function loadCollectionCharges(period) {
       var grandTotal = users.reduce(function(s,uid){ return s + byUser[uid].total; }, 0);
 
       var html = '<div style="background:var(--accent-light);border:1px solid var(--accent);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">'
-        + '<div style="font-size:13px;font-weight:500">' + (period==='daily'?'Today':'This Week') + ' — Total</div>'
+        + '<div style="font-size:13px;font-weight:500">' + (period==='daily'?'Today':period==='weekly'?'This Week':'Last Week') + ' — Total</div>'
         + '<div style="font-size:18px;font-weight:600;color:var(--accent)">Rs.' + grandTotal.toLocaleString('en-IN') + '</div>'
         + '</div>';
 

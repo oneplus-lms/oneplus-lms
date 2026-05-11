@@ -1,5 +1,5 @@
 // LabFlow Service Worker — v21.00
-const CACHE_NAME = 'labflow-v21.07';
+const CACHE_NAME = 'labflow-v21.08';
 
 const PRECACHE = [
   '/index.html',

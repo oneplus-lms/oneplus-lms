@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.39 — OnePLUS</title>
+<title>LabFlow Dashboard v20.40 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -166,7 +166,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.39</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.40</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -183,6 +183,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <button class="rqb active" id="rqb-today"     onclick="setQuickRange('today')">Today</button>
     <button class="rqb"        id="rqb-yesterday"  onclick="setQuickRange('yesterday')">Yesterday</button>
     <button class="rqb"        id="rqb-week"        onclick="setQuickRange('week')">This Week</button>
+    <button class="rqb"        id="rqb-lastweek"    onclick="setQuickRange('lastweek')">Last Week</button>
     <button class="rqb"        id="rqb-month"       onclick="setQuickRange('month')">This Month</button>
     <button class="rqb"        id="rqb-custom"      onclick="setQuickRange('custom')">Custom</button>
     <div class="rdates">
@@ -473,7 +474,7 @@ function startDash(){
 function setQuickRange(mode){
   dashMode=mode;
   var today=td(); var d=new Date();
-  ['today','yesterday','week','month','custom'].forEach(function(id){
+  ['today','yesterday','week','lastweek','month','custom'].forEach(function(id){
     var btn=document.getElementById('rqb-'+id);
     if(btn)btn.className='rqb'+(id===mode?' active':'');
   });
@@ -482,6 +483,7 @@ function setQuickRange(mode){
   if(mode==='today'){dashFrom=dashTo=today;dashViewLabel='today';}
   else if(mode==='yesterday'){var y=new Date(d);y.setDate(y.getDate()-1);dashFrom=dashTo=fmtDate(y);dashViewLabel='yesterday';}
   else if(mode==='week'){var mon=new Date(d);mon.setDate(d.getDate()-((d.getDay()+6)%7));dashFrom=fmtDate(mon);dashTo=today;dashViewLabel='this week';}
+  else if(mode==='lastweek'){var lsun=new Date(d);lsun.setDate(d.getDate()-((d.getDay()+6)%7)-1);var lmon=new Date(lsun);lmon.setDate(lsun.getDate()-6);dashFrom=fmtDate(lmon);dashTo=fmtDate(lsun);dashViewLabel='last week';}
   else if(mode==='month'){dashFrom=today.slice(0,8)+'01';dashTo=today;dashViewLabel='this month';}
   else if(mode==='custom'){dashFrom=rf?rf.value||today:today;dashTo=rt?rt.value||today:today;dashViewLabel='selected range';}
   if(rf&&mode!=='custom')rf.value=dashFrom;
@@ -495,7 +497,7 @@ function onCustomRange(){
   if(!rf||!rt||!rf.value||!rt.value)return;
   if(rf.value>rt.value)rt.value=rf.value;
   dashMode='custom';
-  ['today','yesterday','week','month','custom'].forEach(function(id){
+  ['today','yesterday','week','lastweek','month','custom'].forEach(function(id){
     var btn=document.getElementById('rqb-'+id);
     if(btn)btn.className='rqb'+(id==='custom'?' active':'');
   });
@@ -1223,7 +1225,7 @@ function renderRangeSummary(){
     +'<span style="width:110px">Date</span><span style="width:50px;text-align:right">Orders</span>'
     +'<span style="width:100px;text-align:right">Revenue</span><span style="width:80px;text-align:right">Cash</span>'
     +'<span style="width:80px;text-align:right">UPI</span><span style="width:80px;text-align:right">Card</span>'
-    +'<span style="width:90px;text-align:right">Credit</span></div>'
+    +'<span style="width:90px;text-align:right">Credit</span><span style="width:80px;text-align:right">+Coll.</span></div>'
     +days.map(function(day){
       var b=byDay[day]; var isToday=day===td();
       var dayLabel=new Date(day+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short'});
@@ -1235,6 +1237,7 @@ function renderRangeSummary(){
         +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.upi)+'</span>'
         +'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fmt(b.card)+'</span>'
         +'<span style="width:90px;text-align:right;font-family:var(--mono);color:var(--amber)">'+fmt(b.credit)+'</span>'
+        +(b.coll?'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--blue)">'+fmt(b.coll)+'</span>':'<span style="width:80px;text-align:right;font-family:var(--mono);color:var(--text3)">—</span>')
         +'</div>';
     }).join('');
 }

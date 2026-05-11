@@ -24,7 +24,9 @@ self.addEventListener('install', event => {
           console.log('SW: doctors.json not yet available — will cache on first fetch');
         });
       });
-    }).then(() => self.skipWaiting())
+    })
+    // Do NOT skipWaiting here — let the app control when to apply the update
+    // so mid-session reloads don't interrupt bookings
   );
 });
 

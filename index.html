@@ -3375,7 +3375,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.10';
+var APP_VERSION = 'v21.11';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3505,8 +3505,17 @@ if ('serviceWorker' in navigator) {
     })
     .catch(function(err) { console.warn('SW registration failed:', err); });
   // When SW activates after skipWaiting — reload to get fresh app
+  // Guard: don't reload mid-booking (the banner already handles that case)
   navigator.serviceWorker.addEventListener('controllerchange', function() {
-    window.location.reload();
+    var cur = stack && stack[stack.length - 1];
+    var safeToCCReload = !cur || cur === 's-auth' || cur === 's-pin' || cur === 's-dash';
+    if (safeToCCReload) {
+      window.location.reload();
+    } else {
+      // Show the update banner instead — user taps "Update now" when ready
+      var banner = document.getElementById('update-banner');
+      if (banner) banner.style.display = 'flex';
+    }
   });
 }
 

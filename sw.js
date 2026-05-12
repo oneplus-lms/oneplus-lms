@@ -1,5 +1,5 @@
 // LabFlow Service Worker — v21.00
-const CACHE_NAME = 'labflow-v21.11';
+const CACHE_NAME = 'labflow-v21.12';
 
 const PRECACHE = [
   '/index.html',
@@ -24,10 +24,9 @@ self.addEventListener('install', event => {
           console.log('SW: doctors.json not yet available — will cache on first fetch');
         });
       });
-    }).then(() => self.skipWaiting())
-    // skipWaiting here is intentional for v21.10 ONLY — escapes the v21.08 deadlock
-    // where the old SW (which also had skipWaiting in install) would never yield.
-    // From v21.11 onwards this will be removed and message-based updates resume.
+    })
+    // skipWaiting intentionally removed — update flow is message-based (SKIP_WAITING)
+    // The app sends it from updatefound handler (safe screens) or user taps "Update now".
   );
 });
 

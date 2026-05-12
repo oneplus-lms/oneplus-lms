@@ -3375,7 +3375,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.11';
+var APP_VERSION = 'v21.12';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -10288,11 +10288,23 @@ function loadCollectionCharges(period) {
     endStr   = lastSun.getFullYear() + '-' + String(lastSun.getMonth()+1).padStart(2,'0') + '-' + String(lastSun.getDate()).padStart(2,'0');
   }
 
-  db.collection('orders')
-    .where('date', '>=', startStr)
-    .where('date', '<=', endStr)
-    .get()
-    .then(function(snap) {
+  // Fetch staff names first so emails don't show as phlebo names
+  var _ccStaffNames = {};
+  function _ccResolveName(uid, fallback) {
+    if (_ccStaffNames[uid]) return _ccStaffNames[uid];
+    if (fallback && fallback.includes('@')) return fallback.split('@')[0];
+    return fallback || 'Unknown';
+  }
+  db.collection('staff').where('active','==',true).get().then(function(staffSnap) {
+    staffSnap.forEach(function(d) {
+      var s = d.data();
+      if (s.name) _ccStaffNames[d.id] = s.name;
+    });
+    return db.collection('orders')
+      .where('date', '>=', startStr)
+      .where('date', '<=', endStr)
+      .get();
+  }).then(function(snap) {
       // Group collection charges by user
       var byUser = {}; // uid -> {name, total, orders: [{date, patient, amount}]}
       snap.forEach(function(d) {
@@ -10300,7 +10312,7 @@ function loadCollectionCharges(period) {
         var cc = o.collectionCharge || 0;
         if (!cc || o.source === 'Walk-in') return; // walk-in has no collection charge
         var uid = o.createdBy || 'unknown';
-        var name = o.createdByName || 'Unknown';
+        var name = _ccResolveName(uid, o.createdByName);
         if (!byUser[uid]) byUser[uid] = { name: name, total: 0, orders: [] };
         byUser[uid].total += cc;
         byUser[uid].orders.push({

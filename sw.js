@@ -1,32 +1,23 @@
-// LabFlow Service Worker — v21.00
-const CACHE_NAME = 'labflow-v21.15';
+// LabFlow Service Worker — labflow-v21.16
+const CACHE_NAME = 'labflow-v21.16';
 
 const PRECACHE = [
-  '/index.html',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/doctors.json',
+  '/oneplus-lms/manifest.json',
+  '/oneplus-lms/icon-192.png',
+  '/oneplus-lms/icon-512.png',
 ];
 
 self.addEventListener('install', event => {
+  // skipWaiting here is INTENTIONAL and PERMANENT for this app.
+  // The message-based approach cannot work because the old SW serves the old
+  // index.html from cache — the new index.html (which sends SKIP_WAITING) never
+  // loads. skipWaiting in install is the only reliable way to force updates.
+  // The controllerchange handler in index.html guards against mid-booking reloads.
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      // Cache core files — doctors.json may not exist yet, don't fail if missing
-      return cache.addAll([
-        '/index.html',
-        '/manifest.json',
-        '/icon-192.png',
-        '/icon-512.png',
-      ]).then(() => {
-        // Cache doctors.json separately — optional, won't block install
-        return cache.add('/doctors.json').catch(() => {
-          console.log('SW: doctors.json not yet available — will cache on first fetch');
-        });
-      });
+      return cache.addAll(PRECACHE).catch(() => {});
     })
-    // skipWaiting intentionally removed — update flow is message-based (SKIP_WAITING)
-    // The app sends it from updatefound handler (safe screens) or user taps "Update now".
   );
 });
 
@@ -41,11 +32,22 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET') return;
+  // Never intercept Firebase/Google requests
   if (url.hostname.includes('googleapis.com')) return;
   if (url.hostname.includes('gstatic.com')) return;
   if (url.hostname.includes('firebaseio.com')) return;
+  if (url.hostname.includes('firebaseapp.com')) return;
 
-  // Network first, fall back to cache
+  // index.html — always network first, no cache fallback
+  // This ensures the app shell is always fresh after a SW update
+  if (url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Everything else — network first, cache fallback
   event.respondWith(
     fetch(event.request)
       .then(response => {
@@ -57,7 +59,7 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// Listen for skip waiting message from app
+// Listen for skip waiting message from app (belt-and-suspenders)
 self.addEventListener('message', event => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting().then(() => self.clients.claim());

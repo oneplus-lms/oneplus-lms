@@ -3375,7 +3375,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.08';
+var APP_VERSION = 'v21.10';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3633,7 +3633,7 @@ function goBack() {
   var cur = stack[stack.length-1];
   // Already at root — do nothing, never exit the app
   if (cur === 's-dash' || stack.length <= 1) {
-    history.replaceState({appNav: true}, '', '');
+    history.pushState({appNav: true}, '', '');
     return;
   }
   // If mid-order, swipe/back navigates between steps — never discards
@@ -3680,10 +3680,10 @@ window.addEventListener('popstate', function(e) {
   if (stack.length > 1) {
     goBack();
   } else {
-    // Already at root — keep sentinel alive so app never exits
-    history.replaceState({appNav: true}, '', '');
+    // Already at root — keep sentinel alive so app never exits.
+    // Must pushState (not replaceState) so the stack never drains to 0.
+    history.pushState({appNav: true}, '', '');
   }
-  // If at root (stack.length === 1) just swallow — app stays open.
 });
 
 // ── AUTH STATE ──
@@ -6893,22 +6893,19 @@ function submitOrder() {
     fieldAssignedAt: (curOrder.fieldAssignedToUid || curOrder._fieldAssignedToUid) ? firebase.firestore.FieldValue.serverTimestamp() : null
   };
   // Atomically get next serial number for today, then save order
-  var counterRef = db.collection('counters').doc(todayStr());
-  db.runTransaction(function(tx) {
-    return tx.get(counterRef).then(function(doc) {
-      var next = doc.exists ? (doc.data().seq || 0) + 1 : 1;
-      tx.set(counterRef, { seq: next, date: todayStr() }, { merge: true });
-      return next;
-    });
-  }).then(function(seq) {
-    // Format: DD/MM/YYYY - XXXX
+  // If offline: skip transaction, assign a temporary local serial, queue write via Firestore persistence
+  function _doSaveOrder(seq, isOfflineSerial) {
     var parts = todayStr().split('-'); // YYYY-MM-DD
     var displayDate = parts[2] + '/' + parts[1] + '/' + parts[0];
-    var serial = String(seq).padStart(4, '0');
-    order.serialNo = displayDate + ' - ' + serial;
-    order.seq = seq;
+    if (isOfflineSerial) {
+      order.serialNo = displayDate + ' - OFFLINE-' + seq;
+      order.seq = null; // will be reassigned when online
+      order._needsSerial = true; // flag for later reassignment
+    } else {
+      order.serialNo = displayDate + ' - ' + String(seq).padStart(4, '0');
+      order.seq = seq;
+    }
     registerDoctorFromOrder(order.refBy);
-    // Strip base64 photos from order doc before saving — upload to Storage instead
     var photosToUpload = order.rxPhotos || [];
     var proofToUpload = order.paymentProof || '';
     order.rxPhotos = [];
@@ -6916,11 +6913,29 @@ function submitOrder() {
     order.paymentProof = '';
     var safeOrder = cleanForFirestore(order);
     return db.collection('orders').add(safeOrder).then(function(ref) {
-      // Upload photos to Storage in background — don't block order confirmation
-      uploadOrderPhotos(ref.id, photosToUpload, proofToUpload);
+      if (!isOfflineSerial) uploadOrderPhotos(ref.id, photosToUpload, proofToUpload);
       return ref;
     });
-  }).then(function(ref) {
+  }
+
+  var counterRef = db.collection('counters').doc(todayStr());
+  var savePromise;
+  if (!navigator.onLine) {
+    // Offline — Firestore transactions require network. Use a time-based local serial.
+    // Firestore persistence will queue the write and sync when back online.
+    var offlineSeq = Date.now() % 100000; // 5-digit timestamp suffix, unique enough
+    toast('Offline — order saved locally, will sync when connected', 'warn');
+    savePromise = _doSaveOrder(offlineSeq, true);
+  } else {
+    savePromise = db.runTransaction(function(tx) {
+      return tx.get(counterRef).then(function(doc) {
+        var next = doc.exists ? (doc.data().seq || 0) + 1 : 1;
+        tx.set(counterRef, { seq: next, date: todayStr() }, { merge: true });
+        return next;
+      });
+    }).then(function(seq) { return _doSaveOrder(seq, false); });
+  }
+  savePromise.then(function(ref) {
     lastOrder = {id: ref.id}; Object.assign(lastOrder, order);
     // Pin order ID to TRF button — iOS-safe, survives JS state restoration
     var _trfBtn = document.getElementById('done-trf-btn');
@@ -8747,19 +8762,17 @@ function completeBookingSubmit(orderId) {
   var timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
   // Get next serial number then update
+  // If offline: skip transaction, use temp serial — Firestore persistence will queue the write
   var counterRef = db.collection('counters').doc(todayStr());
-  db.runTransaction(function(tx) {
-    return tx.get(counterRef).then(function(doc) {
-      var next = doc.exists ? (doc.data().seq || 0) + 1 : 1;
-      tx.set(counterRef, { seq: next, date: todayStr() }, { merge: true });
-      return next;
-    });
-  }).then(function(seq) {
+  function _doCBUpdate(seq, isOfflineSerial) {
     var parts = todayStr().split('-');
     var displayDate = parts[2] + '/' + parts[1] + '/' + parts[0];
-    var serialNo = displayDate + ' - ' + String(seq).padStart(4, '0');
+    var serialNo = isOfflineSerial
+      ? displayDate + ' - OFFLINE-' + seq
+      : displayDate + ' - ' + String(seq).padStart(4, '0');
 
     var update = {
+      _needsSerial: isOfflineSerial || undefined,
       tests:       editSelTests,
       totalAmount: total,
       testTotal:   total,
@@ -8800,7 +8813,23 @@ function completeBookingSubmit(orderId) {
     update.status = dueAmt > 0 ? 'pending' : 'paid';
 
     return db.collection('orders').doc(orderId).update(update);
-  }).then(function() {
+  }
+
+  var cbSavePromise;
+  if (!navigator.onLine) {
+    var offlineSeq2 = Date.now() % 100000;
+    toast('Offline — booking saved locally, will sync when connected', 'warn');
+    cbSavePromise = _doCBUpdate(offlineSeq2, true);
+  } else {
+    cbSavePromise = db.runTransaction(function(tx) {
+      return tx.get(counterRef).then(function(doc) {
+        var next = doc.exists ? (doc.data().seq || 0) + 1 : 1;
+        tx.set(counterRef, { seq: next, date: todayStr() }, { merge: true });
+        return next;
+      });
+    }).then(function(seq) { return _doCBUpdate(seq, false); });
+  }
+  cbSavePromise.then(function() {
     closeEditModal();
     // Remove draft banner
     var banner = document.getElementById('draft-completion-banner');

@@ -2894,7 +2894,13 @@ function renderPhleboDash(orders) {
         + '<div style="margin-bottom:8px">'+reqStr+'</div>';
     }
 
+    var _bookedBy = o.createdByName || '';
+    if (_bookedBy.includes('@')) _bookedBy = _bookedBy.split('@')[0];
+    var _bookedByRow = _bookedBy
+      ? '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">Booked by: '+esc(_bookedBy)+'</div>'
+      : '';
     return '<div style="'+cardBg+';border:1px solid;border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px">'
+      + _bookedByRow
       + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;cursor:pointer" ontouchend="event.preventDefault();openOrderDetail(\''+o.id+'\')" onclick="openOrderDetail(\''+o.id+'\')">'
       + '<div style="font-size:16px;font-weight:600">'+esc(o.patientName||'-')+'</div>'
       + '<span style="font-size:10px;font-family:var(--mono);font-weight:700;color:'+statusColor+';background:'+statusColor+'18;border-radius:10px;padding:3px 8px;white-space:nowrap;margin-left:8px">'+statusLabel+'</span>'
@@ -3375,7 +3381,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.12';
+var APP_VERSION = 'v21.15';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -9602,9 +9608,51 @@ function loadHO() {
       var alreadyOut = 0;
       hoSnap.forEach(function(d) {
         var h = d.data();
-        if (h.recordedBy !== _hoMyUid) return;
-        if (h.type === 'refund') return; // refunds don't reduce cash in hand
-        if (h.custodyStatus === 'ACCEPTED') alreadyOut += (h.amount||0);
+        if (h.type === 'refund') return;
+
+        // Cash I have already handed out
+        if (h.recordedBy === _hoMyUid && h.custodyStatus === 'ACCEPTED') {
+          alreadyOut += (h.amount||0);
+        }
+
+        // Cash handed TO me (accepted) — merge their patient list into my checklist
+        var isIncoming = (h.toUid ? h.toUid === _hoMyUid
+          : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(
+              ((curProfile&&curProfile.name)||'').split(' ')[0].toLowerCase()) >= 0))
+          && h.recordedBy !== _hoMyUid
+          && h.custodyStatus === 'ACCEPTED';
+
+        if (isIncoming) {
+          // Add cash amount to running total so netCash is correct
+          cash += (h.amount||0);
+          // Merge patient list into checklist so phlebo can hand them over to reception
+          var srcList = (h.allOrders && h.allOrders.length) ? h.allOrders : (h.orders||[]);
+          srcList.forEach(function(op) {
+            // Avoid duplicates (same orderId already in list from own orders)
+            var alreadyIn = previewOrders.some(function(p){ return p.orderId === op.orderId; });
+            if (alreadyIn) return;
+            var cashAmt = op.cashAmt || (op.payMode==='cash' ? (op.paidAmount||0) : 0);
+            if (cashAmt > 0) {
+              previewOrders.push({
+                serial:   op.serial || '-',
+                name:     op.name || op.patientName || '-',
+                tests:    op.tests || '',
+                cashAmt:  cashAmt,
+                colCharge:0,
+                total:    cashAmt,
+                payMode:  op.payMode || 'cash',
+                dueRow:   false,
+                orderId:  op.orderId || '',
+                fromHandover: h.recordedByName || 'transferred'
+              });
+            }
+            // Always include in full manifest (all pay modes) for reception
+            var alreadyInManifest = allOrdersManifest.some(function(p){ return p.orderId === op.orderId; });
+            if (!alreadyInManifest) {
+              allOrdersManifest.push(Object.assign({fromHandover: h.recordedByName||'transferred'}, op));
+            }
+          });
+        }
       });
       var netCash = Math.max(0, cash - alreadyOut);
 
@@ -9650,7 +9698,7 @@ function loadHO() {
       var _myFirst = _myName.split(' ')[0].toLowerCase();
       rows.forEach(function(h) {
         if (h.custodyStatus === 'ACCEPTED' && h.type !== 'refund'
-            && h.handoverTo && h.handoverTo.toLowerCase().indexOf(_myFirst) >= 0
+            && (h.toUid ? h.toUid === (curUser&&curUser.uid) : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(_myFirst) >= 0))
             && h.recordedBy !== (curUser&&curUser.uid)) {
           _incomingCash += (h.amount||0);
         }
@@ -9679,7 +9727,7 @@ function loadHO() {
         // Show to recipient (normal) or requester (refund)
         var isForMe = h.type === 'refund'
           ? (h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0)
-          : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0);
+          : (h.toUid ? h.toUid === _hoMyUid : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0));
         // Also show initiator their own stuck pending
         var isMine = h.recordedBy === _hoMyUid;
         if (isForMe || isMine) overdue.push(h);
@@ -9701,8 +9749,8 @@ function renderHOOverdue(overdue) {
   var html = overdue.map(function(h) {
     var isForMe = h.type === 'refund'
       ? (h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0)
-      : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0);
-    var isMine = h.recordedBy === _hoMyUid;
+      : (h.toUid ? h.toUid === (curUser&&curUser.uid) : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0));
+    var isMine = h.recordedBy === (curUser&&curUser.uid);
     var actionBtns = isForMe
       ? '<div class="ho-pending-actions">'
         + '<button class="btn-accept" onclick="hoConfirm(&quot;accept&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10003; Accept</button>'
@@ -9780,6 +9828,8 @@ function renderHOPatientChecklist(orders, alreadyOut, totalCash, netCash) {
   var rows = orders.map(function(o, i) {
     var tag = o.dueRow
       ? '<span style="font-size:9px;background:#FEF3C7;color:#92400E;border-radius:3px;padding:1px 5px;margin-left:4px">DUE</span>'
+      : o.fromHandover
+      ? '<span style="font-size:9px;background:#DBEAFE;color:#1D4ED8;border-radius:3px;padding:1px 5px;margin-left:4px">via '+esc(o.fromHandover.split(' ')[0])+'</span>'
       : (o.payMode === 'split' ? '<span style="font-size:9px;background:#EDE9FE;color:#5B21B6;border-radius:3px;padding:1px 5px;margin-left:4px">SPLIT</span>' : '');
     return '<label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:0.5px solid var(--border);cursor:pointer">'
       + '<input type="checkbox" data-idx="'+i+'" data-amt="'+o.total+'" checked'
@@ -9843,6 +9893,7 @@ function hoToggleAll(btn) {
 // ─────────────────────────────────────────────────────────────────────────
 
 function renderHOPending(rows) {
+  var myUid = curUser && curUser.uid;
   var myName = (curProfile&&curProfile.name)||'';
   var myFirst = myName.split(' ')[0].toLowerCase();
   var pending = rows.filter(function(h){
@@ -9852,7 +9903,7 @@ function renderHOPending(rows) {
       return h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0;
     }
     // Normal handover: show to recipient
-    return h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0;
+    return h.toUid ? h.toUid === myUid : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0);
   });
   var sec = document.getElementById('ho-pending-section');
   var list = document.getElementById('ho-pending-list');
@@ -9898,7 +9949,7 @@ function loadHOHistory(dateStr) {
     var isAdmin = role==='admin'||role==='pathologist'||role==='manager';
     if (!isAdmin && dateStr !== today) {
       var myUid = curUser && curUser.uid;
-      rows = rows.filter(function(h){ return h.recordedBy===myUid || h.handoverTo===((curProfile&&curProfile.name)||''); });
+      rows = rows.filter(function(h){ return h.recordedBy===myUid || (h.toUid ? h.toUid===myUid : h.handoverTo===((curProfile&&curProfile.name)||'')); });
     }
     rows.sort(function(a,b){
       return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)
@@ -10102,7 +10153,7 @@ function submitHandover() {
 
     var now = new Date();
     db.collection('handovers').add({
-      handoverTo: toName, amount: amt, notes: notes, date: today,
+      handoverTo: toName, toUid: toUID||'', amount: amt, notes: notes, date: today,
       time: now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       recordedBy: myUid, recordedByName: myName,

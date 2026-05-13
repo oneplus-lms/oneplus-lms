@@ -3381,7 +3381,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.16';
+var APP_VERSION = 'v21.17';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -9692,26 +9692,6 @@ function loadHO() {
       renderHOList(rows);
       renderHOPending(rows);
     }, function(){ });
-      // Recompute cash tile to include incoming accepted handovers
-      var _incomingCash = 0;
-      var _myName = (curProfile&&curProfile.name)||'';
-      var _myFirst = _myName.split(' ')[0].toLowerCase();
-      rows.forEach(function(h) {
-        if (h.custodyStatus === 'ACCEPTED' && h.type !== 'refund'
-            && (h.toUid ? h.toUid === (curUser&&curUser.uid) : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(_myFirst) >= 0))
-            && h.recordedBy !== (curUser&&curUser.uid)) {
-          _incomingCash += (h.amount||0);
-        }
-      });
-      if (_incomingCash > 0) {
-        var _cashEl = document.getElementById('ho-cash');
-        if (_cashEl) {
-          // Parse current cash value and add incoming
-          var _curCash = parseFloat((_cashEl.textContent||'0').replace(/[^\d.]/g,''))||0;
-          _cashEl.textContent = 'Rs.'+ (_curCash + _incomingCash).toLocaleString('en-IN');
-          _cashEl.title = 'Includes Rs.'+_incomingCash.toLocaleString('en-IN')+' received from handovers';
-        }
-      }
 
   // ── Overdue pending handovers from previous days ──
   // Query all PENDING handovers not from today — recipient may need to accept/reject
@@ -10094,12 +10074,18 @@ function submitHandover() {
     }
 
     var alreadyHandedOver = 0;
+    var incomingAccepted = 0;
     var hasPendingOut = false;
     hoSnap.forEach(function(d) {
       var h = d.data();
-      if (h.recordedBy !== myUid) return;
-      if (h.custodyStatus === 'ACCEPTED') alreadyHandedOver += (h.amount||0);
-      if (h.custodyStatus === 'PENDING') hasPendingOut = true;
+      if (h.type === 'refund') return;
+      // Cash I already handed out
+      if (h.recordedBy === myUid && h.custodyStatus === 'ACCEPTED') alreadyHandedOver += (h.amount||0);
+      // Pending I initiated — block duplicate (same concept, any recipient)
+      if (h.recordedBy === myUid && h.custodyStatus === 'PENDING') hasPendingOut = true;
+      // Cash handed TO me and accepted — I physically hold this
+      if ((h.toUid ? h.toUid === myUid : false) && h.recordedBy !== myUid && h.custodyStatus === 'ACCEPTED')
+        incomingAccepted += (h.amount||0);
     });
 
     if (hasPendingOut) {
@@ -10107,7 +10093,7 @@ function submitHandover() {
       return;
     }
 
-    var cashInHand = cashCollected - alreadyHandedOver;
+    var cashInHand = cashCollected + incomingAccepted - alreadyHandedOver;
     if (amt > cashInHand + 0.01) {
       toast('Amount exceeds your cash in hand (Rs.'+Math.max(0,cashInHand).toLocaleString('en-IN')+')','warn');
       return;
@@ -10128,7 +10114,8 @@ function submitHandover() {
           patientName: po.name || '',
           tests: po.tests || '',
           cashAmt: po.total || 0,
-          orderId: po.serial || ''
+          serial: po.serial || '',
+          orderId: po.orderId || po.serial || ''
         });
       });
     } else {

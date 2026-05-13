@@ -2247,6 +2247,23 @@ function routeAfterPin(role) {
       phEod.querySelector('.qa-sub').textContent   = 'Send to admin';
       phEod.setAttribute('onclick', 'showPhlebEOD()');
     }
+    // Add prominent Cash Handover tile for phlebo at top of dash (above quick-actions)
+    var _phHOTile = document.getElementById('ph-ho-tile');
+    if (!_phHOTile) {
+      _phHOTile = document.createElement('div');
+      _phHOTile.id = 'ph-ho-tile';
+      _phHOTile.style.cssText = 'margin:0 0 12px;display:flex;gap:8px';
+      _phHOTile.innerHTML =
+        '<button onclick="goTo(\x27s-ho\x27)" style="flex:1;display:flex;align-items:center;gap:10px;'
+        +'background:var(--accent);color:#fff;border:none;border-radius:var(--radius-lg);'
+        +'padding:12px 16px;font-size:13px;font-weight:600;cursor:pointer;text-align:left">'
+        +'<span style="font-size:20px">&#128176;</span>'
+        +'<div><div>Cash Handover</div>'
+        +'<div style="font-size:10px;font-weight:400;opacity:0.85">EOD settlement</div></div>'
+        +'</button>';
+      var _qaGrid = document.querySelector('#s-dash .quick-actions');
+      if (_qaGrid) _qaGrid.parentNode.insertBefore(_phHOTile, _qaGrid);
+    }
     startPhleboDash();
   } else if (role === 'senior_lab') {
     goTo('s-dash', false); stack=['s-dash'];
@@ -2534,6 +2551,8 @@ function startPhleboDash() {
     var sec = document.getElementById('ph-dues-section');
     var list = document.getElementById('ph-dues-list');
     if (!sec || !list) return;
+    // TODO: re-enable due collection from field dash (temporarily hidden)
+    sec.style.display = 'none'; return;
     if (!dues.length) { sec.style.display = 'none'; return; }
     sec.style.display = 'block';
     list.innerHTML = dues.map(function(o) {
@@ -3395,7 +3414,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.19';
+var APP_VERSION = 'v21.23';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -9565,8 +9584,9 @@ function loadHO() {
       });
     });
 
-    // ── Due collections on older orders — only those collected today ──
-    dueSnap.forEach(function(d){
+    // ── Due collections on older orders — temporarily hidden (TODO: re-enable)
+    // dueSnap.forEach(function(d){
+    if (false) dueSnap.forEach(function(d){
       if (todayIds[d.id]) return; // already counted above
       var o = d.data();
       if (!o.dueCollectedAmt || o.dueCollectedAmt <= 0) return;
@@ -9611,7 +9631,7 @@ function loadHO() {
         payMode: todayInstalments.length > 1 ? 'instalments' : (todayInstalments[0].mode||'cash'),
         dueRow: true, dueAmt: totalToday
       });
-    });
+    }); // end dueSnap (temporarily hidden)
 
     document.getElementById('ho-cash').textContent='Rs.'+cash.toLocaleString('en-IN');
     document.getElementById('ho-upi').textContent='Rs.'+upi.toLocaleString('en-IN');
@@ -9688,7 +9708,7 @@ function loadHO() {
       }
       // Show register section for reception/lab roles if they have cash in hand
       var _regRole = curProfile && curProfile.role || '';
-      var _canRegister = ['reception','lab','senior_lab'].indexOf(_regRole) >= 0;
+      var _canRegister = !!_regRole; // any authenticated staff can deposit into register
       var _regSec = document.getElementById('ho-register-section');
       var _regAmt = document.getElementById('ho-register-amt');
       if (_regSec && _canRegister && netCash > 0) {
@@ -9953,13 +9973,16 @@ function loadHOHistory(dateStr) {
   db.collection('handovers').where('date','==',dateStr).get().then(function(snap) {
     var rows = [];
     snap.forEach(function(d){ rows.push(Object.assign({id:d.id}, d.data())); });
-    // If viewing a past date, filter to current user's records only (phlebo/reception)
-    // Admin/pathologist/manager see all
+    // Everyone sees records where they are the sender or recipient
+    // Admin/pathologist/manager see all records for all staff
     var role = curProfile && curProfile.role;
     var isAdmin = role==='admin'||role==='pathologist'||role==='manager';
-    if (!isAdmin && dateStr !== today) {
+    if (!isAdmin) {
       var myUid = curUser && curUser.uid;
-      rows = rows.filter(function(h){ return h.recordedBy===myUid || (h.toUid ? h.toUid===myUid : h.handoverTo===((curProfile&&curProfile.name)||'')); });
+      rows = rows.filter(function(h){
+        return h.recordedBy===myUid
+          || (h.toUid ? h.toUid===myUid : h.handoverTo===((curProfile&&curProfile.name)||''));
+      });
     }
     rows.sort(function(a,b){
       return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)
@@ -10195,9 +10218,7 @@ function submitHandover() {
 // ── SUBMIT TO CASH REGISTER ─────────────────────────────────────────────
 function submitToRegister() {
   var _regRole = curProfile && curProfile.role || '';
-  if (['reception','lab','senior_lab'].indexOf(_regRole) < 0) {
-    toast('Only reception/lab staff can submit to register','warn'); return;
-  }
+  if (!_regRole) { toast('Not authenticated','warn'); return; }
   var amtEl = document.getElementById('ho-register-amt');
   var amt = parseFloat((amtEl ? amtEl.textContent : '0').replace(/[^\d.]/g,'')) || 0;
   if (amt <= 0) { toast('No cash in hand to deposit','warn'); return; }
@@ -10207,48 +10228,19 @@ function submitToRegister() {
   var today  = todayStr();
   var now    = new Date();
 
-  // Requires supervisor PIN (admin/pathologist/manager) — not the reception staff's own PIN
-  // Fetch all admin/pathologist/manager staff to verify against their stored PINs
+  // Uses staff member's own PIN — same as daily login
   hoPendingAction = {action:'register', hvid:null, amount:amt, recordedByName:myName, notes:notes};
   hoPinBuf = '';
   hoUpdatePinDots();
   document.getElementById('ho-pin-err').textContent = '';
-  document.getElementById('ho-confirm-title').textContent = 'Supervisor PIN Required';
+  document.getElementById('ho-confirm-title').textContent = 'Submit to Cash Register?';
   document.getElementById('ho-confirm-sub').textContent =
-    'Rs.' + amt.toLocaleString('en-IN') + ' → Cash Register. Enter Admin / Pathologist / Manager PIN to authorise.';
-  // Override PIN check to verify against supervisor PINs
-  _hoExecuteOverride = function() {
-    _hoExecuteOverride = null;
-    if (hoPinBuf.length < 4) return;
-    var enteredPin = hoPinBuf;
-    hoPinBuf = ''; hoUpdatePinDots();
-    // Fetch supervisor staff and check PIN against each
-    db.collection('staff').where('active','==',true).get().then(async function(snap) {
-      var authorised = false;
-      var authorisedBy = '';
-      for (var i = 0; i < snap.docs.length; i++) {
-        var s = snap.docs[i].data();
-        if (['admin','pathologist','manager'].indexOf(s.role) < 0) continue;
-        if (!s.pin) continue;
-        var hashed = await hashPin(enteredPin);
-        if (hashed === s.pin) { authorised = true; authorisedBy = s.name || s.role; break; }
-      }
-      if (!authorised) {
-        document.getElementById('ho-pin-err').textContent = 'Incorrect supervisor PIN';
-        hoPinBuf = ''; hoUpdatePinDots();
-        _hoExecuteOverride = arguments.callee; // re-arm for retry
-        return;
-      }
-      hoConfirmCancel();
-      var _pend = hoPendingAction;
-      hoPendingAction = null;
-      _doRegisterDeposit(_pend ? _pend.amount : amt, (_pend ? _pend.notes : notes), authorisedBy);
-    }).catch(function() { toast('Could not verify PIN — check connection','err'); hoConfirmCancel(); });
-  };
+    'Rs.' + amt.toLocaleString('en-IN') + ' will be marked as deposited. Enter your PIN to confirm.';
   document.getElementById('ho-confirm-overlay').style.display = 'flex';
 }
 
-function _doRegisterDeposit(amt, notes, authorisedBy) {
+function _doRegisterDeposit(amt, notes) {
+  var authorisedBy = '';
   var myUid  = curUser && curUser.uid;
   var myName = (curProfile&&curProfile.name) || curUser.email;
   var today  = todayStr();

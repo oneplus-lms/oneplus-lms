@@ -1197,6 +1197,20 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <div class="field"><label>Notes</label><input type="text" id="ho-notes" placeholder="Shift end, remarks..."></div>
       <button class="btn btn-primary" id="ho-submit-btn" onclick="submitHandover()">Initiate Handover →</button>
     </div>
+    <!-- Submit to Cash Register — shown only for reception/lab roles -->
+    <div id="ho-register-section" style="display:none;margin-bottom:16px">
+      <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:var(--radius-lg);padding:14px 16px">
+        <div style="font-size:11px;font-family:var(--mono);color:#166534;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">&#128181; Cash Register</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:13px;color:var(--text2)">Cash in hand to deposit</div>
+          <div style="font-size:18px;font-weight:700;color:#166534" id="ho-register-amt">Rs.0</div>
+        </div>
+        <div class="field" style="margin-bottom:10px"><label>Notes (optional)</label><input type="text" id="ho-register-notes" placeholder="End of shift, counter closing..."></div>
+        <button class="btn btn-primary" style="width:100%;background:#16A34A;border-color:#16A34A" onclick="submitToRegister()">
+          &#10003; Submit to Cash Register
+        </button>
+      </div>
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px">
       <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em">Handover Log</div>
       <input type="date" id="ho-log-date" style="font-size:12px;font-family:var(--mono);padding:4px 8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer" onchange="loadHOHistory(this.value)">
@@ -3381,7 +3395,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.17';
+var APP_VERSION = 'v21.19';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -9672,6 +9686,17 @@ function loadHO() {
         // Amount auto-set to sum of all selected (all pre-checked) minus already out
         hoUpdateAmtFromSelection();
       }
+      // Show register section for reception/lab roles if they have cash in hand
+      var _regRole = curProfile && curProfile.role || '';
+      var _canRegister = ['reception','lab','senior_lab'].indexOf(_regRole) >= 0;
+      var _regSec = document.getElementById('ho-register-section');
+      var _regAmt = document.getElementById('ho-register-amt');
+      if (_regSec && _canRegister && netCash > 0) {
+        _regSec.style.display = 'block';
+        if (_regAmt) _regAmt.textContent = 'Rs.' + netCash.toLocaleString('en-IN');
+      } else if (_regSec) {
+        _regSec.style.display = 'none';
+      }
     }).catch(function(){
       // fallback: just set full cash if handover fetch fails
       document.getElementById('ho-amt').value = cash;
@@ -9905,9 +9930,14 @@ function renderHOList(rows) {
     var status = h.custodyStatus || 'ACCEPTED';
     var badgeClass = status==='PENDING'?'pending':status==='REJECTED'?'rejected':'accepted';
     var badgeLabel = status==='PENDING'?'Awaiting Acceptance':status==='REJECTED'?'Rejected':'Accepted';
-    var refundBadge = h.type==='refund'?'<span style="font-size:9px;font-family:var(--mono);background:#FEE2E2;color:#DC2626;padding:1px 6px;border-radius:10px;margin-left:4px">REFUND</span>':'';
+    var refundBadge = h.type==='refund'
+      ? '<span style="font-size:9px;font-family:var(--mono);background:#FEE2E2;color:#DC2626;padding:1px 6px;border-radius:10px;margin-left:4px">REFUND</span>'
+      : h.type==='register'
+      ? '<span style="font-size:9px;font-family:var(--mono);background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:10px;margin-left:4px">&#128181; REGISTER</span>'
+      : '';
     var acceptedLine = '';
-    if (status==='ACCEPTED' && h.acceptedAt) acceptedLine='<div><div class="ho-card-k">Accepted At</div><div class="ho-card-v">'+esc(h.acceptedAt)+'</div></div>';
+    if (h.type==='register' && h.authorisedBy) acceptedLine='<div><div class="ho-card-k">Authorised By</div><div class="ho-card-v" style="color:#166534;font-weight:600">'+esc(h.authorisedBy)+'</div></div>';
+    else if (status==='ACCEPTED' && h.acceptedAt) acceptedLine='<div><div class="ho-card-k">Accepted At</div><div class="ho-card-v">'+esc(h.acceptedAt)+'</div></div>';
     if (status==='REJECTED' && h.rejectedAt) acceptedLine='<div><div class="ho-card-k">Rejected At</div><div class="ho-card-v">'+esc(h.rejectedAt)+'</div></div>';
     return '<div class="ho-handover-card">'      +'<div class="ho-card-header">'        +'<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">#'+h.id.slice(-6).toUpperCase()+'</span>'        +'<span class="ho-status-badge '+badgeClass+'">'+badgeLabel+'</span>'+refundBadge        +'<span style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(h.time||'')+'</span>'      +'</div>'      +'<div class="ho-card-body">'        +(h.type==='refund'
           ?'<div><div class="ho-card-k">Refund From</div><div class="ho-card-v" style="color:#DC2626">'+esc(h.refundRequestedFromName||h.handoverFrom||'-')+'</div></div>'
@@ -10162,6 +10192,94 @@ function submitHandover() {
   }).catch(function(){ toast('Could not verify balance — check connection','err'); });
 }
 
+// ── SUBMIT TO CASH REGISTER ─────────────────────────────────────────────
+function submitToRegister() {
+  var _regRole = curProfile && curProfile.role || '';
+  if (['reception','lab','senior_lab'].indexOf(_regRole) < 0) {
+    toast('Only reception/lab staff can submit to register','warn'); return;
+  }
+  var amtEl = document.getElementById('ho-register-amt');
+  var amt = parseFloat((amtEl ? amtEl.textContent : '0').replace(/[^\d.]/g,'')) || 0;
+  if (amt <= 0) { toast('No cash in hand to deposit','warn'); return; }
+  var notes = (document.getElementById('ho-register-notes')||{}).value || '';
+  var myUid  = curUser && curUser.uid;
+  var myName = (curProfile&&curProfile.name) || curUser.email;
+  var today  = todayStr();
+  var now    = new Date();
+
+  // Requires supervisor PIN (admin/pathologist/manager) — not the reception staff's own PIN
+  // Fetch all admin/pathologist/manager staff to verify against their stored PINs
+  hoPendingAction = {action:'register', hvid:null, amount:amt, recordedByName:myName, notes:notes};
+  hoPinBuf = '';
+  hoUpdatePinDots();
+  document.getElementById('ho-pin-err').textContent = '';
+  document.getElementById('ho-confirm-title').textContent = 'Supervisor PIN Required';
+  document.getElementById('ho-confirm-sub').textContent =
+    'Rs.' + amt.toLocaleString('en-IN') + ' → Cash Register. Enter Admin / Pathologist / Manager PIN to authorise.';
+  // Override PIN check to verify against supervisor PINs
+  _hoExecuteOverride = function() {
+    _hoExecuteOverride = null;
+    if (hoPinBuf.length < 4) return;
+    var enteredPin = hoPinBuf;
+    hoPinBuf = ''; hoUpdatePinDots();
+    // Fetch supervisor staff and check PIN against each
+    db.collection('staff').where('active','==',true).get().then(async function(snap) {
+      var authorised = false;
+      var authorisedBy = '';
+      for (var i = 0; i < snap.docs.length; i++) {
+        var s = snap.docs[i].data();
+        if (['admin','pathologist','manager'].indexOf(s.role) < 0) continue;
+        if (!s.pin) continue;
+        var hashed = await hashPin(enteredPin);
+        if (hashed === s.pin) { authorised = true; authorisedBy = s.name || s.role; break; }
+      }
+      if (!authorised) {
+        document.getElementById('ho-pin-err').textContent = 'Incorrect supervisor PIN';
+        hoPinBuf = ''; hoUpdatePinDots();
+        _hoExecuteOverride = arguments.callee; // re-arm for retry
+        return;
+      }
+      hoConfirmCancel();
+      var _pend = hoPendingAction;
+      hoPendingAction = null;
+      _doRegisterDeposit(_pend ? _pend.amount : amt, (_pend ? _pend.notes : notes), authorisedBy);
+    }).catch(function() { toast('Could not verify PIN — check connection','err'); hoConfirmCancel(); });
+  };
+  document.getElementById('ho-confirm-overlay').style.display = 'flex';
+}
+
+function _doRegisterDeposit(amt, notes, authorisedBy) {
+  var myUid  = curUser && curUser.uid;
+  var myName = (curProfile&&curProfile.name) || curUser.email;
+  var today  = todayStr();
+  var now    = new Date();
+  var allOrders = window._hoAllOrdersManifest || [];
+
+  db.collection('handovers').add({
+    type:          'register',
+    custodyStatus: 'ACCEPTED',   // terminal — no recipient to confirm
+    handoverTo:    'CASH_REGISTER',
+    toUid:         'CASH_REGISTER',
+    amount:        amt,
+    notes:         notes || 'Cash register deposit',
+    date:          today,
+    time:          now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+    createdAt:     firebase.firestore.FieldValue.serverTimestamp(),
+    recordedBy:    myUid,
+    recordedByName:myName,
+    authorisedBy:  authorisedBy || '',   // supervisor who entered PIN
+    allOrders:     allOrders,
+    acceptedAt:    now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})
+  }).then(function() {
+    toast('Rs.' + amt.toLocaleString('en-IN') + ' deposited into cash register ✓', 'ok');
+    logActivity('register_deposit', 'Deposited Rs.' + amt.toLocaleString('en-IN') + ' to cash register — authorised by ' + (authorisedBy||'supervisor'), {amt: amt, authorisedBy: authorisedBy});
+    document.getElementById('ho-register-section').style.display = 'none';
+    loadStats();
+    loadHO();
+  }).catch(function() { toast('Failed — check connection', 'err'); });
+}
+// ─────────────────────────────────────────────────────────────────────────
+
 // PIN-authenticated handover confirmation
 var hoPendingAction = null;
 var hoPinBuf = '';
@@ -10221,7 +10339,15 @@ async function hoConfirmExecute() {
   if (!hoPendingAction) return;
   var action = hoPendingAction.action;
   var hvid = hoPendingAction.hvid;
+  var _pendingNotes = hoPendingAction.notes || '';
+  var _pendingAmt = hoPendingAction.amount || 0;
   hoConfirmCancel();
+
+  // Register deposit — terminal action, no Firestore handover doc to update
+  if (action === 'register') {
+    _doRegisterDeposit(_pendingAmt, _pendingNotes);
+    return;
+  }
   var now = new Date();
   var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
   var byName = (curProfile&&curProfile.name)||curUser.email;

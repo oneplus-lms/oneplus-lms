@@ -3414,7 +3414,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.23';
+var APP_VERSION = 'v21.24';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -9749,6 +9749,7 @@ function loadHO() {
       snap.forEach(function(d) {
         var h = Object.assign({id:d.id}, d.data());
         if (h.date === today) return; // today's handled by real-time listener above
+        if (h.custodyStatus === 'DISMISSED') return; // user dismissed — don't resurface
         // Show to recipient (normal) or requester (refund)
         var isForMe = h.type === 'refund'
           ? (h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0)
@@ -9776,12 +9777,18 @@ function renderHOOverdue(overdue) {
       ? (h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0)
       : (h.toUid ? h.toUid === (curUser&&curUser.uid) : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0));
     var isMine = h.recordedBy === (curUser&&curUser.uid);
+    var _dismissBtn = '<button onclick="hoDismissOverdue(\x27'+h.id+'\x27)"'
+      + ' style="margin-top:6px;width:100%;padding:7px;background:none;border:1px solid #D97706;'
+      + 'border-radius:var(--radius);color:#92400E;font-size:11px;font-family:var(--mono);cursor:pointer">'
+      + '&#10005; Dismiss</button>';
     var actionBtns = isForMe
       ? '<div class="ho-pending-actions">'
         + '<button class="btn-accept" onclick="hoConfirm(&quot;accept&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10003; Accept</button>'
         + '<button class="btn-reject" onclick="hoConfirm(&quot;reject&quot;,&quot;'+h.id+'&quot;,&quot;'+esc(h.recordedByName||'')+'&quot;,'+(h.amount||0)+')">&#10007; Reject</button>'
         + '</div>'
-      : '<div style="font-size:11px;color:var(--text3);margin-top:8px">Awaiting acceptance by '+esc(h.handoverTo||'recipient')+'</div>';
+        + _dismissBtn
+      : '<div style="font-size:11px;color:var(--text3);margin-top:8px">Awaiting acceptance by '+esc(h.handoverTo||'recipient')+'</div>'
+        + (isMine ? _dismissBtn : '');
     return '<div class="ho-pending-card" style="border-color:#D97706;background:#FFFBEB">'
       + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
       + '<span style="font-size:10px;font-weight:700;background:#FEF3C7;color:#92400E;border:1px solid #D97706;border-radius:4px;padding:2px 7px;font-family:var(--mono);text-transform:uppercase">&#9888; Overdue · '+esc(h.date)+'</span>'
@@ -10214,6 +10221,22 @@ function submitHandover() {
 
   }).catch(function(){ toast('Could not verify balance — check connection','err'); });
 }
+
+// ── DISMISS OVERDUE HANDOVER ────────────────────────────────────────────
+function hoDismissOverdue(hvid) {
+  if (!confirm('Dismiss this overdue handover? This marks it as resolved without cash transfer. Use only for stale or already-settled entries.')) return;
+  db.collection('handovers').doc(hvid).update({
+    custodyStatus: 'DISMISSED',
+    dismissedBy: curUser && curUser.uid,
+    dismissedByName: (curProfile&&curProfile.name)||'',
+    dismissedAt: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+    dismissedTimestamp: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function() {
+    toast('Handover dismissed','ok');
+    loadHO();
+  }).catch(function() { toast('Failed — check connection','err'); });
+}
+// ─────────────────────────────────────────────────────────────────────────
 
 // ── SUBMIT TO CASH REGISTER ─────────────────────────────────────────────
 function submitToRegister() {

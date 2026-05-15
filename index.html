@@ -2781,6 +2781,7 @@ function setQpMode(m) {
 }
 
 async function submitQuickPay() {
+  if (_impersonating) { toast('Exit “View As” before collecting dues', 'warn'); return; }
   var amt = parseFloat(document.getElementById('qp-amt').value) || 0;
   var errEl = document.getElementById('qp-err');
   errEl.textContent = '';
@@ -2807,7 +2808,7 @@ async function submitQuickPay() {
       paidAmount: newPaid, dueAmount: newDue,
       status:     newDue <= 0 ? 'paid' : 'pending',
       hasDue:     newDue > 0,
-      payMode:    newDue <= 0 ? _qpMode : o.payMode || 'pending',
+      payMode:    newDue <= 0 ? _qpMode : o.payMode || 'credit',
       dueCollectedAt:     firebase.firestore.FieldValue.serverTimestamp(),
       dueCollectedBy:     curUser && curUser.uid,
       dueCollectedByName: byName,
@@ -3144,12 +3145,39 @@ fieldConfirm = function() {
     update.dueAmount     = _newDue;
     update.hasDue        = _newDue > 0;
     update.status        = _newDue <= 0 ? 'paid' : 'pending';
-    update.payMode       = _fieldPayMode;
+    // Preserve original payMode if order had partial payment at registration;
+    // only set if it was empty/pending. Use instalments to track mixed-mode payments.
+    if (!_fo || !_fo.payMode || _fo.payMode === 'pending' || (_oldPaid === 0)) {
+      update.payMode = _fieldPayMode;
+    } else if (_fo.payMode !== _fieldPayMode) {
+      // Mixed payment — promote to split mode and merge
+      update.payMode = 'split';
+      var _existingSplit = (_fo.splitPayments && typeof _fo.splitPayments === 'object') ? Object.assign({}, _fo.splitPayments) : {};
+      if (!_existingSplit.cash && !_existingSplit.upi && !_existingSplit.card) {
+        // Seed from existing scalar paid amount under original mode
+        _existingSplit[_fo.payMode] = _oldPaid;
+      }
+      _existingSplit[_fieldPayMode] = (_existingSplit[_fieldPayMode] || 0) + _amt;
+      update.splitPayments = _existingSplit;
+    } else {
+      // Same mode (e.g. cash + cash) — keep as-is
+    }
     update.collectedByPhlebo = byName;
-    update.dueCollectedAt    = firebase.firestore.FieldValue.serverTimestamp();
+    // Audit trail: which user collected (UID required for handover queries)
+    update.dueCollectedBy     = curUser && curUser.uid;
     update.dueCollectedByName = byName;
-    update.dueCollectedMode  = _fieldPayMode;
-    update.dueCollectedAmt   = _amt;
+    update.dueCollectedMode   = _fieldPayMode;
+    update.dueCollectedAmt    = _amt;
+    update.dueCollectedAt     = firebase.firestore.FieldValue.serverTimestamp();
+    // Append to duePayments[] instalment array — required for accurate cash audit
+    var _existingPayments = Array.isArray(_fo && _fo.duePayments) ? _fo.duePayments.slice() : [];
+    _existingPayments.push({
+      amt: _amt, mode: _fieldPayMode,
+      byUid: curUser && curUser.uid, byName: byName,
+      at: new Date().toISOString(),
+      source: 'field'
+    });
+    update.duePayments = _existingPayments;
     _fieldPayMode = null;
   }
   closeFieldModal();
@@ -3453,7 +3481,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.33';
+var APP_VERSION = 'v21.36';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3709,6 +3737,10 @@ function showScreen(id) {
   if (id === 's-phlebo') { startPhleboDash(); }
 }
 function goTo(id, push) {
+  // Block order/estimate creation during impersonation — writes would use admin UID not staff UID
+  if (_impersonating && (id === 's-order' || id === 's-estimate')) {
+    toast('Exit “View As” before creating orders', 'warn'); return;
+  }
   // Prevent duplicate consecutive stack entries
   if (push !== false && stack[stack.length-1] === id) {
     showScreen(id); return;
@@ -4213,20 +4245,40 @@ function loadStats() {
   var myUid = viewUid();
   var role = curProfile && curProfile.role || '';
   var isPhlebo = role === 'phlebotomist';
-  // Phlebotomist sees only their own orders and revenue
-  var ordersQ = isPhlebo
-    ? db.collection('orders').where('date','==',today).where('createdBy','==',myUid)
-    : db.collection('orders').where('date','==',today);
-  ordersQ.get().then(function(snap){
-    var rev=0, pend=0, count=0;
-    snap.forEach(function(d){ var o=d.data();
-      if (o.status==='draft') return; // exclude drafts from stats
-      count++; rev+=(o.paidAmount||0); if(o.payMode==='credit') pend++;
-    });
+
+  function _renderStats(rev, pend, count) {
     document.getElementById('st-orders').textContent=count;
     document.getElementById('st-rev').textContent='Rs.'+rev.toLocaleString('en-IN');
     document.getElementById('st-pend').textContent=pend;
-  }).catch(function(){});
+  }
+
+  if (isPhlebo) {
+    Promise.all([
+      db.collection('orders').where('date','==',today).where('createdBy','==',myUid).get(),
+      db.collection('orders').where('date','==',today).where('fieldAssignedToUid','==',myUid).get()
+    ]).then(function(results) {
+      var seen={}, rev=0, pend=0, count=0;
+      function _accum(snap) {
+        snap.forEach(function(d){
+          if (seen[d.id]) return; seen[d.id]=true;
+          var o=d.data();
+          if (o.status==='draft') return;
+          count++; rev+=(o.paidAmount||0); if(o.payMode==='credit') pend++;
+        });
+      }
+      _accum(results[0]); _accum(results[1]);
+      _renderStats(rev, pend, count);
+    }).catch(function(){});
+  } else {
+    db.collection('orders').where('date','==',today).get().then(function(snap){
+      var rev=0, pend=0, count=0;
+      snap.forEach(function(d){ var o=d.data();
+        if (o.status==='draft') return;
+        count++; rev+=(o.paidAmount||0); if(o.payMode==='credit') pend++;
+      });
+      _renderStats(rev, pend, count);
+    }).catch(function(){});
+  }
   db.collection('handovers').where('date','==',todayStr()).get().then(function(snap){
     var accepted=0;
     snap.forEach(function(d){ if((d.data().custodyStatus||'ACCEPTED')==='ACCEPTED') accepted++; });
@@ -4236,14 +4288,10 @@ function loadStats() {
 function loadRecent() {
   var myUid = viewUid();
   var role = curProfile && curProfile.role || '';
-  var recentQ = role === 'phlebotomist'
-    ? db.collection('orders').where('date','==',todayStr()).where('createdBy','==',myUid)
-    : db.collection('orders').where('date','==',todayStr());
-  recentQ.get().then(function(snap){
-    var el=document.getElementById('dash-recent-list');
-    if (snap.empty) { el.innerHTML='<div class="empty">No orders yet today</div>'; return; }
-    var rows=[];
-    snap.forEach(function(d){ var o=d.data(); if(o.status==='draft') return; rows.push(Object.assign({id:d.id},o)); });
+  var el=document.getElementById('dash-recent-list');
+
+  function _renderRecent(rows) {
+    if (!rows.length) { el.innerHTML='<div class="empty">No orders yet today</div>'; return; }
     rows.sort(function(a,b){ return (b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0)-(a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0); });
     el.innerHTML = rows.slice(0,5).map(function(o){
       return '<div class="row" style="cursor:pointer" onclick="openOrderDetail(\''+o.id+'\')">'
@@ -4252,6 +4300,31 @@ function loadRecent() {
         +'<div style="font-size:11px;font-family:var(--mono);color:var(--accent);flex-shrink:0;margin-left:8px">TRF ›</div>'
         +'</div>';
     }).join('');
+  }
+
+  if (role === 'phlebotomist') {
+    Promise.all([
+      db.collection('orders').where('date','==',todayStr()).where('createdBy','==',myUid).get(),
+      db.collection('orders').where('date','==',todayStr()).where('fieldAssignedToUid','==',myUid).get()
+    ]).then(function(results) {
+      var seen={}, rows=[];
+      function _accum(snap) {
+        snap.forEach(function(d){
+          if (seen[d.id]) return; seen[d.id]=true;
+          var o=d.data(); if(o.status==='draft') return;
+          rows.push(Object.assign({id:d.id},o));
+        });
+      }
+      _accum(results[0]); _accum(results[1]);
+      _renderRecent(rows);
+    }).catch(function(){});
+    return;
+  }
+
+  db.collection('orders').where('date','==',todayStr()).get().then(function(snap){
+    var rows=[];
+    snap.forEach(function(d){ var o=d.data(); if(o.status==='draft') return; rows.push(Object.assign({id:d.id},o)); });
+    _renderRecent(rows);
   }).catch(function(){});
 }
 
@@ -5337,10 +5410,32 @@ function loadDues() {
   var canSeeAll = role==='admin'||role==='manager'||role==='pathologist'||role==='senior_lab';
   var d = new Date(); d.setDate(d.getDate()-90);
   var fromDate = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  var q = canSeeAll
-    ? db.collection('orders').where('hasDue','==',true).where('date','>=',fromDate)
-    : db.collection('orders').where('hasDue','==',true).where('date','>=',fromDate).where('createdBy','==',myUid);
-  q.get().then(function(snap) {
+
+  function _processDuesSnaps(snaps) {
+    var seen={}, docs=[];
+    snaps.forEach(function(snap) {
+      snap.forEach(function(d){
+        if (seen[d.id]) return; seen[d.id]=true;
+        docs.push(d);
+      });
+    });
+    return { empty: docs.length===0, forEach: function(fn) { docs.forEach(fn); } };
+  }
+
+  var queryP;
+  if (canSeeAll) {
+    queryP = db.collection('orders').where('hasDue','==',true).where('date','>=',fromDate).get()
+      .then(function(s){ return _processDuesSnaps([s]); });
+  } else if (role === 'phlebotomist') {
+    queryP = Promise.all([
+      db.collection('orders').where('hasDue','==',true).where('date','>=',fromDate).where('createdBy','==',myUid).get(),
+      db.collection('orders').where('hasDue','==',true).where('date','>=',fromDate).where('fieldAssignedToUid','==',myUid).get()
+    ]).then(function(results){ return _processDuesSnaps(results); });
+  } else {
+    queryP = db.collection('orders').where('hasDue','==',true).where('date','>=',fromDate).where('createdBy','==',myUid).get()
+      .then(function(s){ return _processDuesSnaps([s]); });
+  }
+  queryP.then(function(snap) {
     var card = document.getElementById('dash-dues-card');
     var countEl = document.getElementById('dash-dues-count');
     var listEl = document.getElementById('dash-dues');
@@ -6919,6 +7014,7 @@ function _setOrderBtnState(loading) {
 }
 
 function submitOrder() {
+  if (_impersonating) { toast('Exit “View As” before submitting orders', 'warn'); return; }
   if (_orderSubmitting) { toast('Saving... please wait', 'warn'); return; }
   _orderSubmitting = true;
   _setOrderBtnState(true);
@@ -7488,22 +7584,53 @@ function confirmDeleteOrder(orderId) {
 function deleteOrder(orderId, reason) {
   var o = curDetailOrder;
   var btn = document.querySelector('[onclick="confirmDeleteOrder(\'' + orderId + '\')"]');
-  if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
 
-  // Log before delete — once deleted we can't read the doc
-  var summary = (o ? (o.patientName||'Unknown') + ' · ' + (o.tests||[]).slice(0,3).map(function(t){return t.shortCode||t.name;}).join(', ') + ' · Rs.'+(o.totalAmount||0) : orderId);
-  logActivity('order_delete', 'Deleted order: ' + summary + ' | Reason: ' + reason);
-
-  db.collection('orders').doc(orderId).delete()
-    .then(function() {
-      toast('Order deleted ✓', 'ok');
-      curDetailOrder = null;
-      goBack();
-    })
-    .catch(function(e) {
-      toast('Delete failed: ' + e.message, 'err');
-      if (btn) { btn.disabled = false; btn.textContent = '🗑 Delete Order'; }
+  // SAFETY (#18, #19): refuse delete if order is in a handover; warn if paid
+  db.collection('handovers').get().then(function(hoSnap) {
+    var blockingHandover = null;
+    hoSnap.forEach(function(h) {
+      if (blockingHandover) return;
+      var hData = h.data();
+      if (hData.custodyStatus !== 'ACCEPTED' && hData.custodyStatus !== 'PENDING') return;
+      var orders = (hData.orders || []).concat(hData.allOrders || []);
+      var hasIt = orders.some(function(op){ return op && op.orderId === orderId; });
+      if (hasIt) blockingHandover = Object.assign({id:h.id}, hData);
     });
+
+    if (blockingHandover) {
+      var status = blockingHandover.custodyStatus;
+      toast('Cannot delete \u2014 order is in ' + status + ' handover #' + blockingHandover.id.slice(-6).toUpperCase() + ' to ' + (blockingHandover.handoverTo||'?'), 'err');
+      if (btn) { btn.disabled = false; btn.textContent = '\u{1F5D1} Delete Order'; }
+      return;
+    }
+
+    if (o && (o.paidAmount||0) > 0.5) {
+      var paidAmt = (o.paidAmount||0).toLocaleString('en-IN');
+      if (!confirm('\u26a0 This order has Rs.' + paidAmt + ' already PAID.\n\nDeleting will remove the cash audit trail. Patient may need a refund.\n\nProceed?')) {
+        if (btn) { btn.disabled = false; btn.textContent = '\u{1F5D1} Delete Order'; }
+        return;
+      }
+    }
+
+    var summary = (o ? (o.patientName||'Unknown') + ' \u00b7 ' + (o.tests||[]).slice(0,3).map(function(t){return t.shortCode||t.name;}).join(', ') + ' \u00b7 Rs.'+(o.totalAmount||0) + (o.paidAmount>0 ? ' [PAID Rs.'+o.paidAmount+']' : '') : orderId);
+    logActivity('order_delete', 'Deleted order: ' + summary + ' | Reason: ' + reason);
+
+    if (btn) btn.textContent = 'Deleting...';
+    db.collection('orders').doc(orderId).delete()
+      .then(function() {
+        toast('Order deleted \u2713', 'ok');
+        curDetailOrder = null;
+        goBack();
+      })
+      .catch(function(e) {
+        toast('Delete failed: ' + e.message, 'err');
+        if (btn) { btn.disabled = false; btn.textContent = '\u{1F5D1} Delete Order'; }
+      });
+  }).catch(function() {
+    toast('Could not verify handover state \u2014 try again', 'err');
+    if (btn) { btn.disabled = false; btn.textContent = '\u{1F5D1} Delete Order'; }
+  });
 }
 function updateLabStatus(orderId, status) {
   var _lsRole = curProfile && curProfile.role || '';
@@ -8098,9 +8225,32 @@ function submitEditOrder() {
       paid = enteredPaid;
       var modes = [];
       if (pCash>0) modes.push('cash'); if (pUpi>0) modes.push('upi'); if (pCard>0) modes.push('card');
-      finalPayMode = modes.length===1 ? modes[0] : (modes.length>1 ? 'split' : 'cash');
+      finalPayMode = modes.length===1 ? modes[0] : (modes.length>1 ? 'split' : (enteredPaid > 0 ? 'cash' : 'pending'));
       splitPayments = modes.length>1 ? {cash:pCash, upi:pUpi, card:pCard} : null;
     }
+  }
+  // ── Cash audit trail on edit (#12, #13) ──
+  // If paid amount INCREASED via edit (extra cash collected), append a duePayments[] entry
+  var _editPaidDelta = (paid || 0) - (existingPaid || 0);
+  var _editInstalment = null;
+  var _editDueFields = {};
+  if (_editPaidDelta > 0.5 && !editCreditMode) {
+    var _instMode = (finalPayMode === 'split' || !finalPayMode) ? 'cash' : finalPayMode;
+    _editInstalment = {
+      amt: _editPaidDelta,
+      mode: _instMode,
+      byUid: curUser && curUser.uid,
+      byName: (curProfile && curProfile.name) || curUser.email,
+      at: new Date().toISOString(),
+      source: 'edit'
+    };
+    _editDueFields = {
+      dueCollectedBy:     curUser && curUser.uid,
+      dueCollectedByName: (curProfile && curProfile.name) || curUser.email,
+      dueCollectedMode:   _instMode,
+      dueCollectedAmt:    _editPaidDelta,
+      dueCollectedAt:     firebase.firestore.FieldValue.serverTimestamp()
+    };
   }
   var total = editSelTests.reduce(function(s, t) { return s + (t.rate || 0); }, 0);
   var netAmt = Math.max(0, total + cc - disc);  // cc = collection charge, already read above
@@ -8153,6 +8303,10 @@ function submitEditOrder() {
     lastEditedBy: amendment.byName, lastEditedAt: amendment.at,
     amendments: firebase.firestore.FieldValue.arrayUnion(amendment)
   };
+  if (_editInstalment) {
+    updatedData.duePayments = firebase.firestore.FieldValue.arrayUnion(_editInstalment);
+    Object.assign(updatedData, _editDueFields);
+  }
   // Local copy without the sentinel — safe to assign to curDetailOrder
   var localUpdate = Object.assign({}, updatedData, { amendments: null });
 
@@ -8850,6 +9004,7 @@ function cbSendVerifyWA() {
 var _cbSubmitting = false;
 
 function completeBookingSubmit(orderId) {
+  if (_impersonating) { toast('Exit “View As” before completing field bookings', 'warn'); return; }
   if (_cbSubmitting) { toast('Saving... please wait', 'warn'); return; }
   _cbSubmitting = true;
   var saveBtn = document.getElementById('edit-save-btn');
@@ -9583,18 +9738,22 @@ function loadHO() {
   var _hoMyUid = viewUid();
   var _hoRole = curProfile && curProfile.role || '';
   var _hoIsPhlebo = _hoRole === 'phlebotomist';
-  // Always query own orders for the handover form — admin cannot initiate handover for others' cash
-  var _hoQ = db.collection('orders').where('date','==',today).where('createdBy','==',_hoMyUid);
+  // Query own orders + field orders assigned to me (field orders have createdBy=admin, not phlebo)
+  var _hoQ      = db.collection('orders').where('date','==',today).where('createdBy','==',_hoMyUid);
+  var _hoFieldQ = db.collection('orders').where('date','==',today).where('fieldAssignedToUid','==',_hoMyUid);
   // Due collections: always own only
   var _dueQ = db.collection('orders').where('dueCollectedBy','==',_hoMyUid);
 
-  Promise.all([_hoQ.get(), _dueQ.get()]).then(function(results) {
-    var todaySnap = results[0];
-    var dueSnap   = results[1];
+  Promise.all([_hoQ.get(), _hoFieldQ.get(), _dueQ.get()]).then(function(results) {
+    var _ownSnap   = results[0];
+    var _fieldSnap = results[1];
+    var dueSnap    = results[2];
 
-    // Build a set of today's order IDs to avoid double-counting dues collected on today's orders
+    // Merge own + field orders, deduplicate by doc ID
     var todayIds = {};
-    todaySnap.forEach(function(d){ todayIds[d.id] = true; });
+    var mergedDocs = [];
+    _ownSnap.forEach(function(d){ if (!todayIds[d.id]) { todayIds[d.id]=true; mergedDocs.push(d); } });
+    _fieldSnap.forEach(function(d){ if (!todayIds[d.id]) { todayIds[d.id]=true; mergedDocs.push(d); } });
 
     var cash=0, upi=0, credit=0;
     var previewOrders = [];
@@ -9815,7 +9974,7 @@ function loadHO() {
         if (h.custodyStatus === 'DISMISSED') return; // user dismissed — don't resurface
         // Show to recipient (normal) or requester (refund)
         var isForMe = h.type === 'refund'
-          ? (h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0)
+          ? (h.refundRequestedFromUid ? h.refundRequestedFromUid === _hoMyUid : (h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0))
           : (h.toUid ? h.toUid === _hoMyUid : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0));
         // Also show initiator their own stuck pending
         var isMine = h.recordedBy === _hoMyUid;
@@ -9837,7 +9996,7 @@ function renderHOOverdue(overdue) {
 
   var html = overdue.map(function(h) {
     var isForMe = h.type === 'refund'
-      ? (h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0)
+      ? (h.refundRequestedFromUid ? h.refundRequestedFromUid === _hoMyUid : (h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0))
       : (h.toUid ? h.toUid === (curUser&&curUser.uid) : (h.handoverTo && h.handoverTo.toLowerCase().indexOf(myFirst) >= 0));
     var isMine = h.recordedBy === (curUser&&curUser.uid);
     var _dismissBtn = '<button onclick="hoDismissOverdue(\x27'+h.id+'\x27)"'
@@ -9994,7 +10153,8 @@ function renderHOPending(rows) {
   var pending = rows.filter(function(h){
     if (h.custodyStatus !== 'PENDING') return false;
     if (h.type === 'refund') {
-      // Refund pending: show to the person being asked to return cash
+      // Refund pending: show to the person being asked to return cash (refunder)
+      if (h.refundRequestedFromUid) return h.refundRequestedFromUid === myUid;
       return h.refundRequestedFromName && h.refundRequestedFromName.toLowerCase().indexOf(myFirst) >= 0;
     }
     // Normal handover: prefer toUid match; name fallback only for legacy records without toUid
@@ -10090,9 +10250,10 @@ function submitHandover() {
   if (toUID && toUID === curUser.uid) { toast('Cannot hand over to yourself','warn'); return; }
   if (!toUID && toName && toName === myName) { toast('Cannot hand over to yourself','warn'); return; }
 
+  // BLOCK during impersonation — handover writes must reflect real actor
+  if (_impersonating) { toast('Exit “View As” before submitting a handover', 'warn'); return; }
   var today = todayStr();
-  var myUid = viewUid();            // read queries: whose cash to calculate
-  var _writeUid = curUser.uid;      // writes: always the real logged-in admin
+  var myUid = curUser.uid;          // no impersonation: read=write=curUser.uid
   var myName = (curProfile&&curProfile.name)||curUser.email;
 
   // REFUND MODE — request cash back from another staff member
@@ -10111,12 +10272,14 @@ function submitHandover() {
       var now = new Date();
       db.collection('handovers').add({
         handoverTo: myName,   // refund goes TO the initiator
+        toUid: myUid,         // initiator UID (the receiver of the refund)
         handoverFrom: toName, // refund comes FROM this person
         amount: amt, notes: notes ? notes : 'Refund', date: today,
         time: now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         recordedBy: myUid, recordedByName: myName,
         refundRequestedFrom: to, refundRequestedFromName: toName,
+        refundRequestedFromUid: toUID || '',  // #16: precise UID for matching
         custodyStatus: 'PENDING',
         type: 'refund'
       }).then(function(){
@@ -10214,7 +10377,22 @@ function submitHandover() {
     var hasPendingOut = false;
     hoSnap.forEach(function(d) {
       var h = d.data();
-      if (h.type === 'refund') return;
+      if (h.type === 'refund') {
+        // Refund: cash flows FROM refunder TO initiator (h.recordedBy)
+        if (h.custodyStatus !== 'ACCEPTED') return;
+        var iAmRefunder;
+        if (h.refundRequestedFromUid) {
+          iAmRefunder = h.refundRequestedFromUid === myUid;
+        } else {
+          // legacy fallback: name match
+          var refunderNameLower = (h.refundRequestedFromName||'').toLowerCase();
+          iAmRefunder = refunderNameLower && myName && refunderNameLower === myName.toLowerCase();
+        }
+        if (iAmRefunder) alreadyHandedOver += (h.amount||0);
+        else if (h.recordedBy === myUid) incomingAccepted += (h.amount||0);
+        return;
+      }
+      // Normal handover
       // Cash I already handed out
       if (h.recordedBy === myUid && h.custodyStatus === 'ACCEPTED') alreadyHandedOver += (h.amount||0);
       // Pending I initiated — block duplicate (same concept, any recipient)
@@ -10255,18 +10433,19 @@ function submitHandover() {
         });
       });
     } else {
-      // Fallback: include all cash/split orders from today
+      // Fallback: include all cash/split orders from today (own + field assigned)
       orderSnap.forEach(function(d) {
         var o = d.data();
-        if (o.createdBy === myUid && (o.payMode === 'cash' || o.payMode === 'split')) {
-          var cashAmt = o.payMode === 'split' && o.splitPayments ? (o.splitPayments.cash||0) : (o.paidAmount||0);
-          if (cashAmt > 0) {
-            myOrders.push({
-              patientName: o.patientName||'', age: o.age||'', sex: o.sex||'',
-              tests: (o.tests||[]).map(function(t){ return t.name; }).join(', '),
-              cashAmt: cashAmt, orderId: d.id.slice(-6).toUpperCase()
-            });
-          }
+        var isMine = (o.createdBy === myUid) || (o.fieldAssignedToUid === myUid);
+        if (!isMine) return;
+        if (o.payMode !== 'cash' && o.payMode !== 'split') return;
+        var cashAmt = o.payMode === 'split' && o.splitPayments ? (o.splitPayments.cash||0) : (o.paidAmount||0);
+        if (cashAmt > 0) {
+          myOrders.push({
+            patientName: o.patientName||'', age: o.age||'', sex: o.sex||'',
+            tests: (o.tests||[]).map(function(t){ return t.name; }).join(', '),
+            cashAmt: cashAmt, orderId: d.id.slice(-6).toUpperCase()
+          });
         }
       });
     }
@@ -10302,6 +10481,12 @@ function submitHandover() {
 
 // ── DISMISS OVERDUE HANDOVER ────────────────────────────────────────────
 function hoDismissOverdue(hvid) {
+  // #22: restrict dismiss to admin/manager/pathologist only
+  var _dismRole = curProfile && curProfile.role || '';
+  if (_dismRole !== 'admin' && _dismRole !== 'manager' && _dismRole !== 'pathologist') {
+    toast('Only admin/manager/pathologist can dismiss handovers', 'warn'); return;
+  }
+  if (_impersonating) { toast('Exit View As before dismissing handovers', 'warn'); return; }
   if (!confirm('Dismiss this overdue handover? This marks it as resolved without cash transfer. Use only for stale or already-settled entries.')) return;
   db.collection('handovers').doc(hvid).update({
     custodyStatus: 'DISMISSED',
@@ -10318,6 +10503,7 @@ function hoDismissOverdue(hvid) {
 
 // ── SUBMIT TO CASH REGISTER ─────────────────────────────────────────────
 function submitToRegister() {
+  if (_impersonating) { toast('Exit “View As” before depositing to register', 'warn'); return; }
   var _regRole = curProfile && curProfile.role || '';
   if (!_regRole) { toast('Not authenticated','warn'); return; }
   var amtEl = document.getElementById('ho-register-amt');
@@ -10378,6 +10564,7 @@ var hoPendingAction = null;
 var hoPinBuf = '';
 
 function hoConfirm(action, hvid, fromName, amount) {
+  if (_impersonating) { toast('Exit “View As” before accepting/rejecting handovers', 'warn'); return; }
   hoPendingAction = {action:action, hvid:hvid, amount:amount, recordedByName:fromName};
   hoPinBuf = '';
   hoUpdatePinDots();
@@ -10456,6 +10643,26 @@ async function hoConfirmExecute() {
       acceptedByName: byName, acceptedAt: timeStr,
       acceptedTimestamp: firebase.firestore.FieldValue.serverTimestamp()
     };
+    // #20: also stamp each included order with handover reference (best-effort, fire-and-forget)
+    // We only stamp normal handovers (not refund/register) since those have different semantics
+    setTimeout(function() {
+      db.collection('handovers').doc(hvid).get().then(function(hDoc) {
+        if (!hDoc.exists) return;
+        var hData = hDoc.data();
+        if (hData.type === 'refund') return;
+        var stampOrders = (hData.orders || []).concat(hData.allOrders || []);
+        var seenOrderIds = {};
+        stampOrders.forEach(function(op) {
+          if (!op || !op.orderId || seenOrderIds[op.orderId]) return;
+          seenOrderIds[op.orderId] = true;
+          db.collection('orders').doc(op.orderId).update({
+            handoverIds: firebase.firestore.FieldValue.arrayUnion(hvid),
+            lastHandoverAt: firebase.firestore.FieldValue.serverTimestamp(),
+            lastHandoverTo: hData.handoverTo || ''
+          }).catch(function(){ /* best-effort */ });
+        });
+      }).catch(function(){});
+    }, 100);
   } else {
     updateData = {
       custodyStatus: 'REJECTED', rejectedBy: curUser.uid,
@@ -10478,7 +10685,15 @@ async function hoConfirmExecute() {
       });
       loadStats();
     }
-    else { toast('Handover rejected','warn'); logActivity('handover_rej', 'Rejected handover from '+_pendingFrom); }
+    else {
+      toast('Handover rejected','warn');
+      // #21: richer reject log so sender can see it on their activity feed
+      logActivity('handover_rej', 'REJECTED handover Rs.'+_pendingAmt.toLocaleString('en-IN')+' from '+_pendingFrom+' — cash remains with sender', {
+        handoverFrom: _pendingFrom,
+        handoverAmt: _pendingAmt,
+        handoverOrders: _pendingOrders.map(function(o){ return {name: o.patientName, amt: o.cashAmt, id: o.orderId}; })
+      });
+    }
   }).catch(function(err){
     if (err.message === 'already_actioned') toast('Already accepted or rejected by another session','warn');
     else if (err.message === 'not_found') toast('Handover record not found','err');
@@ -10782,15 +10997,40 @@ function showPhlebEOD() {
     var walkIn      = totalOrders - fieldOrders;
     var cashCollected=0, upiCollected=0, totalCollected=0;
 
+    var today = todayStr();
     orders.forEach(function(o){
       if (o.status==='draft') return;
-      var paid = o.paidAmount||0;
-      totalCollected += paid;
-      if (o.payMode==='cash') cashCollected += paid;
-      else if (o.payMode==='upi'||o.payMode==='card') upiCollected += paid;
-      else if (o.payMode==='split'&&o.splitPayments) {
-        cashCollected += (o.splitPayments.cash||0);
-        upiCollected  += (o.splitPayments.upi||0)+(o.splitPayments.card||0);
+
+      // STEP 1: today's due-payment instalments by me (any-date orders)
+      if (Array.isArray(o.duePayments)) {
+        o.duePayments.forEach(function(p) {
+          if (!p.at) return;
+          if (p.byUid !== myUid) return;
+          if (p.at.substring(0,10) !== today) return;
+          var pAmt = p.amt || 0;
+          totalCollected += pAmt;
+          if (p.mode === 'cash') cashCollected += pAmt;
+          else if (p.mode === 'upi' || p.mode === 'card') upiCollected += pAmt;
+        });
+      }
+
+      // STEP 2: initial payment (only for orders created today). Subtract instalments to avoid double count
+      if (o.date === today) {
+        var paid = o.paidAmount||0;
+        var sumInstalments = (o.duePayments||[]).reduce(function(s,p){ return s+(p.amt||0); },0);
+        var initialPaid = Math.max(0, paid - sumInstalments);
+        if (initialPaid > 0) {
+          totalCollected += initialPaid;
+          if (o.payMode==='cash') cashCollected += initialPaid;
+          else if (o.payMode==='upi'||o.payMode==='card') upiCollected += initialPaid;
+          else if (o.payMode==='split'&&o.splitPayments) {
+            var splitTotal = (o.splitPayments.cash||0)+(o.splitPayments.upi||0)+(o.splitPayments.card||0);
+            if (splitTotal > 0) {
+              cashCollected += initialPaid * (o.splitPayments.cash||0) / splitTotal;
+              upiCollected  += initialPaid * ((o.splitPayments.upi||0)+(o.splitPayments.card||0)) / splitTotal;
+            }
+          }
+        }
       }
     });
 

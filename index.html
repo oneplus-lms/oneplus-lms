@@ -3453,7 +3453,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.32';
+var APP_VERSION = 'v21.33';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3585,12 +3585,17 @@ if ('serviceWorker' in navigator) {
   // When SW activates after skipWaiting — reload to get fresh app
   // Guard: don't reload mid-booking (the banner already handles that case)
   navigator.serviceWorker.addEventListener('controllerchange', function() {
+    if (_userInitiatedUpdate) {
+      // User tapped "Update now" — always reload immediately
+      window.location.reload();
+      return;
+    }
     var cur = stack && stack[stack.length - 1];
     var safeToCCReload = !cur || cur === 's-auth' || cur === 's-pin' || cur === 's-dash';
     if (safeToCCReload) {
       window.location.reload();
     } else {
-      // Show the update banner instead — user taps "Update now" when ready
+      // Mid-session — show banner, let user decide
       var banner = document.getElementById('update-banner');
       if (banner) banner.style.display = 'flex';
     }
@@ -3598,10 +3603,17 @@ if ('serviceWorker' in navigator) {
 }
 
 // Dynamic online/offline indicator
+var _userInitiatedUpdate = false;
 function applyUpdate() {
+  _userInitiatedUpdate = true; // flag so controllerchange always reloads
+  var banner = document.getElementById('update-banner');
+  if (banner) banner.innerHTML = '<span style="font-size:13px">⏳ Updating...</span>';
   navigator.serviceWorker.getRegistration().then(function(reg) {
     if (reg && reg.waiting) {
       reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+      // No waiting SW — just reload to pick up fresh files
+      window.location.reload();
     }
   });
 }

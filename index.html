@@ -3443,7 +3443,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.30';
+var APP_VERSION = 'v21.31';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -11587,9 +11587,10 @@ async function loadAdminStaff() {
         + '<div style="font-size:11px;color:var(--text3)">' + esc(s.email||'') + '</div>'
         + (s.defaultDoctor ? '<div style="font-size:10px;font-family:var(--mono);color:var(--accent);margin-top:2px">&#128084; ' + esc(s.defaultDoctor) + '</div>' : '')
         + '</div>'
-        + '<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">'
-        + '<button data-id="' + d.id + '" onclick="editStaff(this.dataset.id)" style="font-size:12px;padding:5px 12px;border:0.5px solid var(--border-strong);border-radius:8px;background:none;cursor:pointer;color:var(--text2)">Edit</button>'
-        + '<button onclick="startImpersonation(\''+d.id+'\',\''+esc(s.name||'')+'\')" style="font-size:11px;padding:4px 10px;border:0.5px solid #7C3AED;border-radius:8px;background:none;cursor:pointer;color:#7C3AED;font-family:var(--mono)">👁 View As</button>'
+        + '<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0">'
+        + '<button data-id="' + d.id + '" onclick="editStaff(this.dataset.id)" style="font-size:12px;padding:5px 14px;border:0.5px solid var(--border-strong);border-radius:8px;background:none;cursor:pointer;color:var(--text2);white-space:nowrap">Edit</button>'
+        + '<button onclick="startImpersonation(\''+d.id+'\',\''+esc(s.name||'')+'\')" style="font-size:11px;padding:4px 10px;border:0.5px solid #7C3AED;border-radius:8px;background:none;cursor:pointer;color:#7C3AED;font-family:var(--mono);white-space:nowrap">👁 View As</button>'
+        + '</div>'
         + '</div>';
     });
     el.innerHTML = html;

@@ -2264,11 +2264,6 @@
         "du": 5000,
         "sh": 5000
     },
-    "HAEMATOLOGY|NT-PRO BNP (N TERMINAL PRO B TYPE NATRIURETIC PEPTIDE)": {
-        "jk": 3500,
-        "du": 3500,
-        "sh": 3500
-    },
     "HAEMATOLOGY|OSMOTIC FRAGILITY TEST": {
         "jk": 700,
         "du": 700,
@@ -5463,5 +5458,10 @@
         "jk": 450,
         "du": 500,
         "sh": 400
+    },
+    "HAEMATOLOGY|NT-PRO BNP": {
+        "jk": 3800,
+        "du": 2070,
+        "sh": 3800
     }
 }

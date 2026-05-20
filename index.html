@@ -3481,7 +3481,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.36';
+var APP_VERSION = 'v21.37';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -9741,8 +9741,10 @@ function loadHO() {
   // Query own orders + field orders assigned to me (field orders have createdBy=admin, not phlebo)
   var _hoQ      = db.collection('orders').where('date','==',today).where('createdBy','==',_hoMyUid);
   var _hoFieldQ = db.collection('orders').where('date','==',today).where('fieldAssignedToUid','==',_hoMyUid);
-  // Due collections: always own only
-  var _dueQ = db.collection('orders').where('dueCollectedBy','==',_hoMyUid);
+  // Due collections: own only, limited to last 90 days (performance guard)
+  var _dueQDate = new Date(); _dueQDate.setDate(_dueQDate.getDate() - 90);
+  var _dueQDateStr = _dueQDate.getFullYear()+'-'+String(_dueQDate.getMonth()+1).padStart(2,'0')+'-'+String(_dueQDate.getDate()).padStart(2,'0');
+  var _dueQ = db.collection('orders').where('dueCollectedBy','==',_hoMyUid).where('date','>=',_dueQDateStr);
 
   Promise.all([_hoQ.get(), _hoFieldQ.get(), _dueQ.get()]).then(function(results) {
     var _ownSnap   = results[0];
@@ -9808,7 +9810,7 @@ function loadHO() {
 
     // ── Due collections on older orders — temporarily hidden (TODO: re-enable)
     // dueSnap.forEach(function(d){
-    if (false) dueSnap.forEach(function(d){
+    dueSnap.forEach(function(d){
       if (todayIds[d.id]) return; // already counted above
       var o = d.data();
       if (!o.dueCollectedAmt || o.dueCollectedAmt <= 0) return;
@@ -10527,9 +10529,9 @@ function submitToRegister() {
 }
 
 function _doRegisterDeposit(amt, notes) {
-  var authorisedBy = '';
   var myUid  = curUser && curUser.uid;
   var myName = (curProfile&&curProfile.name) || curUser.email;
+  var authorisedBy = myName;  // PIN was verified by hoConfirmExecute before this call
   var today  = todayStr();
   var now    = new Date();
   var allOrders = window._hoAllOrdersManifest || [];

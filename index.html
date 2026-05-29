@@ -1138,6 +1138,70 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
   </div>
 </div>
 
+<!-- Known Locations Manager modal (admin) -->
+<div id="loc-mgr-bg" class="edit-modal-bg" style="display:none" onclick="if(event.target===this)closeLocationsManager()">
+  <div class="edit-modal" id="loc-mgr" style="max-width:520px">
+    <div class="modal-handle"></div>
+    <div class="modal-title">\uD83D\uDCCD Known Locations</div>
+    <div class="modal-sub">Admin-managed registry. Used to label GPS at order creation, attendance, and field collection.</div>
+
+    <!-- Existing locations list -->
+    <div id="loc-list" style="margin-bottom:14px"><div class="empty">Loading...</div></div>
+
+    <!-- Add / edit form -->
+    <div class="card" style="background:var(--surface2);padding:12px;border-radius:var(--radius)">
+      <div class="edit-section-lbl" id="loc-form-title" style="margin-top:0">Add New Location</div>
+      <input type="hidden" id="loc-edit-id">
+      <div class="field">
+        <label>Name <span style="color:var(--red)">*</span></label>
+        <input type="text" id="loc-name" placeholder="e.g. Savitri Hospital">
+        <div class="ferr" id="err-loc-name">Name required</div>
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <select id="loc-type" style="width:100%;padding:9px 11px;border:0.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:14px">
+          <option value="hospital">\uD83C\uDFE5 Hospital</option>
+          <option value="clinic">\uD83E\uDE7A Clinic</option>
+          <option value="camp">\u26FA Camp</option>
+          <option value="home">\uD83C\uDFE0 Home</option>
+          <option value="partner">\uD83E\uDD1D Partner</option>
+          <option value="lab">\uD83D\uDD2C Lab</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <button type="button" class="btn" style="flex:1;font-size:13px" onclick="captureLocationGPS()">\uD83D\uDCCD Capture GPS here</button>
+        <div id="loc-gps-status" style="font-size:11px;font-family:var(--mono);color:var(--text3);flex:1;line-height:1.4">Not captured</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="field" style="margin-bottom:8px">
+          <label>Latitude</label>
+          <input type="text" id="loc-lat" placeholder="28.7041" inputmode="decimal">
+        </div>
+        <div class="field" style="margin-bottom:8px">
+          <label>Longitude</label>
+          <input type="text" id="loc-lng" placeholder="77.1025" inputmode="decimal">
+        </div>
+      </div>
+      <div class="field">
+        <label>Match radius (metres) — how close counts as "here"</label>
+        <input type="number" id="loc-radius" placeholder="75" min="10" max="500" value="75" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label>Address <span style="font-size:11px;color:var(--text3)">(optional)</span></label>
+        <input type="text" id="loc-address" placeholder="House/street/locality">
+      </div>
+      <div class="ferr" id="err-loc-gps">Capture GPS or enter coordinates</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+        <button class="btn" onclick="resetLocationForm()">Clear</button>
+        <button class="btn btn-primary" onclick="saveLocation()">Save Location</button>
+      </div>
+    </div>
+
+    <div style="height:10px"></div>
+    <button class="btn" style="width:100%" onclick="closeLocationsManager()">Close</button>
+  </div>
+</div>
+
 <!-- Field task delivery modal -->
 <div id="field-modal-bg" class="edit-modal-bg" style="display:none" onclick="if(event.target===this)closeFieldModal()">
   <div class="edit-modal" id="field-modal">
@@ -1732,6 +1796,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
       <button class="btn" style="font-size:12px;background:var(--surface2);border:0.5px solid var(--border-strong)" onclick="goTo('s-activity')">&#128196; Activity Log</button>
       <button class="btn" style="font-size:12px;background:var(--surface2);border:0.5px solid var(--border-strong)" onclick="goTo('s-pa-editor')">&#129514; PA Editor</button>
+      <button class="btn" style="font-size:12px;background:var(--surface2);border:0.5px solid var(--border-strong);grid-column:1/-1" onclick="openLocationsManager()">&#128205; Known Locations</button>
     </div>
 
     <!-- Staff List -->
@@ -3088,7 +3153,15 @@ function captureFieldGPS() {
   el.textContent = 'Locating...';
   navigator.geolocation.getCurrentPosition(function(pos) {
     _fieldGPS = {lat:pos.coords.latitude.toFixed(6), lng:pos.coords.longitude.toFixed(6), accuracy:Math.round(pos.coords.accuracy)};
-    el.textContent = '✓ '+_fieldGPS.lat+', '+_fieldGPS.lng+' ±'+_fieldGPS.accuracy+'m';
+    var match = matchKnownLocation(_fieldGPS.lat, _fieldGPS.lng);
+    if (match) {
+      _fieldGPS.knownLocation = match.loc.name;
+      _fieldGPS.knownLocationType = match.loc.type || '';
+      _fieldGPS.knownLocationDist = match.distance;
+      el.innerHTML = '\u2713 <span style="color:var(--accent);font-weight:600">\uD83D\uDCCD '+esc(match.loc.name)+'</span> ('+match.distance+'m)<br><span style="color:var(--text3)">'+_fieldGPS.lat+', '+_fieldGPS.lng+' \u00b1'+_fieldGPS.accuracy+'m</span>';
+    } else {
+      el.textContent = '\u2713 '+_fieldGPS.lat+', '+_fieldGPS.lng+' \u00b1'+_fieldGPS.accuracy+'m';
+    }
     el.style.color = 'var(--accent)';
   }, function() {
     el.textContent = 'Could not get location';
@@ -3481,7 +3554,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.37';
+var APP_VERSION = 'v21.39';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3512,6 +3585,7 @@ function loadAppData() {
     PANELS    = results[1];
     PA_DATA   = results[2].PA_DATA;
     loadPAOverrides(); // load Firestore pa_overrides into paOverridesCache
+    loadKnownLocations(); // live-load admin-managed known locations registry
     PA_ERRORS = results[2].PA_ERRORS;
     PA_PREP   = results[2].PA_PREP;
     _dataLoaded = true;
@@ -4340,6 +4414,228 @@ function loadPAOverrides() {
   }).catch(function() {});
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// KNOWN LOCATIONS (geo-tagging registry) — Phase 1
+// Admin-managed registry of hospitals/clinics/camps/homes. Used to label
+// GPS captures at order creation, attendance check-in, and field collection.
+// ═══════════════════════════════════════════════════════════════════════════
+var KNOWN_LOCATIONS = [];     // [{id, name, type, lat, lng, radius, address, active}]
+var _locationsUnsub = null;
+var DEFAULT_LOC_RADIUS = 75;  // metres (midpoint of 50-100m)
+
+// Live-load known locations from Firestore (admin edits propagate instantly)
+function loadKnownLocations() {
+  if (_locationsUnsub) return; // already subscribed
+  _locationsUnsub = db.collection('locations').onSnapshot(function(snap) {
+    KNOWN_LOCATIONS = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      if (data.active === false) return; // skip deactivated
+      KNOWN_LOCATIONS.push(Object.assign({ id: d.id }, data));
+    });
+  }, function(err) {
+    console.warn('Known locations listener error:', err && err.message);
+  });
+}
+
+// Haversine distance in metres between two lat/lng points
+function geoDistanceMeters(lat1, lng1, lat2, lng2) {
+  var R = 6371000; // Earth radius in metres
+  var toRad = function(d) { return d * Math.PI / 180; };
+  var dLat = toRad(lat2 - lat1);
+  var dLng = toRad(lng2 - lng1);
+  var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+          Math.sin(dLng/2) * Math.sin(dLng/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Find the nearest known location within its own radius. Returns {loc, distance} or null.
+function matchKnownLocation(lat, lng) {
+  if (lat == null || lng == null) return null;
+  var nlat = parseFloat(lat), nlng = parseFloat(lng);
+  if (isNaN(nlat) || isNaN(nlng)) return null;
+  var best = null;
+  KNOWN_LOCATIONS.forEach(function(loc) {
+    if (loc.lat == null || loc.lng == null) return;
+    var dist = geoDistanceMeters(nlat, nlng, parseFloat(loc.lat), parseFloat(loc.lng));
+    var radius = loc.radius || DEFAULT_LOC_RADIUS;
+    if (dist <= radius) {
+      if (!best || dist < best.distance) best = { loc: loc, distance: Math.round(dist) };
+    }
+  });
+  return best;
+}
+
+// Convenience: just the display name for a coordinate pair, or null
+function knownLocationName(lat, lng) {
+  var m = matchKnownLocation(lat, lng);
+  return m ? m.loc.name : null;
+}
+
+var LOC_TYPE_LABELS = { hospital: '\uD83C\uDFE5 Hospital', clinic: '\uD83E\uDE7A Clinic', camp: '\u26FA Camp', home: '\uD83C\uDFE0 Home', partner: '\uD83E\uDD1D Partner', lab: '\uD83D\uDD2C Lab' };
+var LOC_TYPES = ['hospital', 'clinic', 'camp', 'home', 'partner', 'lab'];
+
+// Admin-or-elevated role check (admin can always manage locations)
+function isAdminRole() {
+  var r = (curProfile && curProfile.role) || '';
+  return r === 'admin';
+}
+
+// ── Locations Manager UI (admin) ────────────────────────────────────────
+var _locGPS = null;
+
+function openLocationsManager() {
+  if (!isAdminRole()) { toast('Admin only', 'warn'); return; }
+  resetLocationForm();
+  renderLocationsList();
+  document.getElementById('loc-mgr-bg').style.display = 'flex';
+}
+
+function closeLocationsManager() {
+  document.getElementById('loc-mgr-bg').style.display = 'none';
+}
+
+function renderLocationsList() {
+  var el = document.getElementById('loc-list');
+  if (!el) return;
+  if (!KNOWN_LOCATIONS.length) {
+    el.innerHTML = '<div class="empty">No known locations yet. Add your first below.</div>';
+    return;
+  }
+  // Sort by type then name
+  var sorted = KNOWN_LOCATIONS.slice().sort(function(a, b) {
+    if (a.type !== b.type) return (a.type||'').localeCompare(b.type||'');
+    return (a.name||'').localeCompare(b.name||'');
+  });
+  el.innerHTML = sorted.map(function(loc) {
+    var typeLabel = LOC_TYPE_LABELS[loc.type] || loc.type || '';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surface2);border-radius:var(--radius);margin-bottom:6px">'
+      + '<div style="flex:1;min-width:0">'
+        + '<div style="font-weight:500;font-size:13px">' + esc(loc.name) + '</div>'
+        + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3)">' + typeLabel + ' \u00b7 r=' + (loc.radius||DEFAULT_LOC_RADIUS) + 'm \u00b7 ' + (loc.lat||'?') + ', ' + (loc.lng||'?') + '</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:4px;flex-shrink:0">'
+        + '<button class="btn" style="font-size:10px;padding:4px 8px" onclick="editLocation(\'' + loc.id + '\')">Edit</button>'
+        + '<button class="btn" style="font-size:10px;padding:4px 8px;color:var(--red)" onclick="deactivateLocation(\'' + loc.id + '\',\'' + esc(loc.name).replace(/'/g, "\\'") + '\')">Remove</button>'
+      + '</div>'
+    + '</div>';
+  }).join('');
+}
+
+function captureLocationGPS() {
+  var el = document.getElementById('loc-gps-status');
+  el.textContent = 'Acquiring...';
+  if (!navigator.geolocation) { el.textContent = 'GPS unavailable'; return; }
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    var lat = pos.coords.latitude.toFixed(6);
+    var lng = pos.coords.longitude.toFixed(6);
+    _locGPS = { lat: lat, lng: lng, accuracy: Math.round(pos.coords.accuracy) };
+    document.getElementById('loc-lat').value = lat;
+    document.getElementById('loc-lng').value = lng;
+    el.textContent = '\u2713 ' + lat + ', ' + lng + ' \u00b1' + _locGPS.accuracy + 'm';
+  }, function() {
+    el.textContent = 'GPS failed \u2014 enter manually';
+  }, { timeout: 20000, maximumAge: 0, enableHighAccuracy: true });
+}
+
+function resetLocationForm() {
+  document.getElementById('loc-edit-id').value = '';
+  document.getElementById('loc-name').value = '';
+  document.getElementById('loc-type').value = 'hospital';
+  document.getElementById('loc-lat').value = '';
+  document.getElementById('loc-lng').value = '';
+  document.getElementById('loc-radius').value = '75';
+  document.getElementById('loc-address').value = '';
+  document.getElementById('loc-gps-status').textContent = 'Not captured';
+  document.getElementById('loc-form-title').textContent = 'Add New Location';
+  document.getElementById('err-loc-name').style.display = 'none';
+  document.getElementById('err-loc-gps').style.display = 'none';
+  _locGPS = null;
+}
+
+function editLocation(id) {
+  var loc = KNOWN_LOCATIONS.find(function(l) { return l.id === id; });
+  if (!loc) return;
+  document.getElementById('loc-edit-id').value = id;
+  document.getElementById('loc-name').value = loc.name || '';
+  document.getElementById('loc-type').value = loc.type || 'hospital';
+  document.getElementById('loc-lat').value = loc.lat || '';
+  document.getElementById('loc-lng').value = loc.lng || '';
+  document.getElementById('loc-radius').value = loc.radius || 75;
+  document.getElementById('loc-address').value = loc.address || '';
+  document.getElementById('loc-gps-status').textContent = loc.lat ? ('\u2713 ' + loc.lat + ', ' + loc.lng) : 'Not captured';
+  document.getElementById('loc-form-title').textContent = 'Edit: ' + (loc.name || '');
+  // Scroll form into view
+  document.getElementById('loc-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function saveLocation() {
+  if (!isAdminRole()) { toast('Admin only', 'warn'); return; }
+  var name = document.getElementById('loc-name').value.trim();
+  var type = document.getElementById('loc-type').value;
+  var lat = document.getElementById('loc-lat').value.trim();
+  var lng = document.getElementById('loc-lng').value.trim();
+  var radius = parseInt(document.getElementById('loc-radius').value) || DEFAULT_LOC_RADIUS;
+  var address = document.getElementById('loc-address').value.trim();
+  var editId = document.getElementById('loc-edit-id').value;
+
+  document.getElementById('err-loc-name').style.display = 'none';
+  document.getElementById('err-loc-gps').style.display = 'none';
+
+  if (!name) { document.getElementById('err-loc-name').style.display = 'block'; return; }
+  if (!lat || !lng || isNaN(parseFloat(lat)) || isNaN(parseFloat(lng))) {
+    document.getElementById('err-loc-gps').style.display = 'block'; return;
+  }
+  if (radius < 10) radius = 10;
+  if (radius > 500) radius = 500;
+
+  var data = {
+    name: name, type: type,
+    lat: parseFloat(lat).toFixed(6), lng: parseFloat(lng).toFixed(6),
+    radius: radius, address: address, active: true
+  };
+
+  var p;
+  if (editId) {
+    data.updatedBy = (curProfile && curProfile.name) || curUser.email;
+    data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    p = db.collection('locations').doc(editId).update(data);
+  } else {
+    data.createdBy = curUser.uid;
+    data.createdByName = (curProfile && curProfile.name) || curUser.email;
+    data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    p = db.collection('locations').add(data);
+  }
+  p.then(function() {
+    toast(editId ? 'Location updated \u2713' : 'Location added \u2713', 'ok');
+    logActivity('location_' + (editId ? 'edit' : 'add'), (editId ? 'Edited' : 'Added') + ' known location: ' + name);
+    resetLocationForm();
+    // list re-renders automatically via onSnapshot; force a refresh shortly
+    setTimeout(renderLocationsList, 400);
+  }).catch(function(e) {
+    toast('Save failed: ' + (e.message || 'error'), 'err');
+  });
+}
+
+function deactivateLocation(id, name) {
+  if (!isAdminRole()) { toast('Admin only', 'warn'); return; }
+  if (!confirm('Remove "' + name + '" from known locations? Existing orders keep their stored labels.')) return;
+  db.collection('locations').doc(id).update({
+    active: false,
+    deactivatedBy: (curProfile && curProfile.name) || curUser.email,
+    deactivatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function() {
+    toast('Location removed', 'ok');
+    logActivity('location_remove', 'Removed known location: ' + name);
+    setTimeout(renderLocationsList, 400);
+  }).catch(function(e) {
+    toast('Failed: ' + (e.message || 'error'), 'err');
+  });
+}
+
+
+
 // Merge JSON base with Firestore override for a given PA data object
 function mergePA(pa, testKey) {
   var ov = paOverridesCache[testKey];
@@ -4470,6 +4766,8 @@ var _attendAdminTarget = null;  // uid of staff selected in admin panel
 var _attendAdminDoc = null;     // that staff member's today doc
 var _attendTeamUnsub = null;
 
+var _gpsRecheckTimer = null;
+
 function checkGPSStatus() {
   var warn = document.getElementById('attend-gps-warn');
   if (!warn) return;
@@ -4479,16 +4777,40 @@ function checkGPSStatus() {
   }
   // Quick position attempt with network-based fallback (fast, low accuracy)
   navigator.geolocation.getCurrentPosition(
-    function() { warn.style.display = 'none'; },
+    function() {
+      warn.style.display = 'none';
+      // Stop re-checking once GPS works
+      if (_gpsRecheckTimer) { clearInterval(_gpsRecheckTimer); _gpsRecheckTimer = null; }
+    },
     function(err) {
       warn.style.display = 'flex';
       var msgEl = warn.querySelector('.gps-warn-msg');
       if (msgEl) {
         if (err.code === 1) { // PERMISSION_DENIED
-          msgEl.textContent = 'Location permission denied. Go to phone Settings → Apps → Chrome → Permissions → Location → Allow.';
-        } else { // POSITION_UNAVAILABLE or TIMEOUT
-          msgEl.textContent = 'GPS / Location is off. Turn on Location in your phone\'s quick settings before checking in.';
+          // Chrome site-level permission may be denied even if Android system permission is granted
+          msgEl.innerHTML = 'Location blocked for this site. Tap the &#128274; lock icon next to the URL (or 3-dot menu \u2192 Site settings) and allow Location. <br><br>If you already allowed it, refresh the page.';
+        } else if (err.code === 2) { // POSITION_UNAVAILABLE
+          msgEl.textContent = 'Location is off on your phone. Pull down quick settings and turn ON Location, then it will retry automatically.';
+        } else { // TIMEOUT
+          msgEl.textContent = 'GPS taking too long (poor signal indoors?). Will retry automatically. Check-in still works without GPS.';
         }
+      }
+      // Auto-retry every 5 seconds while banner is showing — silently disappears once GPS works
+      if (!_gpsRecheckTimer) {
+        _gpsRecheckTimer = setInterval(function() {
+          if (warn.style.display === 'none') {
+            clearInterval(_gpsRecheckTimer); _gpsRecheckTimer = null;
+            return;
+          }
+          navigator.geolocation.getCurrentPosition(
+            function() {
+              warn.style.display = 'none';
+              clearInterval(_gpsRecheckTimer); _gpsRecheckTimer = null;
+            },
+            function() {},
+            { timeout: 5000, maximumAge: 30000, enableHighAccuracy: false }
+          );
+        }, 5000);
       }
     },
     { timeout: 6000, maximumAge: 60000, enableHighAccuracy: false }
@@ -4572,16 +4894,38 @@ function initAttendScreen() {
 }
 
 function loadMyAttendance(uid, today) {
+  var statusEl = document.getElementById('attend-my-status');
+  if (statusEl) statusEl.innerHTML = '<div style="color:var(--text3);font-size:13px">Loading...</div>';
   db.collection('attendance').doc(uid + '_' + today).get({ source: 'server' }).then(function(doc) {
     _attendToday = doc.exists ? doc.data() : null;
     renderMyAttendance(_attendToday, uid, today, false);
-  }).catch(function() {
-    // Fallback to cache if server unreachable
+  }).catch(function(serverErr) {
+    // Server fetch failed (likely offline / Firestore unreachable)
+    // Try cache, but if cache also empty, show explicit error — not "Not checked in"
     db.collection('attendance').doc(uid + '_' + today).get().then(function(doc) {
-      _attendToday = doc.exists ? doc.data() : null;
-      renderMyAttendance(_attendToday, uid, today, false);
-    }).catch(function() {
-      renderMyAttendance(null, uid, today, false);
+      if (doc.exists) {
+        _attendToday = doc.data();
+        renderMyAttendance(_attendToday, uid, today, false);
+      } else {
+        // Cache is empty too — could be genuinely not-checked-in OR offline+no-cache
+        // Show recoverable state with retry rather than silently saying "Not checked in"
+        if (statusEl) {
+          statusEl.innerHTML = '<div style="font-size:14px;color:#D97706;margin-bottom:8px">\u26A0 Could not load attendance</div>'
+            + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Check connection. If you have checked in today, this is a sync issue.</div>'
+            + '<button class="btn btn-primary" style="font-size:12px;padding:8px 16px" onclick="loadMyAttendance(\'' + uid + '\',\'' + today + '\')">Retry</button>';
+        }
+        var btnsEl = document.getElementById('attend-action-btns');
+        if (btnsEl) btnsEl.innerHTML = '';
+        console.warn('Attendance load failed (cache empty):', serverErr && serverErr.message);
+      }
+    }).catch(function(cacheErr) {
+      // Both failed — explicit error
+      if (statusEl) {
+        statusEl.innerHTML = '<div style="font-size:14px;color:var(--red);margin-bottom:8px">\u26A0 Cannot reach attendance data</div>'
+          + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">' + esc((serverErr && serverErr.message) || 'Network error') + '</div>'
+          + '<button class="btn btn-primary" style="font-size:12px;padding:8px 16px" onclick="loadMyAttendance(\'' + uid + '\',\'' + today + '\')">Retry</button>';
+      }
+      console.warn('Attendance load failed both server and cache:', serverErr && serverErr.message, cacheErr && cacheErr.message);
     });
   });
 }
@@ -4719,9 +5063,15 @@ function attendLogRow(label, point) {
     ? ' <a href="https://maps.google.com/?q='+point.lat+','+point.lng+'" target="_blank" '
       + 'style="font-size:10px;color:var(--accent);text-decoration:none;display:inline-block;margin-top:2px">&#128205; Map</a>'
     : '';
+  var knownBadge = point.knownLocation
+    ? '<div style="font-size:11px;color:var(--accent);font-weight:600;margin-top:1px">&#128205; '+esc(point.knownLocation)
+      + (point.knownLocationDist != null ? ' <span style="color:var(--text3);font-weight:400">('+point.knownLocationDist+'m)</span>' : '')
+      + '</div>'
+    : '';
   return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px;gap:8px">'
     + '<div style="flex:1;min-width:0;overflow:hidden">'
     +   '<div style="font-weight:500;color:var(--text1)">' + label + '</div>'
+    +   knownBadge
     +   (point.address ? '<div style="font-size:11px;color:var(--text3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(point.address)+'</div>' : '')
     +   gpsLink
     + '</div>'
@@ -4882,6 +5232,8 @@ function captureGPSBackground(docRef, fieldPath) {
   navigator.geolocation.getCurrentPosition(function(pos) {
     var lat = parseFloat(pos.coords.latitude.toFixed(6));
     var lng = parseFloat(pos.coords.longitude.toFixed(6));
+    // Match against known locations registry (e.g. "checked in at OnePLUS Lab")
+    var knownMatch = matchKnownLocation(lat, lng);
     fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&zoom=17&addressdetails=0',
       { headers: { 'Accept-Language': 'en' } })
       .then(function(r){ return r.json(); })
@@ -4891,25 +5243,35 @@ function captureGPSBackground(docRef, fieldPath) {
         update[fieldPath+'.lat'] = lat;
         update[fieldPath+'.lng'] = lng;
         update[fieldPath+'.address'] = address;
+        if (knownMatch) {
+          update[fieldPath+'.knownLocation'] = knownMatch.loc.name;
+          update[fieldPath+'.knownLocationType'] = knownMatch.loc.type || '';
+          update[fieldPath+'.knownLocationDist'] = knownMatch.distance;
+        }
         docRef.update(update).then(function(){
           // Refresh display after GPS arrives
           var today = todayStr();
           var uid = curUser && curUser.uid;
           if (uid) loadMyAttendance(uid, today);
-        }).catch(function(){});
+        }).catch(function(e){ console.warn('attend GPS update failed', e && e.message); });
       })
       .catch(function() {
         var update = {};
         update[fieldPath+'.lat'] = lat;
         update[fieldPath+'.lng'] = lng;
         update[fieldPath+'.address'] = lat+', '+lng;
-        docRef.update(update).catch(function(){});
+        if (knownMatch) {
+          update[fieldPath+'.knownLocation'] = knownMatch.loc.name;
+          update[fieldPath+'.knownLocationType'] = knownMatch.loc.type || '';
+          update[fieldPath+'.knownLocationDist'] = knownMatch.distance;
+        }
+        docRef.update(update).catch(function(e){ console.warn('attend GPS update failed', e && e.message); });
       });
   }, function() {
     // GPS truly unavailable — update address
     var update = {};
     update[fieldPath+'.address'] = 'GPS unavailable';
-    docRef.update(update).catch(function(){});
+    docRef.update(update).catch(function(e){ console.warn('attend GPS update failed', e && e.message); });
   }, { timeout: 25000, maximumAge: 0, enableHighAccuracy: true });
 }
 
@@ -5838,7 +6200,15 @@ function captureGPS() {
       var lng=pos.coords.longitude.toFixed(6);
       var acc=Math.round(pos.coords.accuracy);
       curGPS={lat:lat,lng:lng,accuracy:acc,capturedAt:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})};
-      statusEl.innerHTML='<span style="color:#059669">&#10003; '+lat+', '+lng+'<br>±'+acc+'m at '+curGPS.capturedAt+'</span>';
+      // Match against known locations
+      var match = matchKnownLocation(lat, lng);
+      if (match) {
+        curGPS.knownLocation = match.loc.name;
+        curGPS.knownLocationType = match.loc.type || '';
+        curGPS.knownLocationDist = match.distance;
+      }
+      var knownHtml = match ? '<br><span style="color:var(--accent);font-weight:600">&#128205; '+esc(match.loc.name)+' ('+match.distance+'m)</span>' : '';
+      statusEl.innerHTML='<span style="color:#059669">&#10003; '+lat+', '+lng+'<br>±'+acc+'m at '+curGPS.capturedAt+'</span>'+knownHtml;
     },
     function(err) {
       var msgs={1:'Permission denied',2:'Position unavailable',3:'Timeout'};
@@ -7427,8 +7797,9 @@ function renderOrderDetail(o) {
       + '<div><div class="audit-kv-k">Source</div><div class="audit-kv-v">' + esc(o.source) + '</div></div>'
       + (o.address ? '<div style="grid-column:span 2"><div class="audit-kv-k">Address</div><div class="audit-kv-v">' + esc(o.address) + '</div></div>' : '')
       + (o.gps ? '<div style="grid-column:span 2"><div class="audit-kv-k">GPS Location</div>'
+        + (o.gps.knownLocation ? '<div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:2px">&#128205; ' + esc(o.gps.knownLocation) + (o.gps.knownLocationDist != null ? ' <span style="color:var(--text3);font-weight:400">(' + o.gps.knownLocationDist + 'm)</span>' : '') + '</div>' : '')
         + '<div style="font-size:11px;font-family:var(--mono);color:#1D4ED8;margin-top:2px">' + o.gps.lat + ', ' + o.gps.lng + '</div>'
-        + '<div style="font-size:10px;color:var(--text3)">±' + o.gps.accuracy + 'm · Captured ' + o.gps.capturedAt + '</div>'
+        + '<div style="font-size:10px;color:var(--text3)">±' + o.gps.accuracy + 'm · Captured ' + (o.gps.capturedAt||'') + '</div>'
         + '<a href="https://maps.google.com/?q=' + o.gps.lat + ',' + o.gps.lng + '" target="_blank" style="font-size:11px;color:#1D4ED8;display:inline-block;margin-top:4px">Open in Maps ↗</a>'
         + '</div>' : '')
       + '</div></div>';

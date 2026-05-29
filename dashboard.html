@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.42 — OnePLUS</title>
+<title>LabFlow Dashboard v20.44 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -225,7 +225,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.42</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.44</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -233,6 +233,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="live" title="Live"></div>
       <span id="ddate" class="tb-meta"></span>
       <span id="drefresh" class="tb-meta"></span>
+      <button data-admin-only="1" onclick="openLocationsModal()" style="display:none;font-size:12px;font-family:var(--mono);background:rgba(255,255,255,0.15);color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;margin-right:8px">&#128205; Locations</button>
       <button class="sout" onclick="doSignOut()">Sign out</button>
     </div>
   </div>
@@ -376,6 +377,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <div class="card">
           <div class="ch"><div class="ct">Activity Feed</div><span class="cc2" id="afc">0</span></div>
           <div id="afeed" style="max-height:420px;overflow-y:auto"><div class="empty">Loading...</div></div>
+        </div>
+
+        <!-- Known Locations (admin only) -->
+        <div class="card" data-admin-only="1" style="display:none">
+          <div class="ch">
+            <div class="ct">&#128205; Known Locations</div>
+            <span class="cc2" id="loc-count">0</span>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Hospitals, clinics, camps and homes used to label GPS captures across orders, attendance and field collection.</div>
+          <button onclick="openLocMgrDash()" style="width:100%;padding:8px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">Manage Locations</button>
+          <div id="loc-list-mini" style="margin-top:10px;max-height:240px;overflow-y:auto"></div>
         </div>
 
         <!-- Attendance Today + Export -->
@@ -1063,6 +1075,7 @@ function renderField(){
     var cc=o.collectionCharge>0?' &middot; Coll: Rs.'+o.collectionCharge:'';
     return '<div class="li"><div style="flex:1;min-width:0">'
       +'<div class="lin">'+src+esc(o.patientName)+'</div>'
+      +(o.gps&&o.gps.knownLocation?'<div style="font-size:10px;color:var(--accent);font-weight:600">📍 '+esc(o.gps.knownLocation)+'</div>':'')
       +'<div class="lim">'+esc(o.address||'No address')+(o.gps?' 📍':'')
       +' &middot; '+esc(o.createdByName||'-')+assignee+cc+'</div>'
       +'</div><div style="text-align:right;flex-shrink:0">'+st+'</div></div>';
@@ -1276,9 +1289,11 @@ function renderDashAttendance(recs){
     var state=co?'Out':onBreak?'Break':ci?'In':'—';
     var stateColor=co?'#6B7280':onBreak?'#D97706':ci?'#059669':'var(--text3)';
     var gpsLink=ci&&ci.lat?'<a href="https://maps.google.com/?q='+ci.lat+','+ci.lng+'" target="_blank" style="font-size:10px;color:var(--accent);text-decoration:none;margin-left:4px">&#128205;</a>':'';
+    var knownLoc=ci&&ci.knownLocation?'<div style="font-size:10px;color:var(--accent);font-weight:600">&#128205; '+esc(ci.knownLocation)+(ci.knownLocationDist!=null?' <span style="color:var(--text3);font-weight:400">('+ci.knownLocationDist+'m)</span>':'')+'</div>':'';
     return '<div class="li">'
       +'<div style="flex:1;min-width:0">'
         +'<div class="lin">'+esc(r.name||'-')+'<span style="font-size:9px;font-family:var(--mono);background:var(--border);color:var(--text3);padding:1px 5px;border-radius:3px;text-transform:uppercase;margin-left:4px">'+esc(r.role||'')+'</span></div>'
+        +knownLoc
         +'<div class="lim">'+(ci?'In: '+esc(ci.time):'—')+(co?' · Out: '+esc(co.time):'')+(r.totalHours?' · '+esc(r.totalHours):'')+gpsLink+'</div>'
       +'</div>'
       +'<div style="font-size:12px;font-weight:600;color:'+stateColor+';white-space:nowrap;margin-left:8px">'+state+'</div>'
@@ -1483,6 +1498,12 @@ function applyRoleView() {
   els.forEach(function(el) {
     if (_isReception) el.style.display = 'none';
     else el.style.removeProperty('display');
+  });
+  // Show/hide admin-only elements
+  var adminEls = document.querySelectorAll('[data-admin-only]');
+  adminEls.forEach(function(el) {
+    if (curRole === 'admin') el.style.removeProperty('display');
+    else el.style.display = 'none';
   });
 }
 
@@ -2362,6 +2383,386 @@ function recExecuteRejectHandover(p) {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// KNOWN LOCATIONS MANAGER (admin) — Dashboard
+// Mirrors the mobile registry. Admin manages from either device.
+// ═══════════════════════════════════════════════════════════════════════════
+var KNOWN_LOCATIONS_DASH = [];
+var _locUnsubDash = null;
+var DEFAULT_LOC_RADIUS_DASH = 75;
+var LOC_TYPE_LABELS_DASH = {
+  hospital: '\uD83C\uDFE5 Hospital',
+  clinic: '\uD83E\uDE7A Clinic',
+  camp: '\u26FA Camp',
+  home: '\uD83C\uDFE0 Home',
+  partner: '\uD83E\uDD1D Partner',
+  lab: '\uD83D\uDD2C Lab'
+};
+var _locGPSDash = null;
+
+function loadKnownLocationsDash() {
+  if (_locUnsubDash) return;
+  _locUnsubDash = db.collection('locations').onSnapshot(function(snap) {
+    KNOWN_LOCATIONS_DASH = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      if (data.active === false) return;
+      KNOWN_LOCATIONS_DASH.push(Object.assign({ id: d.id }, data));
+    });
+    renderLocCardMini();
+    var openModal = document.getElementById('loc-mgr-modal');
+    if (openModal && openModal.classList.contains('open')) renderLocMgrList();
+  }, function(err) {
+    console.warn('locations listener:', err && err.message);
+  });
+}
+
+function renderLocCardMini() {
+  var el = document.getElementById('loc-list-mini');
+  var count = document.getElementById('loc-count');
+  if (count) count.textContent = KNOWN_LOCATIONS_DASH.length;
+  if (!el) return;
+  if (!KNOWN_LOCATIONS_DASH.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:10px;text-align:center">No locations yet \u2014 tap Manage Locations to add</div>';
+    return;
+  }
+  var sorted = KNOWN_LOCATIONS_DASH.slice().sort(function(a,b){
+    if (a.type !== b.type) return (a.type||'').localeCompare(b.type||'');
+    return (a.name||'').localeCompare(b.name||'');
+  });
+  el.innerHTML = sorted.slice(0, 12).map(function(loc) {
+    var typeLabel = LOC_TYPE_LABELS_DASH[loc.type] || loc.type || '';
+    return '<div style="padding:6px 8px;font-size:12px;border-bottom:0.5px solid var(--border)">'
+      + '<div style="font-weight:500">' + escHtmlDash(loc.name) + '</div>'
+      + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3)">' + typeLabel + ' \u00b7 r=' + (loc.radius || DEFAULT_LOC_RADIUS_DASH) + 'm</div>'
+    + '</div>';
+  }).join('') + (sorted.length > 12 ? '<div style="font-size:10px;color:var(--text3);padding:6px;text-align:center">+' + (sorted.length - 12) + ' more</div>' : '');
+}
+
+function escHtmlDash(s) {
+  return String(s||'').replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; });
+}
+
+// ── Manager modal ────────────────────────────────────────────────────────
+function openLocMgrDash() {
+  if (curRole !== 'admin') {
+    toastDash('Admin only', 'warn');
+    return;
+  }
+  resetLocFormDash();
+  renderLocMgrList();
+  document.getElementById('loc-mgr-modal').classList.add('open');
+}
+
+function closeLocMgrDash() {
+  document.getElementById('loc-mgr-modal').classList.remove('open');
+}
+
+function renderLocMgrList() {
+  var el = document.getElementById('loc-mgr-list');
+  if (!el) return;
+  if (!KNOWN_LOCATIONS_DASH.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:14px;text-align:center;background:var(--surface2);border-radius:6px">No known locations yet. Add your first below.</div>';
+    return;
+  }
+  var sorted = KNOWN_LOCATIONS_DASH.slice().sort(function(a,b) {
+    if (a.type !== b.type) return (a.type||'').localeCompare(b.type||'');
+    return (a.name||'').localeCompare(b.name||'');
+  });
+  el.innerHTML = sorted.map(function(loc) {
+    var typeLabel = LOC_TYPE_LABELS_DASH[loc.type] || loc.type || '';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surface2);border-radius:6px;margin-bottom:6px;font-size:12px">'
+      + '<div style="flex:1;min-width:0">'
+        + '<div style="font-weight:500;font-size:13px">' + escHtmlDash(loc.name) + '</div>'
+        + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3)">' + typeLabel + ' \u00b7 r=' + (loc.radius || DEFAULT_LOC_RADIUS_DASH) + 'm \u00b7 ' + (loc.lat||'?') + ', ' + (loc.lng||'?') + '</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:4px;flex-shrink:0">'
+        + '<button class="ra-btn" onclick="editLocDash(\'' + loc.id + '\')">Edit</button>'
+        + '<button class="ra-btn warn" onclick="removeLocDash(\'' + loc.id + '\',\'' + escHtmlDash(loc.name).replace(/\\/g,'\\\\').replace(/\u0027/g, "\\'") + '\')">Remove</button>'
+      + '</div>'
+    + '</div>';
+  }).join('');
+}
+
+function captureLocGPSDash() {
+  var el = document.getElementById('loc-mgr-gps-status');
+  el.textContent = 'Acquiring...';
+  if (!navigator.geolocation) { el.textContent = 'GPS unavailable'; return; }
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    var lat = pos.coords.latitude.toFixed(6);
+    var lng = pos.coords.longitude.toFixed(6);
+    _locGPSDash = { lat: lat, lng: lng, accuracy: Math.round(pos.coords.accuracy) };
+    document.getElementById('loc-mgr-lat').value = lat;
+    document.getElementById('loc-mgr-lng').value = lng;
+    el.textContent = '\u2713 ' + lat + ', ' + lng + ' \u00b1' + _locGPSDash.accuracy + 'm';
+  }, function() {
+    el.textContent = 'GPS failed \u2014 enter manually';
+  }, { timeout: 20000, maximumAge: 0, enableHighAccuracy: true });
+}
+
+function resetLocFormDash() {
+  document.getElementById('loc-mgr-edit-id').value = '';
+  document.getElementById('loc-mgr-name').value = '';
+  document.getElementById('loc-mgr-type').value = 'hospital';
+  document.getElementById('loc-mgr-lat').value = '';
+  document.getElementById('loc-mgr-lng').value = '';
+  document.getElementById('loc-mgr-radius').value = '75';
+  document.getElementById('loc-mgr-address').value = '';
+  document.getElementById('loc-mgr-gps-status').textContent = 'Not captured';
+  document.getElementById('loc-mgr-form-title').textContent = 'Add New Location';
+  document.getElementById('loc-mgr-err').textContent = '';
+  _locGPSDash = null;
+}
+
+function editLocDash(id) {
+  var loc = KNOWN_LOCATIONS_DASH.find(function(l){ return l.id === id; });
+  if (!loc) return;
+  document.getElementById('loc-mgr-edit-id').value = id;
+  document.getElementById('loc-mgr-name').value = loc.name || '';
+  document.getElementById('loc-mgr-type').value = loc.type || 'hospital';
+  document.getElementById('loc-mgr-lat').value = loc.lat || '';
+  document.getElementById('loc-mgr-lng').value = loc.lng || '';
+  document.getElementById('loc-mgr-radius').value = loc.radius || 75;
+  document.getElementById('loc-mgr-address').value = loc.address || '';
+  document.getElementById('loc-mgr-gps-status').textContent = loc.lat ? ('\u2713 ' + loc.lat + ', ' + loc.lng) : 'Not captured';
+  document.getElementById('loc-mgr-form-title').textContent = 'Edit: ' + (loc.name || '');
+}
+
+function saveLocDash() {
+  if (curRole !== 'admin') { toastDash('Admin only', 'warn'); return; }
+  var name = document.getElementById('loc-mgr-name').value.trim();
+  var type = document.getElementById('loc-mgr-type').value;
+  var lat = document.getElementById('loc-mgr-lat').value.trim();
+  var lng = document.getElementById('loc-mgr-lng').value.trim();
+  var radius = parseInt(document.getElementById('loc-mgr-radius').value) || DEFAULT_LOC_RADIUS_DASH;
+  var address = document.getElementById('loc-mgr-address').value.trim();
+  var editId = document.getElementById('loc-mgr-edit-id').value;
+  var errEl = document.getElementById('loc-mgr-err');
+  errEl.textContent = '';
+
+  if (!name) { errEl.textContent = 'Name is required'; return; }
+  if (!lat || !lng || isNaN(parseFloat(lat)) || isNaN(parseFloat(lng))) {
+    errEl.textContent = 'Capture GPS or enter valid coordinates';
+    return;
+  }
+  if (radius < 10) radius = 10;
+  if (radius > 500) radius = 500;
+
+  var byName = (curProfile && curProfile.name) || curUser.email;
+  var data = {
+    name: name, type: type,
+    lat: parseFloat(lat).toFixed(6), lng: parseFloat(lng).toFixed(6),
+    radius: radius, address: address, active: true
+  };
+  var p;
+  if (editId) {
+    data.updatedBy = byName;
+    data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    p = db.collection('locations').doc(editId).update(data);
+  } else {
+    data.createdBy = curUser.uid;
+    data.createdByName = byName;
+    data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    p = db.collection('locations').add(data);
+  }
+  p.then(function() {
+    toastDash(editId ? 'Location updated \u2713' : 'Location added \u2713', 'ok');
+    logActivityDash('location_' + (editId ? 'edit' : 'add'), (editId ? 'Edited' : 'Added') + ' known location: ' + name);
+    resetLocFormDash();
+  }).catch(function(e) {
+    errEl.textContent = 'Save failed: ' + (e.message || 'error');
+  });
+}
+
+function removeLocDash(id, name) {
+  if (curRole !== 'admin') { toastDash('Admin only', 'warn'); return; }
+  if (!confirm('Remove "' + name + '" from known locations? Existing orders keep their stored labels.')) return;
+  var byName = (curProfile && curProfile.name) || curUser.email;
+  db.collection('locations').doc(id).update({
+    active: false,
+    deactivatedBy: byName,
+    deactivatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function() {
+    toastDash('Location removed', 'ok');
+    logActivityDash('location_remove', 'Removed known location: ' + name);
+  }).catch(function(e) {
+    toastDash('Failed: ' + (e.message || 'error'), 'err');
+  });
+}
+
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KNOWN LOCATIONS — Admin manager (dashboard)
+// Mirrors the mobile feature. Admin only.
+// ═══════════════════════════════════════════════════════════════════════════
+var KNOWN_LOCATIONS_DASH = [];
+var _locUnsubDash = null;
+var _locGPSDash = null;
+
+function ensureLocationsLoaded() {
+  if (_locUnsubDash) return;
+  _locUnsubDash = db.collection('locations').onSnapshot(function(snap) {
+    KNOWN_LOCATIONS_DASH = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      if (data.active === false) return;
+      KNOWN_LOCATIONS_DASH.push(Object.assign({ id: d.id }, data));
+    });
+    renderLocationsListDash();
+  }, function(err) {
+    console.warn('Locations listener error:', err && err.message);
+  });
+}
+
+function openLocationsModal() {
+  if (curRole !== 'admin') { toastDash('Admin only', 'warn'); return; }
+  ensureLocationsLoaded();
+  resetLocationFormDash();
+  renderLocationsListDash();
+  document.getElementById('loc-modal').classList.add('open');
+}
+
+function closeLocationsModal() {
+  document.getElementById('loc-modal').classList.remove('open');
+}
+
+var LOC_TYPE_LABELS_DASH = { hospital: '\uD83C\uDFE5 Hospital', clinic: '\uD83E\uDE7A Clinic', camp: '\u26FA Camp', home: '\uD83C\uDFE0 Home', partner: '\uD83E\uDD1D Partner', lab: '\uD83D\uDD2C Lab' };
+
+function renderLocationsListDash() {
+  var el = document.getElementById('loc-mgr-list');
+  if (!el) return;
+  if (!KNOWN_LOCATIONS_DASH.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px;text-align:center">No known locations yet. Add your first below.</div>';
+    return;
+  }
+  var sorted = KNOWN_LOCATIONS_DASH.slice().sort(function(a, b) {
+    if (a.type !== b.type) return (a.type||'').localeCompare(b.type||'');
+    return (a.name||'').localeCompare(b.name||'');
+  });
+  el.innerHTML = sorted.map(function(loc) {
+    var typeLabel = LOC_TYPE_LABELS_DASH[loc.type] || loc.type || '';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surface2);border-radius:6px;margin-bottom:6px;font-size:12px">'
+      + '<div style="flex:1;min-width:0">'
+        + '<div style="font-weight:500;font-size:13px">' + esc(loc.name) + '</div>'
+        + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3)">' + typeLabel + ' \u00b7 r=' + (loc.radius||75) + 'm \u00b7 ' + (loc.lat||'?') + ', ' + (loc.lng||'?') + '</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:4px;flex-shrink:0">'
+        + '<button class="ra-btn" onclick="editLocationDash(\'' + loc.id + '\')">Edit</button>'
+        + '<button class="ra-btn warn" onclick="deactivateLocationDash(\'' + loc.id + '\',\'' + esc(loc.name||'').replace(/\u0027/g, "\\u0027") + '\')">Remove</button>'
+      + '</div>'
+    + '</div>';
+  }).join('');
+}
+
+function captureLocationGPSDash() {
+  var el = document.getElementById('loc-mgr-gps-status');
+  el.textContent = 'Acquiring...';
+  if (!navigator.geolocation) { el.textContent = 'GPS unavailable'; return; }
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    var lat = pos.coords.latitude.toFixed(6);
+    var lng = pos.coords.longitude.toFixed(6);
+    _locGPSDash = { lat: lat, lng: lng, accuracy: Math.round(pos.coords.accuracy) };
+    document.getElementById('loc-mgr-lat').value = lat;
+    document.getElementById('loc-mgr-lng').value = lng;
+    el.textContent = '\u2713 ' + lat + ', ' + lng + ' \u00b1' + _locGPSDash.accuracy + 'm';
+  }, function() {
+    el.textContent = 'GPS failed \u2014 enter manually';
+  }, { timeout: 20000, maximumAge: 0, enableHighAccuracy: true });
+}
+
+function resetLocationFormDash() {
+  document.getElementById('loc-mgr-edit-id').value = '';
+  document.getElementById('loc-mgr-name').value = '';
+  document.getElementById('loc-mgr-type').value = 'hospital';
+  document.getElementById('loc-mgr-lat').value = '';
+  document.getElementById('loc-mgr-lng').value = '';
+  document.getElementById('loc-mgr-radius').value = '75';
+  document.getElementById('loc-mgr-address').value = '';
+  document.getElementById('loc-mgr-gps-status').textContent = 'Not captured';
+  document.getElementById('loc-mgr-form-title').textContent = 'Add New Location';
+  document.getElementById('loc-mgr-err').textContent = '';
+  _locGPSDash = null;
+}
+
+function editLocationDash(id) {
+  var loc = KNOWN_LOCATIONS_DASH.find(function(l) { return l.id === id; });
+  if (!loc) return;
+  document.getElementById('loc-mgr-edit-id').value = id;
+  document.getElementById('loc-mgr-name').value = loc.name || '';
+  document.getElementById('loc-mgr-type').value = loc.type || 'hospital';
+  document.getElementById('loc-mgr-lat').value = loc.lat || '';
+  document.getElementById('loc-mgr-lng').value = loc.lng || '';
+  document.getElementById('loc-mgr-radius').value = loc.radius || 75;
+  document.getElementById('loc-mgr-address').value = loc.address || '';
+  document.getElementById('loc-mgr-gps-status').textContent = loc.lat ? ('\u2713 ' + loc.lat + ', ' + loc.lng) : 'Not captured';
+  document.getElementById('loc-mgr-form-title').textContent = 'Edit: ' + (loc.name || '');
+  document.getElementById('loc-mgr-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function saveLocationDash() {
+  if (curRole !== 'admin') { toastDash('Admin only', 'warn'); return; }
+  var name = document.getElementById('loc-mgr-name').value.trim();
+  var type = document.getElementById('loc-mgr-type').value;
+  var lat = document.getElementById('loc-mgr-lat').value.trim();
+  var lng = document.getElementById('loc-mgr-lng').value.trim();
+  var radius = parseInt(document.getElementById('loc-mgr-radius').value) || 75;
+  var address = document.getElementById('loc-mgr-address').value.trim();
+  var editId = document.getElementById('loc-mgr-edit-id').value;
+  var errEl = document.getElementById('loc-mgr-err');
+  errEl.textContent = '';
+
+  if (!name) { errEl.textContent = 'Name required'; return; }
+  if (!lat || !lng || isNaN(parseFloat(lat)) || isNaN(parseFloat(lng))) {
+    errEl.textContent = 'Capture GPS or enter valid coordinates'; return;
+  }
+  if (radius < 10) radius = 10;
+  if (radius > 500) radius = 500;
+
+  var data = {
+    name: name, type: type,
+    lat: parseFloat(lat).toFixed(6), lng: parseFloat(lng).toFixed(6),
+    radius: radius, address: address, active: true
+  };
+  var byName = (curProfile && curProfile.name) || curUser.email;
+
+  var p;
+  if (editId) {
+    data.updatedBy = byName;
+    data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    p = db.collection('locations').doc(editId).update(data);
+  } else {
+    data.createdBy = curUser.uid;
+    data.createdByName = byName;
+    data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    p = db.collection('locations').add(data);
+  }
+  p.then(function() {
+    toastDash(editId ? 'Location updated \u2713' : 'Location added \u2713', 'ok');
+    logActivityDash('location_' + (editId ? 'edit' : 'add'), (editId ? 'Edited' : 'Added') + ' known location: ' + name);
+    resetLocationFormDash();
+  }).catch(function(e) {
+    errEl.textContent = 'Save failed: ' + (e.message || 'error');
+    console.warn('Save location failed:', e);
+  });
+}
+
+function deactivateLocationDash(id, name) {
+  if (curRole !== 'admin') { toastDash('Admin only', 'warn'); return; }
+  if (!confirm('Remove "' + name + '" from known locations? Existing orders keep their stored labels.')) return;
+  db.collection('locations').doc(id).update({
+    active: false,
+    deactivatedBy: (curProfile && curProfile.name) || curUser.email,
+    deactivatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function() {
+    toastDash('Location removed', 'ok');
+    logActivityDash('location_remove', 'Removed known location: ' + name);
+  }).catch(function(e) {
+    toastDash('Failed: ' + (e.message || 'error'), 'err');
+  });
+}
+
 </script>
 
 <!-- TRF order picker (used when reception clicks TRF on a row) - reuses existing lab modal for now, no separate UI -->
@@ -2629,6 +3030,133 @@ function recExecuteRejectHandover(p) {
       <button class="pin-btn" onclick="doLockSignOut()" style="font-size:10px;color:var(--red)">Sign out</button>
     </div>
     <div class="pin-err" id="lock-err"></div>
+  </div>
+</div>
+
+<!-- Known Locations manager (admin) -->
+<div class="modal-overlay" id="loc-mgr-modal">
+  <div class="modal-box wide">
+    <div class="modal-title">
+      <span>\uD83D\uDCCD Known Locations</span>
+      <button class="modal-close" onclick="closeLocMgrDash()">\u2715</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Admin-managed registry. Used to label GPS captures everywhere they occur.</div>
+
+    <!-- Locations list -->
+    <div id="loc-mgr-list" style="margin-bottom:16px;max-height:280px;overflow-y:auto"></div>
+
+    <!-- Add / edit form -->
+    <div style="background:var(--surface2);padding:14px;border-radius:8px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px" id="loc-mgr-form-title">Add New Location</div>
+      <input type="hidden" id="loc-mgr-edit-id">
+
+      <div class="fld-row">
+        <div class="fld">
+          <label>Name *</label>
+          <input type="text" id="loc-mgr-name" placeholder="e.g. Savitri Hospital">
+        </div>
+        <div class="fld">
+          <label>Type</label>
+          <select id="loc-mgr-type">
+            <option value="hospital">\uD83C\uDFE5 Hospital</option>
+            <option value="clinic">\uD83E\uDE7A Clinic</option>
+            <option value="camp">\u26FA Camp</option>
+            <option value="home">\uD83C\uDFE0 Home</option>
+            <option value="partner">\uD83E\uDD1D Partner</option>
+            <option value="lab">\uD83D\uDD2C Lab</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="fld-row-3">
+        <div class="fld">
+          <label>Latitude</label>
+          <input type="text" id="loc-mgr-lat" placeholder="28.7041" inputmode="decimal">
+        </div>
+        <div class="fld">
+          <label>Longitude</label>
+          <input type="text" id="loc-mgr-lng" placeholder="77.1025" inputmode="decimal">
+        </div>
+        <div class="fld">
+          <label>Radius (m)</label>
+          <input type="number" id="loc-mgr-radius" placeholder="75" min="10" max="500" value="75">
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin:6px 0 10px">
+        <button class="mbtn" style="flex:1;font-size:12px" onclick="captureLocGPSDash()">\uD83D\uDCCD Capture GPS here</button>
+        <div id="loc-mgr-gps-status" style="font-size:11px;font-family:var(--mono);color:var(--text3);flex:1;line-height:1.4">Not captured</div>
+      </div>
+
+      <div class="fld">
+        <label>Address (optional)</label>
+        <input type="text" id="loc-mgr-address" placeholder="House/street/locality">
+      </div>
+
+      <div class="merr" id="loc-mgr-err"></div>
+      <div class="modal-actions">
+        <button class="mbtn" onclick="resetLocFormDash()">Clear</button>
+        <button class="mbtn primary" onclick="saveLocDash()">Save Location</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Known Locations admin modal -->
+<div class="modal-overlay" id="loc-modal">
+  <div class="modal-box wide">
+    <div class="modal-title">
+      <span>\uD83D\uDCCD Known Locations</span>
+      <button class="modal-close" onclick="closeLocationsModal()">\u2715</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:14px">Registry used to label GPS at order creation, attendance, and field collection. Admin only.</div>
+
+    <!-- List of existing locations -->
+    <div id="loc-mgr-list" style="margin-bottom:14px"><div style="color:var(--text3);font-size:13px;padding:12px;text-align:center">Loading...</div></div>
+
+    <!-- Add / edit form -->
+    <div style="background:var(--surface2);padding:12px;border-radius:8px">
+      <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px" id="loc-mgr-form-title">Add New Location</div>
+      <input type="hidden" id="loc-mgr-edit-id">
+      <div class="fld">
+        <label>Name *</label>
+        <input id="loc-mgr-name" placeholder="e.g. Savitri Hospital">
+      </div>
+      <div class="fld-row">
+        <div class="fld">
+          <label>Type</label>
+          <select id="loc-mgr-type">
+            <option value="hospital">\uD83C\uDFE5 Hospital</option>
+            <option value="clinic">\uD83E\uDE7A Clinic</option>
+            <option value="camp">\u26FA Camp</option>
+            <option value="home">\uD83C\uDFE0 Home</option>
+            <option value="partner">\uD83E\uDD1D Partner</option>
+            <option value="lab">\uD83D\uDD2C Lab</option>
+          </select>
+        </div>
+        <div class="fld">
+          <label>Match radius (m)</label>
+          <input id="loc-mgr-radius" type="number" min="10" max="500" value="75">
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <button class="mbtn" style="flex:1" onclick="captureLocationGPSDash()">\uD83D\uDCCD Capture GPS here</button>
+        <div id="loc-mgr-gps-status" style="font-size:11px;font-family:var(--mono);color:var(--text3);flex:1;line-height:1.4">Not captured</div>
+      </div>
+      <div class="fld-row">
+        <div class="fld"><label>Latitude</label><input id="loc-mgr-lat" placeholder="28.7041" inputmode="decimal"></div>
+        <div class="fld"><label>Longitude</label><input id="loc-mgr-lng" placeholder="77.1025" inputmode="decimal"></div>
+      </div>
+      <div class="fld">
+        <label>Address (optional)</label>
+        <input id="loc-mgr-address" placeholder="House/street/locality">
+      </div>
+      <div class="merr" id="loc-mgr-err"></div>
+      <div class="modal-actions">
+        <button class="mbtn" onclick="resetLocationFormDash()">Clear</button>
+        <button class="mbtn primary" onclick="saveLocationDash()">Save Location</button>
+      </div>
+    </div>
   </div>
 </div>
 

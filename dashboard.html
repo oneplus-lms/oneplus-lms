@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.44 — OnePLUS</title>
+<title>LabFlow Dashboard v20.46 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -225,7 +225,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.44</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.46</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -455,12 +455,15 @@ var PANELS = null;
 var _catLoading = false;
 
 // ── Auth ──────────────────────────────────────────────────────────────────
+var _freshLogin = false;  // true only when user actively typed credentials this session
+
 function doLogin(){
   var e=document.getElementById('em').value.trim(), p=document.getElementById('pw').value;
   var err=document.getElementById('lerr');
   if(!e||!p){err.textContent='Enter email and password';return;}
   err.textContent='Signing in…';
-  auth.signInWithEmailAndPassword(e,p).catch(function(x){err.textContent=x.message;});
+  _freshLogin = true;  // they authenticated with password — no PIN gate needed this load
+  auth.signInWithEmailAndPassword(e,p).catch(function(x){ _freshLogin = false; err.textContent=x.message;});
 }
 function doSignOut() {
   // Clear inactivity timer
@@ -509,6 +512,17 @@ auth.onAuthStateChanged(function(user){
       startDash();
       initInactivityWatcher();
       startAutoRefresh();
+      // Option B: if this is a RESTORED session (page reloaded / reopened, not a
+      // fresh password login), require PIN before showing data. Prevents an
+      // unattended browser with a saved session from being wide open.
+      if (!_freshLogin) {
+        if (data.pin) {
+          lockDashboard();   // shows PIN overlay; unlock reveals dashboard
+        }
+        // If no PIN is set on the profile, we can't lock — fall through (dashboard shown).
+        // Admin should set a PIN; the lock can't gate without one.
+      }
+      _freshLogin = false;
     }).catch(function(){
       // Never grant silent admin — sign out on Firestore failure
       auth.signOut();
@@ -1114,11 +1128,20 @@ async function fetchAttendData() {
   var to   = document.getElementById('att-to').value;
   var uid  = document.getElementById('att-export-staff').value;
   if (!from || !to) { alert('Select a date range first'); return null; }
-  var q = db.collection('attendance').where('date','>=',from).where('date','<=',to);
-  if (uid) q = q.where('uid','==',uid);
-  var snap = await q.get();
   var recs = [];
-  snap.forEach(function(d) { recs.push(d.data()); });
+  try {
+    // Range on date only (no compound index). Filter uid client-side.
+    var snap = await db.collection('attendance').where('date','>=',from).where('date','<=',to).get();
+    snap.forEach(function(d) {
+      var data = d.data();
+      if (uid && data.uid !== uid) return;
+      recs.push(data);
+    });
+  } catch (e) {
+    alert('Attendance query failed: ' + (e.message || 'error'));
+    console.warn('fetchAttendData error:', e);
+    return null;
+  }
   recs.sort(function(a,b){
     return (a.name||'').localeCompare(b.name||'') || (a.date||'').localeCompare(b.date||'');
   });
@@ -1126,13 +1149,27 @@ async function fetchAttendData() {
 }
 
 function calcBreakMin(breaks) {
-  return (breaks||[]).reduce(function(s,b) {
+  return safeArrDash(breaks).reduce(function(s,b) {
     if (b.start && b.end) {
       var sm = timeToMin(b.start.time), em = timeToMin(b.end.time);
       return s + Math.max(0, em - sm);
     }
     return s;
   }, 0);
+}
+
+// Coerce Firestore field to array — defensive against legacy {0:..., 1:...} object shape
+function safeArrDash(v) {
+  if (Array.isArray(v)) return v;
+  if (v == null) return [];
+  if (typeof v === 'object') {
+    var out = [];
+    Object.keys(v).sort(function(a,b){ return parseInt(a) - parseInt(b); }).forEach(function(k) {
+      out.push(v[k]);
+    });
+    return out;
+  }
+  return [];
 }
 
 function timeToMin(t) {
@@ -1171,11 +1208,15 @@ async function attExportCSV() {
   }).join('\n');
   var from = document.getElementById('att-from').value;
   var to   = document.getElementById('att-to').value;
-  var blob = new Blob([csv], {type:'text/csv'});
+  var blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
   var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  var objUrl = URL.createObjectURL(blob);
+  a.href = objUrl;
   a.download = 'OnePLUS_Attendance_'+from+'_to_'+to+'.csv';
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(objUrl); }, 1000);
 }
 
 async function attExportWhatsApp() {
@@ -1283,7 +1324,7 @@ function renderDashAttendance(recs){
   deduped.sort(function(a,b){return(a.name||'').localeCompare(b.name||'');});
   el.innerHTML=deduped.map(function(r){
     var ci=r.checkIn,co=r.checkOut;
-    var breaks=r.breaks||[];
+    var breaks=safeArrDash(r.breaks);
     var lb=breaks.length?breaks[breaks.length-1]:null;
     var onBreak=lb&&lb.start&&!lb.end;
     var state=co?'Out':onBreak?'Break':ci?'In':'—';

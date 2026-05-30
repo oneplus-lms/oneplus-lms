@@ -3554,7 +3554,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.39';
+var APP_VERSION = 'v21.41';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4952,6 +4952,22 @@ function loadAttendTeam(today) {
     });
 }
 
+// Coerces a Firestore field into a proper array. Defensive against legacy
+// data where 'breaks' was written as {0: {...}, 1: {...}} via fieldPath
+// updates instead of as a true array. Returns [] for null/undefined too.
+function safeArr(v) {
+  if (Array.isArray(v)) return v;
+  if (v == null) return [];
+  if (typeof v === 'object') {
+    var out = [];
+    Object.keys(v).sort(function(a,b){ return parseInt(a) - parseInt(b); }).forEach(function(k) {
+      out.push(v[k]);
+    });
+    return out;
+  }
+  return [];
+}
+
 function renderMyAttendance(rec, uid, today, isAdmin) {
   var statusEl = document.getElementById('attend-my-status');
   var btnsEl   = document.getElementById('attend-action-btns');
@@ -4964,7 +4980,7 @@ function renderMyAttendance(rec, uid, today, isAdmin) {
     return;
   }
   var ci = rec.checkIn, co = rec.checkOut;
-  var breaks = rec.breaks || [];
+  var breaks = safeArr(rec.breaks);
   var lastBreak = breaks.length ? breaks[breaks.length-1] : null;
   var onBreak = lastBreak && lastBreak.start && !lastBreak.end;
 
@@ -5012,7 +5028,7 @@ function renderStaffAttendance(rec, uid, name, today) {
     return;
   }
   var ci = rec.checkIn, co = rec.checkOut;
-  var breaks = rec.breaks || [];
+  var breaks = safeArr(rec.breaks);
   var lastBreak = breaks.length ? breaks[breaks.length-1] : null;
   var onBreak = lastBreak && lastBreak.start && !lastBreak.end;
   var state = co ? 'Checked Out' : onBreak ? 'On Break' : ci ? 'Checked In' : 'Not checked in';
@@ -5044,7 +5060,7 @@ function buildAttendLog(rec) {
   if (rec.checkIn) {
     rows.push(attendLogRow('&#9989; Check In', rec.checkIn));
   }
-  (rec.breaks||[]).forEach(function(b, i) {
+  safeArr(rec.breaks).forEach(function(b, i) {
     rows.push(attendLogRow('&#9749; Break '+(i+1)+' start', b.start));
     if (b.end) rows.push(attendLogRow('&#9749; Break '+(i+1)+' end', b.end));
   });
@@ -5165,7 +5181,7 @@ async function attendAction(action, uid, today, isAdmin) {
     if (!rec || !rec.checkIn) { toast('Not checked in', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
     if (rec.checkOut) { toast('Already checked out', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
     // Close any open break first
-    var breaks = (rec.breaks || []).slice();
+    var breaks = safeArr(rec.breaks).slice();
     var lastBreak = breaks.length ? breaks[breaks.length-1] : null;
     if (lastBreak && lastBreak.start && !lastBreak.end) {
       breaks[breaks.length-1] = Object.assign({}, lastBreak, { end: point });
@@ -5190,7 +5206,7 @@ async function attendAction(action, uid, today, isAdmin) {
 
   } else if (action === 'start-break') {
     if (!rec || !rec.checkIn || rec.checkOut) { toast('Cannot start break', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
-    var breaks2 = (rec.breaks || []).slice();
+    var breaks2 = safeArr(rec.breaks).slice();
     var lb = breaks2.length ? breaks2[breaks2.length-1] : null;
     if (lb && lb.start && !lb.end) { toast('Already on break', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
     breaks2.push({ start: point, end: null });
@@ -5201,7 +5217,7 @@ async function attendAction(action, uid, today, isAdmin) {
 
   } else if (action === 'end-break') {
     if (!rec) { if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
-    var breaks3 = (rec.breaks || []).slice();
+    var breaks3 = safeArr(rec.breaks).slice();
     var lb2 = breaks3.length ? breaks3[breaks3.length-1] : null;
     if (!lb2 || !lb2.start || lb2.end) { toast('No active break', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
     breaks3[breaks3.length-1] = Object.assign({}, lb2, { end: point });
@@ -5292,11 +5308,20 @@ async function attendMobileFetchData() {
   var to    = document.getElementById('attend-exp-to').value;
   var uid   = document.getElementById('attend-exp-staff').value;
   if (!from || !to) { toast('Select a date range', 'warn'); return null; }
-  var q = db.collection('attendance').where('date','>=',from).where('date','<=',to);
-  if (uid) q = q.where('uid','==',uid);
-  var snap = await q.get();
   var recs = [];
-  snap.forEach(function(d){ recs.push(d.data()); });
+  try {
+    // Range query on date only (no compound index needed). Filter uid client-side.
+    var snap = await db.collection('attendance').where('date','>=',from).where('date','<=',to).get();
+    snap.forEach(function(d){
+      var data = d.data();
+      if (uid && data.uid !== uid) return; // client-side staff filter
+      recs.push(data);
+    });
+  } catch (e) {
+    toast('Attendance query failed: ' + (e.message || 'error'), 'err');
+    console.warn('attendMobileFetchData error:', e);
+    return null;
+  }
   recs.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'') || (a.date||'').localeCompare(b.date||''); });
   return recs;
 }
@@ -5325,24 +5350,66 @@ async function attendMobileExportWA() {
 }
 
 async function attendMobileExportCSV() {
-  var recs = await attendMobileFetchData();
+  var recs;
+  try {
+    recs = await attendMobileFetchData();
+  } catch (e) {
+    toast('Could not load attendance: ' + (e.message || 'error'), 'err');
+    return;
+  }
   if (!recs) return;
   if (!recs.length) { toast('No records in selected range', 'warn'); return; }
   var rows = [['Name','Role','Date','Check-In','Check-Out','Break (min)','Total Hours']];
   recs.forEach(function(r) {
     var ci=r.checkIn||{}, co=r.checkOut||{};
-    var bMin=(r.breaks||[]).reduce(function(s,b){
+    var bMin=safeArr(r.breaks).reduce(function(s,b){
       if(b.start&&b.end){var sm=parseAttendTime(b.start.time),em=parseAttendTime(b.end.time);return s+Math.max(0,Math.round((em-sm)/60000));}return s;},0);
     rows.push([r.name||'',r.role||'',r.date||'',ci.time||'',co.time||'',bMin>0?bMin:'',r.totalHours||'']);
   });
   var csv = rows.map(function(r){ return r.map(function(v){ var s=String(v); return s.indexOf(',')>=0?'"'+s+'"':s; }).join(','); }).join('\n');
   var from = document.getElementById('attend-exp-from').value;
   var to   = document.getElementById('attend-exp-to').value;
-  var blob = new Blob([csv],{type:'text/csv'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'Attendance_'+from+'_to_'+to+'.csv';
-  a.click();
+  downloadCSVFile(csv, 'Attendance_'+from+'_to_'+to+'.csv');
+}
+
+// iOS/Android-safe CSV download. Plain a.click() fails on iOS Safari and many
+// Android PWA webviews, so we branch by platform.
+function downloadCSVFile(csv, filename) {
+  // BOM for Excel UTF-8 compatibility
+  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  if (isIOS) {
+    // iOS: open in new tab so user can Share → Save to Files
+    var url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    toast('CSV opened — use Share to save', 'ok');
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    return;
+  }
+  // Android / desktop: anchor download. Append to DOM (some webviews need it).
+  try {
+    var a = document.createElement('a');
+    var objUrl = URL.createObjectURL(blob);
+    a.href = objUrl;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objUrl);
+    }, 1000);
+    toast('CSV downloaded', 'ok');
+  } catch (e) {
+    // Last-resort fallback: data URI
+    try {
+      var dataUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent('\uFEFF' + csv);
+      window.open(dataUri, '_blank');
+      toast('CSV opened in new tab', 'ok');
+    } catch (e2) {
+      toast('Download failed on this device', 'err');
+    }
+  }
 }
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -7403,7 +7470,18 @@ function submitOrder() {
   if (!curOrder.patientName) { toast('Patient name is required', 'warn'); goTo('s-order'); showStep(1); document.getElementById('pt-name').focus(); return; }
   if (!curOrder.phone || curOrder.phone.length < 6) { toast('Mobile number is required', 'warn'); goTo('s-order'); showStep(1); document.getElementById('pt-phone').focus(); return; }
   if (!selTests.length && !(curOrder.tests && curOrder.tests.length)) { toast('Select at least one test', 'warn'); return; }
-  var disc=parseFloat(document.getElementById('discount').value||0);
+  // Compute discount as a rupee amount, respecting discType (% or Rs.) and
+  // applying to TESTS ONLY (never collection charge) — must match applyDiscount()
+  var discRaw = parseFloat(document.getElementById('discount').value || 0) || 0;
+  var ccForDisc = curOrder.collectionCharge || 0;
+  var testTotalForDisc = (curOrder.totalAmount || 0) - ccForDisc;
+  var disc;
+  if (discType === 'pct') {
+    var pctVal = Math.min(100, Math.max(0, discRaw));
+    disc = Math.round(testTotalForDisc * pctVal / 100);
+  } else {
+    disc = Math.min(testTotalForDisc, Math.max(0, discRaw));
+  }
   // Block if discount approval is pending
   var total = curOrder.totalAmount || 0;
   var role = curProfile && curProfile.role || '';

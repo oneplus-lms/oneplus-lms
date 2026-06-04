@@ -3554,7 +3554,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.41';
+var APP_VERSION = 'v21.43';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3924,25 +3924,67 @@ auth.onAuthStateChanged(function(user) {
     goTo('s-auth', false); stack = ['s-auth']; return;
   }
   curUser = user;
-  db.collection('staff').doc(user.uid).get().then(function(snap) {
-    if (snap.exists) {
-      curProfile = snap.data();
-      // Auto-correct email in Firestore if it doesn't match Firebase Auth
-      if (curProfile.email !== user.email) {
-        db.collection('staff').doc(user.uid).update({ email: user.email });
-        curProfile.email = user.email;
-      }
-    } else {
-      curProfile = { name: user.email, role: 'admin', pin: '' };
-    }
+  // Resolve staff profile. Primary lookup is by Auth UID (the document ID).
+  // If that's missing, the user's Auth UID may differ from the staff doc ID
+  // (e.g. account recreated, or admin pre-provisioned the staff doc before the
+  // user's first login created a fresh Auth UID). In that case, fall back to an
+  // email lookup so the correct profile (and role) is found instead of silently
+  // granting admin — which was a real bug that hid handovers and over-privileged users.
+  function proceedWithProfile() {
     loadAppData();        // load catalogue, panels, preanalytical data async
     prewarmDoctorCache(); // start loading 5,914 doctors in background before PIN entry
     setupPin();
     stack = ['s-pin'];
     goTo('s-pin', false);
+  }
+
+  function refuseUnprovisioned() {
+    // No staff record by UID or email — do NOT grant any access.
+    auth.signOut().then(function() {
+      curUser = null; curProfile = null;
+      goTo('s-auth', false); stack = ['s-auth'];
+      document.getElementById('a-err').textContent = 'Your account is not provisioned. Contact admin to set up your staff profile.';
+    });
+  }
+
+  db.collection('staff').doc(user.uid).get().then(function(snap) {
+    if (snap.exists) {
+      curProfile = snap.data();
+      if (curProfile.email !== user.email) {
+        db.collection('staff').doc(user.uid).update({ email: user.email });
+        curProfile.email = user.email;
+      }
+      proceedWithProfile();
+      return;
+    }
+    // No doc at this UID — try email fallback to catch UID mismatches
+    if (!user.email) { refuseUnprovisioned(); return; }
+    db.collection('staff').where('email', '==', user.email).limit(1).get().then(function(q) {
+      if (!q.empty) {
+        var doc = q.docs[0];
+        curProfile = doc.data();
+        // Heal the mismatch: migrate the staff doc to the user's real Auth UID so
+        // future UID-based lookups (and toUid handover matching) work correctly.
+        var healed = Object.assign({}, curProfile, { uid: user.uid, email: user.email });
+        db.collection('staff').doc(user.uid).set(healed).then(function() {
+          // Remove the stale doc if its ID differs from the real UID
+          if (doc.id !== user.uid) {
+            db.collection('staff').doc(doc.id).delete().catch(function(e){ console.warn('Could not remove stale staff doc:', e && e.message); });
+          }
+        }).catch(function(e){ console.warn('Could not heal staff doc UID:', e && e.message); });
+        curProfile.uid = user.uid;
+        curProfile.email = user.email;
+        proceedWithProfile();
+      } else {
+        // Truly no staff record anywhere — refuse, do NOT default to admin
+        refuseUnprovisioned();
+      }
+    }).catch(function(e) {
+      console.error('Staff email lookup failed:', e);
+      refuseUnprovisioned();
+    });
   }).catch(function(e) {
     // Firestore unavailable — do NOT grant admin access silently
-    // Show error and sign out to force re-authentication when back online
     console.error('Staff profile fetch failed:', e);
     auth.signOut().then(function() {
       curUser = null; curProfile = null;
@@ -6228,10 +6270,15 @@ function toggleHomeCollection() {
   if (saveField)  saveField.style.display  = needsAddress ? 'block' : 'none';
   hcf.style.display = needsAddress ? 'block' : 'none';
   // Auto-generate Maps link from address when source = Home Collection.
-  // GPS auto-capture is intentionally skipped — booker's location ≠ patient's location.
-  // Phlebo can manually tap "Capture GPS" when physically at the patient's home.
+  // Auto-capture GPS for PHLEBOTOMISTS on field collections — they are physically
+  // at the patient's location, so their GPS is the correct collection coordinate.
+  // (Reception/desk bookers are NOT auto-captured: their location ≠ patient's.)
   if (src === 'Home Collection' || src === 'Hospital Collection') {
     setTimeout(autoFillMapsFromAddress, 400);
+    var myRole = (curProfile && curProfile.role) || '';
+    if (myRole === 'phlebotomist' && !curGPS) {
+      setTimeout(function(){ captureGPS(true); }, 600); // auto = true (silent, offline-tolerant)
+    }
   }
   // Auto-fill referring doctor from staff profile when Doctor Clinic selected
   if (src==='Doctor Clinic') {
@@ -6257,32 +6304,71 @@ function toggleHomeCollection() {
   }
 }
 var curGPS = null;
-function captureGPS() {
+var _gpsAutoPending = false;     // true when an auto-capture is waiting for a fix
+var _gpsOnlineListener = null;
+
+function captureGPS(auto) {
   var statusEl = document.getElementById('gps-status');
-  if (!navigator.geolocation) { statusEl.textContent='GPS not supported on this device'; return; }
-  statusEl.textContent='Locating…';
-  navigator.geolocation.getCurrentPosition(
-    function(pos) {
-      var lat=pos.coords.latitude.toFixed(6);
-      var lng=pos.coords.longitude.toFixed(6);
-      var acc=Math.round(pos.coords.accuracy);
-      curGPS={lat:lat,lng:lng,accuracy:acc,capturedAt:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})};
-      // Match against known locations
-      var match = matchKnownLocation(lat, lng);
-      if (match) {
-        curGPS.knownLocation = match.loc.name;
-        curGPS.knownLocationType = match.loc.type || '';
-        curGPS.knownLocationDist = match.distance;
+  if (!navigator.geolocation) {
+    if (statusEl) statusEl.textContent = 'GPS not supported on this device';
+    return;
+  }
+  if (statusEl) statusEl.textContent = auto ? 'Auto-locating…' : 'Locating…';
+
+  function onSuccess(pos) {
+    _gpsAutoPending = false;
+    var lat = pos.coords.latitude.toFixed(6);
+    var lng = pos.coords.longitude.toFixed(6);
+    var acc = Math.round(pos.coords.accuracy);
+    curGPS = { lat: lat, lng: lng, accuracy: acc, capturedAt: new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'}), auto: !!auto };
+    // Known-location match works offline (registry is cached in memory)
+    var match = matchKnownLocation(lat, lng);
+    if (match) {
+      curGPS.knownLocation = match.loc.name;
+      curGPS.knownLocationType = match.loc.type || '';
+      curGPS.knownLocationDist = match.distance;
+    }
+    var knownHtml = match ? '<br><span style="color:var(--accent);font-weight:600">&#128205; '+esc(match.loc.name)+' ('+match.distance+'m)</span>' : '';
+    if (statusEl) statusEl.innerHTML = '<span style="color:#059669">&#10003; '+lat+', '+lng+'<br>±'+acc+'m at '+curGPS.capturedAt+(auto?' (auto)':'')+'</span>'+knownHtml;
+  }
+
+  function onError(err) {
+    var msgs = {1:'Permission denied', 2:'Position unavailable', 3:'Timeout'};
+    // For auto-capture: if the device is offline (which slows cold GPS),
+    // queue a retry for when the network returns. The GPS chip works offline,
+    // but A-GPS assistance (faster fix) needs network — so retrying on reconnect
+    // gives a much better chance of a quick, accurate fix.
+    if (auto) {
+      _gpsAutoPending = true;
+      if (statusEl) {
+        statusEl.innerHTML = '<span style="color:#D97706">&#9888; Could not get GPS yet'
+          + (navigator.onLine ? '' : ' (offline)')
+          + ' — will retry automatically. Or tap Capture GPS.</span>';
       }
-      var knownHtml = match ? '<br><span style="color:var(--accent);font-weight:600">&#128205; '+esc(match.loc.name)+' ('+match.distance+'m)</span>' : '';
-      statusEl.innerHTML='<span style="color:#059669">&#10003; '+lat+', '+lng+'<br>±'+acc+'m at '+curGPS.capturedAt+'</span>'+knownHtml;
-    },
-    function(err) {
-      var msgs={1:'Permission denied',2:'Position unavailable',3:'Timeout'};
-      statusEl.textContent='Failed: '+(msgs[err.code]||err.message);
-    },
-    {enableHighAccuracy:true,timeout:15000,maximumAge:0}
-  );
+      // Retry once network returns
+      if (!_gpsOnlineListener) {
+        _gpsOnlineListener = function() {
+          if (_gpsAutoPending && !curGPS) {
+            setTimeout(function(){ captureGPS(true); }, 1500); // small delay for connection to stabilise
+          }
+          window.removeEventListener('online', _gpsOnlineListener);
+          _gpsOnlineListener = null;
+        };
+        window.addEventListener('online', _gpsOnlineListener);
+      }
+      return;
+    }
+    if (statusEl) statusEl.textContent = 'Failed: ' + (msgs[err.code] || err.message);
+  }
+
+  // Auto mode: more forgiving (longer timeout, allow a slightly stale fix, lower
+  // accuracy acceptable) since indoors/offline cold-start can be slow.
+  // Manual mode: strict high-accuracy fresh fix.
+  var opts = auto
+    ? { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
+    : { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+
+  navigator.geolocation.getCurrentPosition(onSuccess, onError, opts);
 }
 function step1Next() {
   var name=document.getElementById('pt-name').value.trim();
@@ -7621,7 +7707,7 @@ function submitOrder() {
 
 }
 function newOrder() {
-  curOrder={}; selTests=[]; curPanel='standard'; payMode='cash'; creditMode=false; splitPay={cash:0,upi:0,card:0}; selDiagnoses=[]; selMeds=[]; rxPhotos=[]; proofPhotoB64=''; discType='amt'; curGPS=null;
+  curOrder={}; selTests=[]; curPanel='standard'; payMode='cash'; creditMode=false; splitPay={cash:0,upi:0,card:0}; selDiagnoses=[]; selMeds=[]; rxPhotos=[]; proofPhotoB64=''; discType='amt'; curGPS=null; _gpsAutoPending=false;
   curHistory = resetHistory(); // resets data AND visual toggle states in step1b
   ['pt-name','pt-age','pt-phone','pt-ref','pt-address','bill-notes'].forEach(function(id){
     document.getElementById(id).value='';

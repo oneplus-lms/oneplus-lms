@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.46 — OnePLUS</title>
+<title>LabFlow Dashboard v20.47 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -225,7 +225,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.46</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.47</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -1089,8 +1089,9 @@ function renderField(){
     var cc=o.collectionCharge>0?' &middot; Coll: Rs.'+o.collectionCharge:'';
     return '<div class="li"><div style="flex:1;min-width:0">'
       +'<div class="lin">'+src+esc(o.patientName)+'</div>'
-      +(o.gps&&o.gps.knownLocation?'<div style="font-size:10px;color:var(--accent);font-weight:600">📍 '+esc(o.gps.knownLocation)+'</div>':'')
-      +'<div class="lim">'+esc(o.address||'No address')+(o.gps?' 📍':'')
+      +(o.gps&&o.gps.knownLocation?'<div style="font-size:10px;color:var(--accent);font-weight:600">📍 '+esc(o.gps.knownLocation)+(o.gps.knownLocationDist!=null?' <span style="color:var(--text3);font-weight:400">('+o.gps.knownLocationDist+'m)</span>':'')+'</div>':'')
+      +'<div class="lim">'+esc(o.address||'No address')
+      +(o.gps&&o.gps.lat?' <a href="https://maps.google.com/?q='+o.gps.lat+','+o.gps.lng+'" target="_blank" style="text-decoration:none;color:var(--accent)" title="Open in Maps">📍</a>':'')
       +' &middot; '+esc(o.createdByName||'-')+assignee+cc+'</div>'
       +'</div><div style="text-align:right;flex-shrink:0">'+st+'</div></div>';
   }).join('');

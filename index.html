@@ -425,6 +425,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
           <button id="panel-btn-jk" onclick="setPanelAndRecalc('jk')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">Dr J K Gupta</button>
           <button id="panel-btn-du" onclick="setPanelAndRecalc('du')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">DU Panel</button>
           <button id="panel-btn-sh" onclick="setPanelAndRecalc('sh')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">Dr Shalini Gupta</button>
+          <button id="panel-btn-pj" onclick="setPanelAndRecalc('pj')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">Dr Pooja Jain</button>
         </div>
       </div>
       <div class="field"><label>Mobile *</label><input type="tel" id="pt-phone" placeholder="9876543210" maxlength="10" inputmode="numeric" oninput="scheduleRepeatCheck()" onblur="checkRepeatPatient()"><div class="ferr" id="err-phone"></div></div>
@@ -789,6 +790,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
         <button id="est-panel-btn-jk" onclick="setEstPanel('jk')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">Dr J K Gupta</button>
         <button id="est-panel-btn-du" onclick="setEstPanel('du')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">DU Panel</button>
         <button id="est-panel-btn-sh" onclick="setEstPanel('sh')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">Dr Shalini Gupta</button>
+        <button id="est-panel-btn-pj" onclick="setEstPanel('pj')" style="flex:1;padding:7px 2px;font-size:10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.35);background:transparent;color:#fff;cursor:pointer">Dr Pooja Jain</button>
       </div>
     </div>
 
@@ -2120,7 +2122,7 @@ var estHits = [];
 
 function setEstPanel(panel) {
   estPanel = panel;
-  ['standard','jk','du','sh'].forEach(function(id) {
+  ['standard','jk','du','sh','pj'].forEach(function(id) {
     var btn = document.getElementById('est-panel-btn-'+id);
     if (!btn) return;
     var active = id === panel;
@@ -2133,7 +2135,7 @@ function setEstPanel(panel) {
   estTests = estTests.map(function(t) {
     var key = (t.dept||'').toUpperCase()+'|'+(t.name||'').toUpperCase();
     var p = PANELS[key];
-    var panelRate = p ? (panel==='jk'?p.jk:panel==='du'?p.du:panel==='sh'?p.sh:null) : null;
+    var panelRate = p ? (panel==='jk'?p.jk:panel==='du'?p.du:panel==='sh'?p.sh:panel==='pj'?p.pj:null) : null;
     return Object.assign({}, t, { rate: panelRate !== null && panelRate !== undefined ? panelRate : t.stdRate });
   });
   renderEstTests();
@@ -2172,7 +2174,7 @@ function searchEstTests(val) {
   el.innerHTML = estHits.map(function(t,i) {
     var key = (t.dept||'').toUpperCase()+'|'+(t.name||'').toUpperCase();
     var p = PANELS[key];
-    var panelRate = p ? (estPanel==='jk'?p.jk:estPanel==='du'?p.du:estPanel==='sh'?p.sh:null) : null;
+    var panelRate = p ? (estPanel==='jk'?p.jk:estPanel==='du'?p.du:estPanel==='sh'?p.sh:estPanel==='pj'?p.pj:null) : null;
     var rate = panelRate !== null && panelRate !== undefined ? panelRate : (t.rate||0);
     return '<div onmousedown="addEstTest('+i+')" ontouchstart="addEstTest('+i+')"'
       +' style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
@@ -2189,7 +2191,7 @@ function addEstTest(i) {
   if (estTests.find(function(x){ return x.name===t.name; })) { toast('Already added','warn'); return; }
   var key = (t.dept||'').toUpperCase()+'|'+(t.name||'').toUpperCase();
   var p = PANELS[key];
-  var panelRate = p ? (estPanel==='jk'?p.jk:estPanel==='du'?p.du:estPanel==='sh'?p.sh:null) : null;
+  var panelRate = p ? (estPanel==='jk'?p.jk:estPanel==='du'?p.du:estPanel==='sh'?p.sh:estPanel==='pj'?p.pj:null) : null;
   var stdRate = t.rate || 0;
   var rate = panelRate !== null && panelRate !== undefined ? panelRate : stdRate;
   estTests.push(Object.assign({}, t, {rate: rate, stdRate: stdRate}));
@@ -3554,7 +3556,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.43';
+var APP_VERSION = 'v21.45';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -6039,7 +6041,7 @@ function toggleDuesList() {
 
 var CATALOGUE = [];
 var PANELS = {};
-var PANEL_NAMES = {standard:'Standard',jk:'Dr J K Gupta',du:'DU Panel',sh:'Dr Shalini Gupta'};
+var PANEL_NAMES = {standard:'Standard',jk:'Dr J K Gupta',du:'DU Panel',sh:'Dr Shalini Gupta',pj:'Dr Pooja Jain'};
 
 // ── PANEL DOCTOR RULES ──
 // Panel restriction: if a locked panel is selected, only certain doctors allowed
@@ -6090,11 +6092,12 @@ function getPanelRate(dept, name) {
   if (curPanel === 'jk') return p.jk || null;
   if (curPanel === 'du') return p.du || null;
   if (curPanel === 'sh') return p.sh || null;
+  if (curPanel === 'pj') return p.pj || null;
   return null; // standard = use CATALOGUE rate
 }
 
 function setPanelButtons() {
-  ['standard','jk','du','sh'].forEach(function(id) {
+  ['standard','jk','du','sh','pj'].forEach(function(id) {
     var btn = document.getElementById('panel-btn-'+id);
     if (!btn) return;
     var active = curPanel === id;
@@ -7620,7 +7623,7 @@ function submitOrder() {
     netAmount: netAmt,
     paidAmount: paid, dueAmount: dueAmt,
     payMode: finalPayMode, splitPayments: splitPayments || null, discountType: discType || 'amt',
-    rxPhotos: [], rxPhoto: '', paymentProof: '',
+    rxPhotos: (rxPhotos && rxPhotos.length) ? rxPhotos.slice() : [], rxPhoto: '', paymentProof: (proofPhotoB64 || ''),
     notes: document.getElementById('bill-notes').value || '',
     history: curOrder.history || {},
     date: todayStr(), createdAt: firebase.firestore.FieldValue.serverTimestamp(),

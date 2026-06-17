@@ -3556,7 +3556,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.45';
+var APP_VERSION = 'v21.46';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3570,9 +3570,11 @@ function loadAppData() {
   if (_dataLoaded) return;
   // Detect hosting: GitHub Pages serves from /oneplus-lms/, Firebase from /
   var base = location.hostname.includes('github.io') ? '/oneplus-lms/' : '/';
-  // Cache-bust with daily timestamp — forces CDN to serve fresh data files each day
-  // Falls back to plain URL if network unavailable (serves yesterday's SW cache)
-  var _cbust = '?v=' + new Date().toISOString().slice(0,10).replace(/-/g,'');
+  // Cache-bust with APP_VERSION — forces CDN/browser to serve fresh data files on every deploy,
+  // not just once a day. Previously used a daily timestamp, which meant a same-day catalogue/panel
+  // update could be served stale to anyone who'd already loaded the app earlier that day.
+  // Falls back to plain URL if network unavailable (serves last-cached SW data)
+  var _cbust = '?v=' + APP_VERSION;
   function fetchJson(path) {
     return fetch(base + path + _cbust)
       .catch(function() { return fetch(base + path); }) // offline fallback — no bust

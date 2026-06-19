@@ -3556,7 +3556,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.46';
+var APP_VERSION = 'v21.47';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -5291,7 +5291,7 @@ async function captureAttendPoint() {
 
 // Called after Firestore write — updates GPS fields in background
 function captureGPSBackground(docRef, fieldPath) {
-  navigator.geolocation.getCurrentPosition(function(pos) {
+  function onPos(pos) {
     var lat = parseFloat(pos.coords.latitude.toFixed(6));
     var lng = parseFloat(pos.coords.longitude.toFixed(6));
     // Match against known locations registry (e.g. "checked in at OnePLUS Lab")
@@ -5311,7 +5311,6 @@ function captureGPSBackground(docRef, fieldPath) {
           update[fieldPath+'.knownLocationDist'] = knownMatch.distance;
         }
         docRef.update(update).then(function(){
-          // Refresh display after GPS arrives
           var today = todayStr();
           var uid = curUser && curUser.uid;
           if (uid) loadMyAttendance(uid, today);
@@ -5329,12 +5328,19 @@ function captureGPSBackground(docRef, fieldPath) {
         }
         docRef.update(update).catch(function(e){ console.warn('attend GPS update failed', e && e.message); });
       });
-  }, function() {
-    // GPS truly unavailable — update address
+  }
+  function onFail() {
+    // Both high-accuracy and coarse attempts failed -- mark unavailable
     var update = {};
     update[fieldPath+'.address'] = 'GPS unavailable';
     docRef.update(update).catch(function(e){ console.warn('attend GPS update failed', e && e.message); });
-  }, { timeout: 25000, maximumAge: 0, enableHighAccuracy: true });
+  }
+  // 1st try: high accuracy but accept a fix up to 60s old (reuses a warm fix instantly)
+  navigator.geolocation.getCurrentPosition(onPos, function() {
+    // 2nd try: fast coarse (wifi/cell) location, accept up to 5min old -- reliable on cold start / indoors
+    navigator.geolocation.getCurrentPosition(onPos, onFail,
+      { timeout: 12000, maximumAge: 300000, enableHighAccuracy: false });
+  }, { timeout: 12000, maximumAge: 60000, enableHighAccuracy: true });
 }
 
 function parseAttendTime(timeStr) {

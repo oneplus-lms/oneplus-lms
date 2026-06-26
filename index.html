@@ -1745,6 +1745,7 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
       <div id="attend-my-status" style="text-align:center;padding:16px 0;color:var(--text3);font-size:13px">Loading...</div>
       <div id="attend-action-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div>
       <div id="attend-my-log" style="margin-top:10px"></div>
+      <input type="file" id="attend-photo-input" accept="image/*" capture="environment" style="display:none" onchange="handleAttendPhoto(this)">
     </div>
 
     <!-- Admin: Mark for others -->
@@ -3556,7 +3557,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.47';
+var APP_VERSION = 'v21.51';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -5030,6 +5031,16 @@ function renderMyAttendance(rec, uid, today, isAdmin) {
   var lastBreak = breaks.length ? breaks[breaks.length-1] : null;
   var onBreak = lastBreak && lastBreak.start && !lastBreak.end;
 
+  // Resume background GPS retry for any point still pending (e.g. app reopened mid-wait)
+  if (curUser && curUser.uid === uid) {
+    var _docId = uid + '_' + today;
+    ['checkIn','checkOut'].forEach(function(f){ if (rec[f] && rec[f].gpsPending) retryAttendGPS(_docId, f); });
+    breaks.forEach(function(b,i){
+      if (b.start && b.start.gpsPending) retryAttendGPS(_docId, 'breaks.'+i+'.start');
+      if (b.end && b.end.gpsPending) retryAttendGPS(_docId, 'breaks.'+i+'.end');
+    });
+  }
+
   // Status line
   var statusHTML = '';
   if (co) {
@@ -5057,6 +5068,11 @@ function renderMyAttendance(rec, uid, today, isAdmin) {
       btns += attendBtn('start-break', '&#9749; Start Break', '#D97706', 'attendAction(\'start-break\',\''+uid+'\',\''+today+'\',false)');
       btns += attendBtn('check-out', '&#128682; Check Out', '#DC2626', 'attendAction(\'check-out\',\''+uid+'\',\''+today+'\',false)');
     }
+  }
+  // Optional location photo (self, once checked in)
+  if (ci && curUser && curUser.uid === uid) {
+    var _photoLbl = ci.photo ? '&#128247; Update location photo' : '&#128247; Add location photo';
+    btns += attendBtn('photo', _photoLbl, '#6366F1', 'attendCapturePhoto(\''+uid+'\',\''+today+'\')');
   }
   btnsEl.innerHTML = btns;
 
@@ -5100,6 +5116,112 @@ function attendBtn(id, label, color, onclick) {
 
 var AMBER_COLOR = '#D97706';
 
+// ---- Attendance GPS on-hold: keep retrying until a fix arrives, then backfill ----
+var _attendRetryTimers = {};
+function retryAttendGPS(docId, fieldPath) {
+  if (!navigator.geolocation) return;
+  var key = docId + '|' + fieldPath;
+  if (_attendRetryTimers[key]) return; // already retrying this point
+  _attendRetryTimers[key] = 1; // sentinel until first timer set
+  var deadline = Date.now() + 5 * 60 * 1000; // give up after 5 min
+  var ref = db.collection('attendance').doc(docId);
+  var tries = 0;
+  function stop() { var t = _attendRetryTimers[key]; if (t && t !== 1) clearTimeout(t); delete _attendRetryTimers[key]; }
+  function reloadIfMine() { if (curUser && curUser.uid && docId.indexOf(curUser.uid) === 0) loadMyAttendance(curUser.uid, todayStr()); }
+  function attempt() {
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      var lat = parseFloat(pos.coords.latitude.toFixed(6));
+      var lng = parseFloat(pos.coords.longitude.toFixed(6));
+      reverseGeocodeAttend(lat, lng).then(function(address) {
+        var update = {};
+        update[fieldPath + '.lat'] = lat;
+        update[fieldPath + '.lng'] = lng;
+        update[fieldPath + '.address'] = address;
+        update[fieldPath + '.gpsOk'] = true;
+        update[fieldPath + '.gpsPending'] = false;
+        var km = matchKnownLocation(lat, lng);
+        if (km) {
+          update[fieldPath + '.knownLocation'] = km.loc.name;
+          update[fieldPath + '.knownLocationType'] = km.loc.type || '';
+          update[fieldPath + '.knownLocationDist'] = km.distance;
+        }
+        ref.update(update).then(reloadIfMine).catch(function(e){ console.warn('attend retry update failed', e && e.message); });
+      });
+      stop();
+    }, function(err) {
+      // Permission denied (code 1) is permanent -- retrying can never succeed and only drains battery. Stop now.
+      if (err && err.code === 1) {
+        var u = {};
+        u[fieldPath + '.gpsPending'] = false;
+        u[fieldPath + '.address'] = 'Location off';
+        u[fieldPath + '.gpsOk'] = false;
+        ref.update(u).then(reloadIfMine).catch(function(){});
+        stop();
+        return;
+      }
+      // App backgrounded -> pause (no drain while hidden); resumes when attendance screen reopens.
+      if (typeof document !== 'undefined' && document.hidden) { stop(); return; }
+      if (Date.now() < deadline) {
+        tries++;
+        var wait = Math.min(30000, 10000 + tries * 5000); // gentle backoff: 10s,15s,...,30s
+        _attendRetryTimers[key] = setTimeout(attempt, wait);
+      } else {
+        var update = {};
+        update[fieldPath + '.gpsPending'] = false;
+        update[fieldPath + '.address'] = 'GPS unavailable';
+        update[fieldPath + '.gpsOk'] = false;
+        ref.update(update).then(reloadIfMine).catch(function(){});
+        stop();
+      }
+    }, { timeout: 9000, maximumAge: 30000, enableHighAccuracy: false });
+  }
+  attempt();
+}
+
+// ---- Attendance location photo (optional, confirms presence) ----
+var _attendPhotoTarget = null;
+function attendCapturePhoto(uid, today) {
+  _attendPhotoTarget = { uid: uid, today: today };
+  var inp = document.getElementById('attend-photo-input');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+function handleAttendPhoto(input) {
+  var file = input.files[0];
+  if (!file || !_attendPhotoTarget) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      var maxW = 700;
+      var scale = img.width > maxW ? maxW / img.width : 1;
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      var b64 = canvas.toDataURL('image/jpeg', 0.6);
+      if (b64.length > 400000) b64 = canvas.toDataURL('image/jpeg', 0.45);
+      uploadAttendPhoto(_attendPhotoTarget.uid, _attendPhotoTarget.today, b64);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+async function uploadAttendPhoto(uid, today, b64) {
+  toast('Uploading photo...', 'ok');
+  try {
+    var docId = uid + '_' + today;
+    var sref = firebase.storage().ref('attendance-photos/' + today + '/' + docId + '_checkIn.jpg');
+    var snap = await sref.putString(b64, 'data_url');
+    var url = await snap.ref.getDownloadURL();
+    await db.collection('attendance').doc(docId).update({ 'checkIn.photo': url });
+    toast('Location photo added', 'ok');
+    if (curUser && curUser.uid === uid) loadMyAttendance(uid, today);
+  } catch (e) {
+    console.warn('attend photo upload failed', e && e.message);
+    toast('Photo upload failed', 'err');
+  }
+}
+
 function buildAttendLog(rec) {
   if (!rec) return '';
   var rows = [];
@@ -5134,7 +5256,12 @@ function attendLogRow(label, point) {
     + '<div style="flex:1;min-width:0;overflow:hidden">'
     +   '<div style="font-weight:500;color:var(--text1)">' + label + '</div>'
     +   knownBadge
-    +   (point.address ? '<div style="font-size:11px;color:var(--text3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(point.address)+'</div>' : '')
+    +   (point.gpsPending
+          ? '<div style="font-size:11px;color:#D97706;font-weight:600;margin-top:1px">&#128205; Locating... (auto)</div>'
+          : point.gpsOk === false
+            ? '<div style="font-size:11px;color:#DC2626;font-weight:600;margin-top:1px">&#9888; No GPS</div>'
+            : (point.address ? '<div style="font-size:11px;color:var(--text3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(point.address)+'</div>' : ''))
+    +   (point.photo ? ' <a href="'+point.photo+'" target="_blank" style="font-size:10px;color:var(--accent);text-decoration:none;display:inline-block;margin-top:2px">&#128247; Photo</a>' : '')
     +   gpsLink
     + '</div>'
     + '<div style="font-family:var(--mono);font-size:11px;color:var(--text3);white-space:nowrap;flex-shrink:0">'
@@ -5178,6 +5305,9 @@ function renderTeam(records) {
   }).join('');
 }
 
+// GPS enforcement for attendance. false = allow check-in but flag gpsOk:false when no fix.
+// Set true to REFUSE any check-in/out/break without a GPS fix (hard block).
+var GPS_HARD_BLOCK = false;
 async function attendAction(action, uid, today, isAdmin) {
   var btn = event && event.target;
   if (btn) {
@@ -5189,9 +5319,16 @@ async function attendAction(action, uid, today, isAdmin) {
     }
   }
 
-  // Capture GPS
+  // Capture GPS (compulsory -- awaited two-tier fix before any Firestore write)
   var point = await captureAttendPoint();
   if (btn) btn.innerHTML = btn.dataset.origText || btn.innerHTML;
+  // GPS_HARD_BLOCK (default off) refuses an action with no immediate fix.
+  // Default: record now, hold GPS as pending, auto-retry in background until it arrives.
+  if (GPS_HARD_BLOCK && (!point || !point.gpsOk)) {
+    toast('Location required to ' + action.replace('-',' ') + ' -- enable GPS & try again', 'err');
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    return;
+  }
 
   var docId = uid + '_' + today;
   var ref = db.collection('attendance').doc(docId);
@@ -5219,7 +5356,7 @@ async function attendAction(action, uid, today, isAdmin) {
       markedBy: isAdmin ? ((curProfile&&curProfile.name)||'admin') : 'self'
     };
     await ref.set(update);
-    captureGPSBackground(ref, 'checkIn');
+    if (point.gpsPending) retryAttendGPS(docId, 'checkIn');
     logActivity('attend_in', (isAdmin?'Marked check-in for '+name:''+'Checked in') + ' at ' + point.time, { attendPoint: point });
     toast('Checked in ✓', 'ok');
 
@@ -5246,7 +5383,7 @@ async function attendAction(action, uid, today, isAdmin) {
     var netMin = Math.max(0, diffMin - breakMin);
     var totalHours = Math.floor(netMin/60) + 'h ' + (netMin%60) + 'm';
     await ref.update({ checkOut: point, breaks: breaks, totalHours: totalHours });
-    captureGPSBackground(ref, 'checkOut');
+    if (point.gpsPending) retryAttendGPS(docId, 'checkOut');
     logActivity('attend_out', 'Checked out at ' + point.time + ' · ' + totalHours, { attendPoint: point });
     toast('Checked out ✓ · ' + totalHours, 'ok');
 
@@ -5257,7 +5394,7 @@ async function attendAction(action, uid, today, isAdmin) {
     if (lb && lb.start && !lb.end) { toast('Already on break', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
     breaks2.push({ start: point, end: null });
     await ref.update({ breaks: breaks2 });
-    captureGPSBackground(ref, 'breaks.'+(breaks2.length-1)+'.start');
+    if (point.gpsPending) retryAttendGPS(docId, 'breaks.'+(breaks2.length-1)+'.start');
     logActivity('attend_break', 'Break started at ' + point.time);
     toast('Break started', 'ok');
 
@@ -5268,7 +5405,7 @@ async function attendAction(action, uid, today, isAdmin) {
     if (!lb2 || !lb2.start || lb2.end) { toast('No active break', 'warn'); if (btn) { btn.disabled=false; btn.style.opacity='1'; } return; }
     breaks3[breaks3.length-1] = Object.assign({}, lb2, { end: point });
     await ref.update({ breaks: breaks3 });
-    captureGPSBackground(ref, 'breaks.'+(breaks3.length-1)+'.end');
+    if (point.gpsPending) retryAttendGPS(docId, 'breaks.'+(breaks3.length-1)+'.end');
     logActivity('attend_break', 'Break ended at ' + point.time);
     toast('Break ended', 'ok');
   }
@@ -5283,10 +5420,52 @@ async function attendAction(action, uid, today, isAdmin) {
 }
 
 async function captureAttendPoint() {
-  // Returns immediately with time — GPS captured in background
   var now = new Date();
   var timeStr = now.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', hour12: true});
-  return { time: timeStr, lat: null, lng: null, address: 'Acquiring GPS...' };
+  var fix = await getAttendGPSFix();
+  if (!fix) {
+    // No fix after both tries -- record written but flagged (or hard-blocked upstream)
+    return { time: timeStr, lat: null, lng: null, address: 'Locating GPS (auto)...', gpsPending: true };
+  }
+  var address = await reverseGeocodeAttend(fix.lat, fix.lng);
+  var point = { time: timeStr, lat: fix.lat, lng: fix.lng, address: address, gpsOk: true };
+  var knownMatch = matchKnownLocation(fix.lat, fix.lng);
+  if (knownMatch) {
+    point.knownLocation = knownMatch.loc.name;
+    point.knownLocationType = knownMatch.loc.type || '';
+    point.knownLocationDist = knownMatch.distance;
+  }
+  return point;
+}
+
+// Two-tier GPS acquisition for attendance -- resolves {lat,lng} or null (never rejects)
+function getAttendGPSFix() {
+  return new Promise(function(resolve) {
+    if (!navigator.geolocation) { resolve(null); return; }
+    function ok(pos) {
+      resolve({ lat: parseFloat(pos.coords.latitude.toFixed(6)), lng: parseFloat(pos.coords.longitude.toFixed(6)) });
+    }
+    // 1st: high accuracy, accept a warm fix up to 60s old
+    navigator.geolocation.getCurrentPosition(ok, function() {
+      // 2nd: fast coarse (wifi/cell), accept up to 5min old -- reliable indoors / cold start
+      navigator.geolocation.getCurrentPosition(ok, function(){ resolve(null); },
+        { timeout: 9000, maximumAge: 300000, enableHighAccuracy: false });
+    }, { timeout: 10000, maximumAge: 60000, enableHighAccuracy: true });
+  });
+}
+
+// Best-effort reverse geocode -- never blocks attendance; falls back to coordinates
+function reverseGeocodeAttend(lat, lng) {
+  return new Promise(function(resolve) {
+    var done = false;
+    var t = setTimeout(function(){ if (!done) { done = true; resolve(lat+', '+lng); } }, 5000);
+    fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&zoom=17&addressdetails=0',
+      { headers: { 'Accept-Language': 'en' } })
+      .then(function(r){ return r.json(); })
+      .then(function(geo){ if (done) return; done = true; clearTimeout(t);
+        resolve(geo.display_name ? geo.display_name.split(',').slice(0,3).join(', ') : lat+', '+lng); })
+      .catch(function(){ if (done) return; done = true; clearTimeout(t); resolve(lat+', '+lng); });
+  });
 }
 
 // Called after Firestore write — updates GPS fields in background

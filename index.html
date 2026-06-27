@@ -3557,7 +3557,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.51';
+var APP_VERSION = 'v21.52';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -5288,21 +5288,44 @@ function renderTeam(records) {
   });
   var deduped = Object.values(byUid);
   deduped.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
-  el.innerHTML = deduped.map(function(r) {
+  el.innerHTML = deduped.map(function(r, idx) {
     var co = r.checkOut, ci = r.checkIn;
     var breaks = r.breaks || [];
     var lastBreak = breaks.length ? breaks[breaks.length-1] : null;
     var onBreak = lastBreak && lastBreak.start && !lastBreak.end;
     var state = co ? 'Out' : onBreak ? 'Break' : ci ? 'In' : '—';
     var stateColor = co ? '#6B7280' : onBreak ? '#D97706' : ci ? '#059669' : 'var(--text3)';
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px 7px 0;border-bottom:0.5px solid var(--border);gap:12px">'
-      + '<div style="flex:1;min-width:0;overflow:hidden">'
-      +   '<div style="font-size:13px;font-weight:500;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name||'-')+'</div>'
-      +   '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.role||'')+(ci?' · In: '+esc(ci.time):'')+(co?' · Out: '+esc(co.time):'')+'</div>'
+    var locHint = '';
+    if (ci) {
+      if (ci.gpsPending) locHint = '<span style="color:#D97706">&#128205; locating...</span>';
+      else if (ci.gpsOk === false) locHint = '<span style="color:#DC2626">&#9888; no GPS</span>';
+      else if (ci.knownLocation) locHint = '<span style="color:#059669">&#128205; '+esc(ci.knownLocation)+'</span>';
+      else if (ci.address) locHint = '<span style="color:var(--text3)">&#128205; '+esc(ci.address)+'</span>';
+    }
+    return '<div>'
+      + '<div onclick="toggleTeamDetail('+idx+')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px 7px 0;border-bottom:0.5px solid var(--border);gap:12px;cursor:pointer">'
+      +   '<div style="flex:1;min-width:0;overflow:hidden">'
+      +     '<div style="font-size:13px;font-weight:500;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name||'-')+'</div>'
+      +     '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.role||'')+(ci?' · In: '+esc(ci.time):'')+(co?' · Out: '+esc(co.time):'')+'</div>'
+      +     (locHint ? '<div style="font-size:10px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+locHint+'</div>' : '')
+      +   '</div>'
+      +   '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;padding-right:4px">'
+      +     '<span style="font-size:12px;font-weight:600;color:'+stateColor+';white-space:nowrap">'+state+'</span>'
+      +     '<span id="teamchev-'+idx+'" style="font-size:9px;color:var(--text3)">&#9660;</span>'
+      +   '</div>'
       + '</div>'
-      + '<div style="font-size:12px;font-weight:600;color:'+stateColor+';white-space:nowrap;flex-shrink:0;padding-right:4px">'+state+'</div>'
+      + '<div id="teamdetail-'+idx+'" style="display:none;padding:2px 0 8px 0;border-bottom:0.5px solid var(--border)">'+buildAttendLog(r)+'</div>'
       + '</div>';
   }).join('');
+}
+
+function toggleTeamDetail(idx) {
+  var d = document.getElementById('teamdetail-'+idx);
+  var chev = document.getElementById('teamchev-'+idx);
+  if (!d) return;
+  var open = d.style.display !== 'none';
+  d.style.display = open ? 'none' : 'block';
+  if (chev) chev.innerHTML = open ? '&#9660;' : '&#9650;';
 }
 
 // GPS enforcement for attendance. false = allow check-in but flag gpsOk:false when no fix.
@@ -5590,12 +5613,12 @@ async function attendMobileExportCSV() {
   }
   if (!recs) return;
   if (!recs.length) { toast('No records in selected range', 'warn'); return; }
-  var rows = [['Name','Role','Date','Check-In','Check-Out','Break (min)','Total Hours']];
+  var rows = [['Name','Role','Date','Check-In','Check-In Location','Check-In Coords','Check-Out','Check-Out Location','Check-Out Coords','Break (min)','Total Hours']];
   recs.forEach(function(r) {
     var ci=r.checkIn||{}, co=r.checkOut||{};
     var bMin=safeArr(r.breaks).reduce(function(s,b){
       if(b.start&&b.end){var sm=parseAttendTime(b.start.time),em=parseAttendTime(b.end.time);return s+Math.max(0,Math.round((em-sm)/60000));}return s;},0);
-    rows.push([r.name||'',r.role||'',r.date||'',ci.time||'',co.time||'',bMin>0?bMin:'',r.totalHours||'']);
+    rows.push([r.name||'',r.role||'',r.date||'',ci.time||'',ci.address||'',(ci.lat!=null&&ci.lng!=null?ci.lat+', '+ci.lng:''),co.time||'',co.address||'',(co.lat!=null&&co.lng!=null?co.lat+', '+co.lng:''),bMin>0?bMin:'',r.totalHours||'']);
   });
   var csv = rows.map(function(r){ return r.map(function(v){ var s=String(v); return s.indexOf(',')>=0?'"'+s+'"':s; }).join(','); }).join('\n');
   var from = document.getElementById('attend-exp-from').value;

@@ -1733,9 +1733,13 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <!-- GPS warning banner — shown if location unavailable -->
     <div id="attend-gps-warn" style="display:none;background:#FEF3C7;border:1px solid #F59E0B;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px">
       <div style="font-size:18px;flex-shrink:0">&#128993;</div>
-      <div>
+      <div style="flex:1">
         <div style="font-size:13px;font-weight:600;color:#92400E">Location unavailable</div>
         <div class="gps-warn-msg" style="font-size:12px;color:#92400E;margin-top:2px">Turn on Location in your phone's quick settings before checking in. Your check-in time will still be recorded but GPS coordinates will be missing.</div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button onclick="retryLocationPermission()" style="padding:6px 14px;border:none;border-radius:6px;background:#F59E0B;color:#fff;font-weight:600;font-size:12px;cursor:pointer">Retry</button>
+          <button onclick="showLocationHelp()" style="padding:6px 14px;border:1px solid #F59E0B;border-radius:6px;background:transparent;color:#92400E;font-weight:600;font-size:12px;cursor:pointer">How to enable</button>
+        </div>
       </div>
     </div>
 
@@ -3557,7 +3561,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.55';
+var APP_VERSION = 'v21.56';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4869,6 +4873,7 @@ function checkGPSStatus() {
         }
       }
       // Auto-retry every 5 seconds while banner is showing — silently disappears once GPS works
+      if (err.code === 1) return; // permission denied cannot self-resolve; skip polling (saves battery)
       if (!_gpsRecheckTimer) {
         _gpsRecheckTimer = setInterval(function() {
           if (warn.style.display === 'none') {
@@ -4888,6 +4893,61 @@ function checkGPSStatus() {
     },
     { timeout: 6000, maximumAge: 60000, enableHighAccuracy: false }
   );
+}
+
+function retryLocationPermission() {
+  toast('Checking location...', 'ok');
+  checkGPSStatus();
+}
+
+function closeLocationHelp() {
+  var ov = document.getElementById('_locHelpOverlay');
+  if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+}
+
+function showLocationHelp() {
+  var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '');
+  var steps;
+  if (isIOS) {
+    steps = ['Open the phone <b>Settings</b> app',
+             'Go to <b>Privacy &amp; Security</b> &#8594; <b>Location Services</b> &#8594; turn it <b>On</b>',
+             'Scroll to <b>Safari Websites</b> and set it to <b>While Using the App</b>',
+             'Come back here and tap <b>Retry</b>'];
+  } else if (standalone) {
+    steps = ['Open phone <b>Settings</b> &#8594; <b>Apps</b>',
+             'Find and open <b>OnePLUS</b> (this app)',
+             'Tap <b>Permissions</b> &#8594; <b>Location</b> &#8594; <b>Allow</b> (While using the app)',
+             'Turn on <b>Use precise location</b>',
+             'Make sure the phone Location master toggle is on, then tap <b>Retry</b>'];
+  } else {
+    steps = ['Tap the <b>&#128274; / &#9432;</b> icon just left of the web address',
+             'Open <b>Permissions</b> &#8594; <b>Location</b> &#8594; <b>Allow</b>',
+             'Or use Chrome menu <b>&#8942;</b> &#8594; <b>Site settings</b> &#8594; <b>Location</b>',
+             'Make sure the phone Location toggle is on, then tap <b>Retry</b>'];
+  }
+  var stepsHtml = '';
+  for (var i = 0; i < steps.length; i++) {
+    stepsHtml += '<div style="display:flex;gap:10px;margin-bottom:9px;align-items:flex-start">'
+      + '<span style="flex-shrink:0;width:20px;height:20px;border-radius:50%;background:#059669;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">' + (i+1) + '</span>'
+      + '<span style="font-size:13px;color:#222;line-height:1.45">' + steps[i] + '</span>'
+      + '</div>';
+  }
+  closeLocationHelp();
+  var ov = document.createElement('div');
+  ov.id = '_locHelpOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = '<div style="background:#ffffff;border-radius:14px;max-width:420px;width:100%;padding:18px;max-height:85vh;overflow:auto">'
+    + '<div style="font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:4px">Enable location</div>'
+    + '<div style="font-size:12px;color:#666;margin-bottom:14px">A web app cannot open Settings for you, so here is the exact path on your phone:</div>'
+    + stepsHtml
+    + '<div style="display:flex;gap:8px;margin-top:14px">'
+    +   '<button onclick="closeLocationHelp();retryLocationPermission()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#059669;color:#fff;font-weight:600;font-size:13px;cursor:pointer">Retry now</button>'
+    +   '<button onclick="closeLocationHelp()" style="flex:1;padding:11px;border:1px solid #ddd;border-radius:8px;background:transparent;color:#444;font-weight:600;font-size:13px;cursor:pointer">Close</button>'
+    + '</div>'
+    + '</div>';
+  ov.onclick = function(e) { if (e.target === ov) closeLocationHelp(); };
+  document.body.appendChild(ov);
 }
 
 function initAttendScreen() {

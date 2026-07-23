@@ -3561,7 +3561,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.56';
+var APP_VERSION = 'v21.57';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -10866,7 +10866,10 @@ function loadHO() {
         if (isForMe || isMine) overdue.push(h);
       });
       renderHOOverdue(overdue);
-    }).catch(function(){});
+    }).catch(function(e){
+      console.warn('overdue handover query failed', e && e.message);
+      toast('Could not load overdue handovers','warn');
+    });
 }
 
 function renderHOOverdue(overdue) {
@@ -11579,6 +11582,9 @@ async function hoConfirmExecute() {
         handoverOrders: _pendingOrders.map(function(o){ return {name: o.patientName, amt: o.cashAmt, id: o.orderId}; })
       });
     }
+    // The Overdue section is built from a one-time .get(); without this the
+    // accepted/rejected card stays on screen with its buttons still live.
+    loadHO();
   }).catch(function(err){
     if (err.message === 'already_actioned') toast('Already accepted or rejected by another session','warn');
     else if (err.message === 'not_found') toast('Handover record not found','err');

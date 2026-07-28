@@ -1603,6 +1603,17 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <input type="number" id="qp-amt" inputmode="numeric"
       style="width:100%;padding:12px 14px;font-size:20px;font-weight:600;border:1.5px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);margin-bottom:6px">
     <div id="qp-err" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:10px"></div>
+    <!-- v21.60 payment proof -->
+    <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:6px">Payment proof <span style="text-transform:none">(optional)</span></div>
+    <input type="file" id="qp-proof-input" accept="image/*" style="display:none" onchange="handleQpPhoto(this)">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button type="button" class="btn" style="flex:1;font-size:12px;padding:8px" onclick="captureQpPhoto('camera')">&#128247; Camera</button>
+      <button type="button" class="btn" style="flex:1;font-size:12px;padding:8px" onclick="captureQpPhoto('gallery')">&#128194; Gallery</button>
+    </div>
+    <div id="qp-proof-preview" style="display:none;margin-bottom:10px;position:relative">
+      <img id="qp-proof-img" style="width:100%;border-radius:8px;border:0.5px solid var(--border)">
+      <button type="button" onclick="removeQpProof()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:14px;cursor:pointer">&#10005;</button>
+    </div>
     <button id="qp-save-btn" class="btn btn-primary" style="width:100%;font-size:15px;padding:13px"
       ontouchend="event.preventDefault();submitQuickPay()"
       onclick="submitQuickPay()">&#10003; Confirm Payment</button>
@@ -2098,6 +2109,16 @@ input,select,textarea{font-family:var(--sans);font-size:14px;outline:none}
     <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Amount Received</div>
     <input type="number" id="cdue-amt" inputmode="numeric" style="width:100%;padding:10px 12px;border:0.5px solid var(--border-strong);border-radius:var(--radius);font-size:16px;margin-bottom:6px">
     <div id="cdue-err" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:12px"></div>
+    <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Payment Proof <span style="text-transform:none;letter-spacing:0;color:var(--text3)">(optional)</span></div>
+    <input type="file" id="cdue-proof-input" accept="image/*" style="display:none" onchange="handleCduePhoto(this)">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+      <button type="button" class="btn" style="font-size:12px;padding:8px" onclick="captureCduePhoto('camera')">&#128247; Camera</button>
+      <button type="button" class="btn" style="font-size:12px;padding:8px" onclick="captureCduePhoto('gallery')">&#128194; Gallery</button>
+    </div>
+    <div id="cdue-proof-preview" style="display:none;margin-bottom:10px;position:relative">
+      <img id="cdue-proof-img" style="width:100%;border-radius:8px;border:0.5px solid var(--border)">
+      <button type="button" onclick="removeCdueProof()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:14px;cursor:pointer">&#10005;</button>
+    </div>
     <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="submitCollectDue()">&#10003; Confirm Payment Received</button>
     <button class="btn" style="width:100%" onclick="closeCollectDue()">Cancel</button>
   </div>
@@ -2834,6 +2855,7 @@ function openQuickPay(orderId, dueAmt, payMode) {
   // Pre-fill name from fieldOrders
   var o = fieldOrders.find(function(x){ return x.id===orderId; });
   if (o) document.getElementById('qp-name').textContent = esc(o.patientName||'');
+  removeQpProof();
   modal.style.display = 'flex';
   document.getElementById('qp-amt').focus();
 }
@@ -2842,6 +2864,51 @@ function closeQuickPay() {
   var modal = document.getElementById('quick-pay-modal');
   if (modal) modal.style.display = 'none';
   _qpOrderId = null;
+  removeQpProof();
+}
+
+// v21.60 — payment proof on the phlebotomist Quick Pay path
+var _qpProofB64 = '';
+var _qpProofFailed = false;
+
+function captureQpPhoto(source) {
+  var input = document.getElementById('qp-proof-input');
+  if (source === 'camera') input.setAttribute('capture', 'environment');
+  else input.removeAttribute('capture');
+  input.click();
+}
+
+function handleQpPhoto(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      var maxW = 600;
+      var scale = img.width > maxW ? maxW / img.width : 1;
+      canvas.width  = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      var b64 = canvas.toDataURL('image/jpeg', 0.6);
+      if (b64.length > 270000) b64 = canvas.toDataURL('image/jpeg', 0.45);
+      _qpProofB64 = b64;
+      document.getElementById('qp-proof-img').src = b64;
+      document.getElementById('qp-proof-preview').style.display = 'block';
+      toast('Payment proof added (' + Math.round(b64.length*0.75/1024) + 'KB)', 'ok');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeQpProof() {
+  _qpProofB64 = '';
+  var inp = document.getElementById('qp-proof-input');
+  if (inp) inp.value = '';
+  var pv = document.getElementById('qp-proof-preview');
+  if (pv) pv.style.display = 'none';
 }
 
 function setQpMode(m) {
@@ -2872,8 +2939,32 @@ async function submitQuickPay() {
     var newDue  = Math.max(0, (o.dueAmount||0) - amt);
     var byName  = (curProfile&&curProfile.name)||(curUser&&curUser.email)||'';
 
-    var instalment = { amt:amt, mode:_qpMode, byUid:curUser&&curUser.uid, byName:byName, at:new Date().toISOString() };
     var existing   = Array.isArray(o.duePayments) ? o.duePayments : [];
+
+    // v21.60: proof uploaded before the write so the URL lives inside the
+    // instalment. Field collections are the highest-risk cash events in the
+    // system — they had no evidence trail at all before this.
+    var _qpProofUrl = '';
+    _qpProofFailed = false;
+    if (_qpProofB64) {
+      btn.textContent = 'Uploading proof...';
+      try {
+        var qpPath = 'proof-photos/' + todayStr() + '/' + _qpOrderId
+                   + '_due' + (existing.length + 1) + '_' + Date.now() + '.jpg';
+        var qpRef  = firebase.storage().ref(qpPath);
+        var qpSnap = await qpRef.putString(_qpProofB64, 'data_url');
+        _qpProofUrl = await qpSnap.ref.getDownloadURL();
+      } catch (qe) {
+        // Cash already collected — record the payment, flag the missing proof.
+        _qpProofFailed = true;
+        console.warn('Quick pay proof upload failed:', qe);
+      }
+      btn.textContent = 'Saving...';
+    }
+
+    var instalment = { amt:amt, mode:_qpMode, byUid:curUser&&curUser.uid, byName:byName, at:new Date().toISOString() };
+    if (_qpProofUrl)    instalment.proof = _qpProofUrl;
+    if (_qpProofFailed) instalment.proofFailed = true;
     existing.push(instalment);
 
     await db.collection('orders').doc(_qpOrderId).update({
@@ -2891,6 +2982,7 @@ async function submitQuickPay() {
 
     logActivity('due_collect', 'Quick pay Rs.'+amt+' ('+_qpMode+') from '+(o.patientName||_qpOrderId.slice(-6)));
     toast('Rs.'+amt.toLocaleString('en-IN')+' recorded ✓', 'ok');
+    if (_qpProofFailed) toast('Proof photo did NOT upload — payment was still recorded', 'warn');
     closeQuickPay();
     // Refresh phlebo dash
     startPhleboDash();
@@ -3561,7 +3653,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.59';
+var APP_VERSION = 'v21.60';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -8409,10 +8501,18 @@ function renderOrderDetail(o) {
           var rows = o.duePayments.map(function(p,i) {
             var d = p.at ? new Date(p.at) : null;
             var ds = d ? d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '-';
-            return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border)">'
-              +'<span style="color:var(--text3)">'+(i+1)+'. '+esc(p.byName||'-')+' · '+ds+'</span>'
-              +'<span style="font-weight:600;color:var(--accent)">Rs.'+(p.amt||0).toLocaleString('en-IN')+' '+(p.mode||'cash').toUpperCase()+'</span>'
-              +'</div>';
+            var proofBit = '';
+            if (p.proof) {
+              proofBit = '<div style="padding:4px 0 6px"><a href="'+esc(p.proof)+'" target="_blank" rel="noopener">'
+                + '<img src="'+esc(p.proof)+'" style="height:54px;border-radius:6px;border:0.5px solid var(--border)"></a></div>';
+            } else if (p.proofFailed) {
+              proofBit = '<div style="padding:2px 0 6px;font-size:10px;color:var(--red)">&#9888; Proof photo failed to upload</div>';
+            }
+            return '<div style="border-bottom:0.5px solid var(--border);padding:3px 0">'
+              + '<div style="display:flex;justify-content:space-between;font-size:11px">'
+              + '<span style="color:var(--text3)">'+(i+1)+'. '+esc(p.byName||'-')+' \u00b7 '+ds+'</span>'
+              + '<span style="font-weight:600;color:var(--accent)">Rs.'+(p.amt||0).toLocaleString('en-IN')+' '+(p.mode||'cash').toUpperCase()+'</span>'
+              + '</div>' + proofBit + '</div>';
           }).join('');
           var totalPaid = o.duePayments.reduce(function(s,p){ return s+(p.amt||0); },0);
           instalHtml = '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:10px">'
@@ -9614,6 +9714,7 @@ function openCollectDue(orderId, dueAmt) {
   document.getElementById('cdue-amt').value = dueAmt;
   document.getElementById('cdue-err').textContent = '';
   setCduePay('cash');
+  removeCdueProof();
   var bg = document.getElementById('collect-due-bg');
   bg.style.display = 'flex';
 }
@@ -9621,6 +9722,50 @@ function openCollectDue(orderId, dueAmt) {
 function closeCollectDue() {
   document.getElementById('collect-due-bg').style.display = 'none';
   _cDueOrderId = null;
+  removeCdueProof();
+}
+
+// v21.60 — per-instalment payment proof capture
+var _cDueProofB64 = '';
+
+function captureCduePhoto(source) {
+  var input = document.getElementById('cdue-proof-input');
+  if (source === 'camera') input.setAttribute('capture', 'environment');
+  else input.removeAttribute('capture');
+  input.click();
+}
+
+function handleCduePhoto(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      var maxW = 600;
+      var scale = img.width > maxW ? maxW / img.width : 1;
+      canvas.width  = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      var b64 = canvas.toDataURL('image/jpeg', 0.6);
+      if (b64.length > 270000) b64 = canvas.toDataURL('image/jpeg', 0.45);
+      var kb = Math.round(b64.length * 0.75 / 1024);
+      _cDueProofB64 = b64;
+      document.getElementById('cdue-proof-img').src = b64;
+      document.getElementById('cdue-proof-preview').style.display = 'block';
+      toast('Payment proof added (' + kb + 'KB)', 'ok');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeCdueProof() {
+  _cDueProofB64 = '';
+  var inp = document.getElementById('cdue-proof-input');
+  if (inp) inp.value = '';
+  document.getElementById('cdue-proof-preview').style.display = 'none';
 }
 
 function setCduePay(mode) {
@@ -9653,6 +9798,31 @@ async function submitCollectDue() {
     var now = new Date();
     var timeStr = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
 
+    // Append to existing duePayments array (or start new one)
+    var existingInstalments = Array.isArray(o.duePayments) ? o.duePayments : [];
+
+    // v21.60: proof is uploaded BEFORE the write so its URL can live INSIDE the
+    // instalment. A top-level paymentProof field would be overwritten by the
+    // next partial payment, losing the link between proof and instalment.
+    var proofUrl = '', proofFailed = false;
+    if (_cDueProofB64) {
+      btn.textContent = 'Uploading proof...';
+      try {
+        var pPath = 'proof-photos/' + todayStr() + '/' + _cDueOrderId
+                  + '_due' + (existingInstalments.length + 1) + '_' + Date.now() + '.jpg';
+        var pRef  = firebase.storage().ref(pPath);
+        var pSnap = await pRef.putString(_cDueProofB64, 'data_url');
+        proofUrl  = await pSnap.ref.getDownloadURL();
+      } catch (pe) {
+        // The cash was physically collected. Never block the payment record on
+        // a failed upload — flag it instead (same allow-but-flag model as
+        // gpsOk) and warn the user rather than swallowing the error.
+        proofFailed = true;
+        console.warn('Due proof upload failed:', pe);
+      }
+      btn.textContent = 'Saving...';
+    }
+
     // Build instalment record
     var instalment = {
       amt:    amt,
@@ -9661,9 +9831,9 @@ async function submitCollectDue() {
       byName: byName,
       at:     new Date().toISOString()
     };
+    if (proofUrl)    instalment.proof = proofUrl;
+    if (proofFailed) instalment.proofFailed = true;
 
-    // Append to existing duePayments array (or start new one)
-    var existingInstalments = Array.isArray(o.duePayments) ? o.duePayments : [];
     existingInstalments.push(instalment);
 
     var update = {
@@ -9683,6 +9853,7 @@ async function submitCollectDue() {
     };
     await db.collection('orders').doc(_cDueOrderId).update(update);
     toast('Payment of Rs.' + amt.toLocaleString('en-IN') + ' recorded ✓', 'ok');
+    if (proofFailed) toast('Proof photo did NOT upload — payment was still recorded', 'warn');
     logActivity('due_collect', 'Collected Rs.' + amt.toLocaleString('en-IN') + ' from ' + ((curDetailOrder && curDetailOrder.patientName) || _cDueOrderId.slice(-6).toUpperCase()));
     closeCollectDue();
     // Refresh order detail

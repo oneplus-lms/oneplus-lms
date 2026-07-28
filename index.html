@@ -2574,7 +2574,7 @@ var phleboDashUnsub = null;
 function _phDueCollect(btn) {
   var id  = btn.getAttribute('data-id');
   var due = parseFloat(btn.getAttribute('data-due')) || 0;
-  openCollectDue(id, due);
+  openCollectDue(id, due, startPhleboDash);
 }
 var URGENT_LATE_MINS = 30;
 
@@ -2931,6 +2931,9 @@ async function submitQuickPay() {
   var btn = document.getElementById('qp-save-btn');
   btn.disabled = true; btn.textContent = 'Saving...';
 
+  // v21.61: overlap the proof upload with the order read.
+  var qpProofPromise = _startProofUpload(_qpProofB64, _qpOrderId);
+
   try {
     var snap = await db.collection('orders').doc(_qpOrderId).get();
     var o = snap.data();
@@ -2941,25 +2944,18 @@ async function submitQuickPay() {
 
     var existing   = Array.isArray(o.duePayments) ? o.duePayments : [];
 
-    // v21.60: proof uploaded before the write so the URL lives inside the
-    // instalment. Field collections are the highest-risk cash events in the
-    // system — they had no evidence trail at all before this.
+    // v21.61: upload was started before the read; collect it here.
     var _qpProofUrl = '';
     _qpProofFailed = false;
-    if (_qpProofB64) {
-      btn.textContent = 'Uploading proof...';
-      try {
-        var qpPath = 'proof-photos/' + todayStr() + '/' + _qpOrderId
-                   + '_due' + (existing.length + 1) + '_' + Date.now() + '.jpg';
-        var qpRef  = firebase.storage().ref(qpPath);
-        var qpSnap = await qpRef.putString(_qpProofB64, 'data_url');
-        _qpProofUrl = await qpSnap.ref.getDownloadURL();
-      } catch (qe) {
+    if (qpProofPromise) {
+      var qRes = await qpProofPromise;
+      if (qRes && qRes.url) {
+        _qpProofUrl = qRes.url;
+      } else {
         // Cash already collected — record the payment, flag the missing proof.
         _qpProofFailed = true;
-        console.warn('Quick pay proof upload failed:', qe);
+        console.warn('Quick pay proof upload failed:', qRes && qRes.err);
       }
-      btn.textContent = 'Saving...';
     }
 
     var instalment = { amt:amt, mode:_qpMode, byUid:curUser&&curUser.uid, byName:byName, at:new Date().toISOString() };
@@ -3653,7 +3649,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.60';
+var APP_VERSION = 'v21.61';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -9619,9 +9615,11 @@ function loadDuesTracking() {
           html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--surface2);border-radius:6px;margin-bottom:4px;cursor:pointer" onclick="closeDuesTrackingAndOpen(\''+o.id+'\')">'
             +'<div><div style="font-size:12px;font-weight:500">'+esc(o.patientName)+'</div>'
             +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3)">'+esc(o.date||'')+(suppressed?' · 🔕 Suppressed':'')+'</div></div>'
-            +'<div style="text-align:right">'
-            +'<div style="font-size:12px;font-weight:500;color:#D97706">Rs.'+due.toLocaleString('en-IN')+'</div>'
-            +'<div style="font-size:10px;color:var(--accent)">View ›</div>'
+            +'<div style="text-align:right;display:flex;align-items:center;gap:8px">'
+            +'<div><div style="font-size:12px;font-weight:500;color:#D97706">Rs.'+due.toLocaleString('en-IN')+'</div>'
+            +'<div style="font-size:10px;color:var(--accent)">View ›</div></div>'
+            +'<button style="flex-shrink:0;font-size:11px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;cursor:pointer;white-space:nowrap"'
+            +' onclick="event.stopPropagation();openCollectDue(\''+o.id+'\','+due+',loadDuesTracking)">&#128176; Collect</button>'
             +'</div></div>';
         });
         html += '</div>';
@@ -9706,10 +9704,15 @@ function toggleReminderSuppression(orderId, suppress) {
     .catch(function(e){ toast('Error: ' + e.message, 'err'); });
 }
 
-function openCollectDue(orderId, dueAmt) {
+function openCollectDue(orderId, dueAmt, onDone) {
   _cDueOrderId = orderId;
   _cDueMax = dueAmt;
   _cDuePayMode = 'cash';
+  // v21.61: submitQuickPay refreshes its list but submitCollectDue never did,
+  // so a collected row stayed on screen with its old amount and a live button
+  // (same failure as the v21.57 overdue-handover cards). Callers that render a
+  // list pass their own reloader here.
+  _cDueOnDone = (typeof onDone === 'function') ? onDone : null;
   document.getElementById('cdue-sub').textContent = 'Due amount: Rs.' + dueAmt.toLocaleString('en-IN');
   document.getElementById('cdue-amt').value = dueAmt;
   document.getElementById('cdue-err').textContent = '';
@@ -9725,8 +9728,39 @@ function closeCollectDue() {
   removeCdueProof();
 }
 
+// v21.61 — base64 data-URLs are ~33% larger than the bytes they encode.
+// Uploading a Blob instead cuts the payload by roughly a quarter, which is the
+// single biggest win on a phlebotomist's mobile data.
+function _b64ToBlob(dataUrl) {
+  var parts = String(dataUrl).split(',');
+  var mime  = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+  var bin   = atob(parts[1]);
+  var arr   = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+// Starts the upload immediately and NEVER rejects — it resolves to
+// {url:...} or {err:...}. Returning a settled sentinel instead of a rejecting
+// promise avoids an unhandled-rejection if the upload fails while we are still
+// awaiting the Firestore read.
+function _startProofUpload(b64, orderId) {
+  if (!b64) return null;
+  try {
+    var path = 'proof-photos/' + todayStr() + '/' + orderId + '_due_' + Date.now() + '.jpg';
+    return firebase.storage().ref(path)
+      .put(_b64ToBlob(b64), { contentType: 'image/jpeg' })
+      .then(function(s) { return s.ref.getDownloadURL(); })
+      .then(function(url) { return { url: url }; })
+      .catch(function(err) { return { err: err }; });
+  } catch (e) {
+    return Promise.resolve({ err: e });
+  }
+}
+
 // v21.60 — per-instalment payment proof capture
 var _cDueProofB64 = '';
+var _cDueOnDone   = null;
 
 function captureCduePhoto(source) {
   var input = document.getElementById('cdue-proof-input');
@@ -9787,6 +9821,10 @@ async function submitCollectDue() {
   var btn = document.querySelector('#collect-due-bg .btn-primary');
   btn.disabled = true; btn.textContent = 'Saving...';
 
+  // v21.61: fire the proof upload FIRST. It does not depend on the order read,
+  // so the network round-trips overlap instead of queueing.
+  var proofPromise = _startProofUpload(_cDueProofB64, _cDueOrderId);
+
   try {
     var snap = await db.collection('orders').doc(_cDueOrderId).get();
     var o = snap.data();
@@ -9801,26 +9839,20 @@ async function submitCollectDue() {
     // Append to existing duePayments array (or start new one)
     var existingInstalments = Array.isArray(o.duePayments) ? o.duePayments : [];
 
-    // v21.60: proof is uploaded BEFORE the write so its URL can live INSIDE the
-    // instalment. A top-level paymentProof field would be overwritten by the
-    // next partial payment, losing the link between proof and instalment.
+    // v21.61: the upload was kicked off before the Firestore read (see above)
+    // so the two run concurrently instead of end to end. Collect the result.
     var proofUrl = '', proofFailed = false;
-    if (_cDueProofB64) {
-      btn.textContent = 'Uploading proof...';
-      try {
-        var pPath = 'proof-photos/' + todayStr() + '/' + _cDueOrderId
-                  + '_due' + (existingInstalments.length + 1) + '_' + Date.now() + '.jpg';
-        var pRef  = firebase.storage().ref(pPath);
-        var pSnap = await pRef.putString(_cDueProofB64, 'data_url');
-        proofUrl  = await pSnap.ref.getDownloadURL();
-      } catch (pe) {
+    if (proofPromise) {
+      var pRes = await proofPromise;
+      if (pRes && pRes.url) {
+        proofUrl = pRes.url;
+      } else {
         // The cash was physically collected. Never block the payment record on
         // a failed upload — flag it instead (same allow-but-flag model as
         // gpsOk) and warn the user rather than swallowing the error.
         proofFailed = true;
-        console.warn('Due proof upload failed:', pe);
+        console.warn('Due proof upload failed:', pRes && pRes.err);
       }
-      btn.textContent = 'Saving...';
     }
 
     // Build instalment record
@@ -9865,6 +9897,7 @@ async function submitCollectDue() {
       renderOrderDetail(curDetailOrder);
     }
     loadStats();
+    if (_cDueOnDone) { try { _cDueOnDone(); } catch(re) { console.warn('post-collect refresh failed:', re); } }
   } catch(e) {
     errEl.textContent = 'Save failed: ' + e.message;
     btn.disabled = false; btn.textContent = '✓ Confirm Payment Received';

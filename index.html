@@ -3561,7 +3561,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.57';
+var APP_VERSION = 'v21.59';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4915,11 +4915,11 @@ function showLocationHelp() {
              'Scroll to <b>Safari Websites</b> and set it to <b>While Using the App</b>',
              'Come back here and tap <b>Retry</b>'];
   } else if (standalone) {
-    steps = ['Open phone <b>Settings</b> &#8594; <b>Apps</b>',
-             'Find and open <b>OnePLUS</b> (this app)',
+    steps = ['<b>Long-press the OnePLUS icon</b> on your home screen, then tap <b>&#9432; App info</b>',
              'Tap <b>Permissions</b> &#8594; <b>Location</b> &#8594; <b>Allow</b> (While using the app)',
              'Turn on <b>Use precise location</b>',
-             'Make sure the phone Location master toggle is on, then tap <b>Retry</b>'];
+             'Make sure the phone Location master toggle is on, then tap <b>Retry</b>',
+             'No icon shortcut? Use <b>Settings</b> &#8594; <b>Apps</b> &#8594; <b>OnePLUS</b> &#8594; <b>Permissions</b> instead'];
   } else {
     steps = ['Tap the <b>&#128274; / &#9432;</b> icon just left of the web address',
              'Open <b>Permissions</b> &#8594; <b>Location</b> &#8594; <b>Allow</b>',
@@ -11471,6 +11471,14 @@ function hoConfirm(action, hvid, fromName, amount) {
 function hoConfirmCancel() {
   document.getElementById('ho-confirm-overlay').style.display='none';
   hoPendingAction = null; hoPinBuf = '';
+  // v21.59 CASH INTEGRITY: fieldTransferAction() reuses this same overlay and
+  // sets _transferPinPending + _hoExecuteOverride. Cancelling here previously
+  // left both set, so the NEXT PIN entry (e.g. a handover accept) hit the
+  // override branch in hoConfirmExecute() and silently executed the abandoned
+  // transfer instead of the action the user actually authorised.
+  // _executeTransferPin() clears these itself; the cancel path must too.
+  _transferPinPending = null;
+  _hoExecuteOverride  = null;
 }
 function hoPinKey(k) {
   if (hoPinBuf.length >= 4) return;

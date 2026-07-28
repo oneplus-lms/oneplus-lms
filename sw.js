@@ -1,5 +1,5 @@
-// LabFlow Service Worker — labflow-v21.62
-const CACHE_NAME = 'labflow-v21.62';
+// LabFlow Service Worker — labflow-v21.63
+const CACHE_NAME = 'labflow-v21.63';
 
 // v21.62: these were '/oneplus-lms/icon-192.png' but the real files are
 // icon192.png / icon512.png (no hyphen). cache.addAll() rejects atomically on

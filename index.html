@@ -3649,7 +3649,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.62';
+var APP_VERSION = 'v21.63';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -8477,6 +8477,7 @@ function renderOrderDetail(o) {
           + (role==='admin' ? '<button class="btn" style="width:100%;margin-bottom:10px;border-color:#DC2626;color:#DC2626;font-size:13px" onclick="confirmDeleteOrder(\''+o.id+'\')">&#128465; Delete Order</button>' : '');
         return ''; // lab sees no edit button
       })()
+    + buildPaymentProofSection(o)
     + (function(){
         var role = curProfile && curProfile.role || '';
         var isOwner = o.createdBy === (curUser && curUser.uid);
@@ -8491,32 +8492,11 @@ function renderOrderDetail(o) {
           // Admin-only credit collection button
           return '<button class="btn" style="width:100%;margin-bottom:10px;border-color:#7C3AED;color:#7C3AED;font-weight:500" onclick="openCollectDue(\''+o.id+'\','+dueAmt+')">&#128196; Collect Credit Payment — Rs.'+dueAmt.toLocaleString('en-IN')+'</button>';
         }
-        // Instalment history
-        var instalHtml = '';
-        if (Array.isArray(o.duePayments) && o.duePayments.length > 0) {
-          var rows = o.duePayments.map(function(p,i) {
-            var d = p.at ? new Date(p.at) : null;
-            var ds = d ? d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '-';
-            var proofBit = '';
-            if (p.proof) {
-              proofBit = '<div style="padding:4px 0 6px"><a href="'+esc(p.proof)+'" target="_blank" rel="noopener">'
-                + '<img src="'+esc(p.proof)+'" style="height:54px;border-radius:6px;border:0.5px solid var(--border)"></a></div>';
-            } else if (p.proofFailed) {
-              proofBit = '<div style="padding:2px 0 6px;font-size:10px;color:var(--red)">&#9888; Proof photo failed to upload</div>';
-            }
-            return '<div style="border-bottom:0.5px solid var(--border);padding:3px 0">'
-              + '<div style="display:flex;justify-content:space-between;font-size:11px">'
-              + '<span style="color:var(--text3)">'+(i+1)+'. '+esc(p.byName||'-')+' \u00b7 '+ds+'</span>'
-              + '<span style="font-weight:600;color:var(--accent)">Rs.'+(p.amt||0).toLocaleString('en-IN')+' '+(p.mode||'cash').toUpperCase()+'</span>'
-              + '</div>' + proofBit + '</div>';
-          }).join('');
-          var totalPaid = o.duePayments.reduce(function(s,p){ return s+(p.amt||0); },0);
-          instalHtml = '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:10px">'
-            +'<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:6px">Payment instalments · Rs.'+totalPaid.toLocaleString('en-IN')+' collected</div>'
-            + rows
-            +'</div>';
-        }
-        return instalHtml
+        // v21.63: instalment history moved OUT of this block into
+        // buildPaymentProofSection(), which renders unconditionally. Inside
+        // this gate it vanished the moment an order was fully paid, taking
+        // the payment proofs with it.
+        return ''
           + '<button class="btn" style="width:100%;margin-bottom:10px;border-color:#D97706;color:#D97706;font-weight:500" onclick="openCollectDue(\''+o.id+'\','+dueAmt+')">&#128176; Collect Due — Rs.'+dueAmt.toLocaleString('en-IN')+' remaining</button>'
           + (function(){
               var role2 = curProfile && curProfile.role || '';
@@ -9565,6 +9545,149 @@ function downloadTRFpdf() {
   }
 }
 
+
+// ── v21.63  ATTACH PAYMENT PROOF LATER ─────────────────────────
+// A UPI screenshot usually arrives AFTER the payment is recorded — at booking
+// or in the field. Proof therefore has to be attachable to an already-written
+// payment. A proof added later is weaker evidence than one captured at the
+// moment of payment, so it is stamped (proofAddedAt/By) and labelled as such.
+var _attachTarget = null;   // {orderId, kind:'booking'|'instalment', idx}
+
+function _proofThumb(url, addedAt) {
+  return '<a href="'+esc(url)+'" target="_blank" rel="noopener">'
+    + '<img src="'+esc(url)+'" style="height:54px;border-radius:6px;border:0.5px solid var(--border)"></a>'
+    + (addedAt ? '<div style="font-size:9px;color:var(--text3);font-family:var(--mono)">added later</div>' : '');
+}
+
+function _attachBtn(orderId, kind, idx, label) {
+  return '<button class="btn" style="font-size:11px;padding:4px 9px;white-space:nowrap"'
+    + ' onclick="startAttachProof(\''+orderId+'\',\''+kind+'\','+idx+')">&#128206; '+label+'</button>';
+}
+
+function buildPaymentProofSection(o) {
+  var role = (curProfile && curProfile.role) || '';
+  if (role === 'lab' || role === 'senior_lab') return '';   // lab never sees money
+  var canAttach = ['admin','pathologist','manager','reception','phlebotomist'].indexOf(role) !== -1
+                  && !_impersonating;   // cash-adjacent write — blocked in View As
+  var body = '';
+
+  // Booking-time payment proof
+  var bRow = '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:0.5px solid var(--border)">'
+    + '<span style="font-size:11px;color:var(--text3)">At booking</span>';
+  if (o.paymentProof) {
+    bRow += '<span style="text-align:right">' + _proofThumb(o.paymentProof, o.paymentProofAddedAt) + '</span>';
+  } else if (canAttach) {
+    bRow += _attachBtn(o.id, 'booking', -1, 'Add proof');
+  } else {
+    bRow += '<span style="font-size:10px;color:var(--text3)">\u2014</span>';
+  }
+  body += bRow + '</div>';
+
+  // One row per instalment
+  if (Array.isArray(o.duePayments) && o.duePayments.length) {
+    body += o.duePayments.map(function(p, i) {
+      var d  = p.at ? new Date(p.at) : null;
+      var ds = d ? d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '-';
+      var right;
+      if (p.proof)          right = _proofThumb(p.proof, p.proofAddedAt);
+      else if (canAttach)   right = _attachBtn(o.id, 'instalment', i, 'Add proof');
+      else if (p.proofFailed) right = '<span style="font-size:10px;color:var(--red)">&#9888; upload failed</span>';
+      else                  right = '<span style="font-size:10px;color:var(--text3)">\u2014</span>';
+      return '<div style="border-bottom:0.5px solid var(--border);padding:4px 0">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        + '<span style="font-size:11px;color:var(--text3)">'+(i+1)+'. '+esc(p.byName||'-')+' \u00b7 '+ds+'</span>'
+        + '<span style="display:flex;align-items:center;gap:8px">'
+        + '<span style="font-size:11px;font-weight:600;color:var(--accent);white-space:nowrap">Rs.'+(p.amt||0).toLocaleString('en-IN')+' '+(p.mode||'cash').toUpperCase()+'</span>'
+        + right + '</span></div></div>';
+    }).join('');
+  }
+
+  var totalPaid = (Array.isArray(o.duePayments) ? o.duePayments : []).reduce(function(s,p){ return s+(p.amt||0); }, 0);
+  return '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:10px">'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:6px">Payment proof'
+    + (totalPaid ? ' \u00b7 Rs.'+totalPaid.toLocaleString('en-IN')+' in instalments' : '') + '</div>'
+    + body
+    + '<input type="file" id="attach-proof-input" accept="image/*" style="display:none" onchange="handleAttachProof(this)">'
+    + '</div>';
+}
+
+function startAttachProof(orderId, kind, idx) {
+  _attachTarget = { orderId: orderId, kind: kind, idx: idx };
+  var inp = document.getElementById('attach-proof-input');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+
+function handleAttachProof(input) {
+  var file = input.files[0];
+  if (!file || !_attachTarget) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      var scale = img.width > 600 ? 600 / img.width : 1;
+      canvas.width  = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      var b64 = canvas.toDataURL('image/jpeg', 0.6);
+      if (b64.length > 270000) b64 = canvas.toDataURL('image/jpeg', 0.45);
+      _saveAttachedProof(b64);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function _saveAttachedProof(b64) {
+  var t = _attachTarget;
+  if (!t) return;
+  if (_impersonating) { toast('Exit “View As” before attaching proof', 'warn'); return; }
+  toast('Uploading proof\u2026', 'ok');
+  var res = await _startProofUpload(b64, t.orderId);
+  if (!res || !res.url) {
+    console.warn('Attach proof upload failed:', res && res.err);
+    toast('Proof upload failed \u2014 nothing was saved', 'err');
+    return;
+  }
+  var ref  = db.collection('orders').doc(t.orderId);
+  var meta = {
+    at:     new Date().toISOString(),
+    byUid:  curUser && curUser.uid,
+    byName: (curProfile && curProfile.name) || (curUser && curUser.email) || ''
+  };
+  try {
+    if (t.kind === 'booking') {
+      await ref.update({
+        paymentProof:            res.url,
+        paymentProofAddedAt:     meta.at,
+        paymentProofAddedBy:     meta.byUid,
+        paymentProofAddedByName: meta.byName
+      });
+    } else {
+      // duePayments is an array: read-modify-write would clobber an instalment
+      // appended by another device between the read and the write. Transaction.
+      await db.runTransaction(async function(tx) {
+        var snap = await tx.get(ref);
+        if (!snap.exists) throw new Error('Order not found');
+        var arr = snap.data().duePayments;
+        if (!Array.isArray(arr) || !arr[t.idx]) throw new Error('Instalment no longer exists');
+        arr[t.idx].proof            = res.url;
+        arr[t.idx].proofAddedAt     = meta.at;
+        arr[t.idx].proofAddedBy     = meta.byUid;
+        arr[t.idx].proofAddedByName = meta.byName;
+        delete arr[t.idx].proofFailed;
+        tx.update(ref, { duePayments: arr });
+      });
+    }
+    logActivity('proof_attach', 'Payment proof attached \u00b7 ' + t.kind + ' \u00b7 ' + t.orderId.slice(-6).toUpperCase());
+    toast('Proof attached \u2713', 'ok');
+    _attachTarget = null;
+    openOrderDetail(t.orderId);
+  } catch (e) {
+    console.warn('Attach proof write failed:', e);
+    toast('Could not save proof: ' + e.message, 'err');
+  }
+}
 
 // ── COLLECT DUE PAYMENT ──
 var _cDueOrderId = null;

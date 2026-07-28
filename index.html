@@ -3649,7 +3649,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.63';
+var APP_VERSION = 'v21.65';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -4453,6 +4453,18 @@ function sendUrgentFieldWA(order, action) {
   // Note: WhatsApp admin notification removed from phlebo device.
   // Re-enable via Cloud Function trigger on urgent order update when available.
 }
+// v21.64 — ROLE-BASED FINANCIAL VISIBILITY
+// Lab and senior_lab run samples; no part of their workflow involves cash.
+// Showing them revenue, dues and payment badges is exposure with no
+// operational benefit, so all money is hidden for those two roles.
+// NOTE: this is a UI boundary only. Firestore still permits any signed-in
+// user to read the orders collection, so this is tidiness and least-
+// privilege by convention — not an enforced security control.
+function canSeeMoney(role) {
+  var r = role || (curProfile && curProfile.role) || '';
+  return r !== 'lab' && r !== 'senior_lab';
+}
+
 function loadStats() {
   var today = todayStr();
   var myUid = viewUid();
@@ -4461,7 +4473,9 @@ function loadStats() {
 
   function _renderStats(rev, pend, count) {
     document.getElementById('st-orders').textContent=count;
-    document.getElementById('st-rev').textContent='Rs.'+rev.toLocaleString('en-IN');
+    // v21.64: lab roles see order volume but not takings
+    document.getElementById('st-rev').textContent = canSeeMoney(role)
+      ? 'Rs.'+rev.toLocaleString('en-IN') : '\u2014';
     document.getElementById('st-pend').textContent=pend;
   }
 
@@ -6313,7 +6327,15 @@ function filterActivityLog() {
 function loadDues() {
   var myUid = viewUid();
   var role = curProfile && curProfile.role || '';
-  var canSeeAll = role==='admin'||role==='manager'||role==='pathologist'||role==='senior_lab';
+  // v21.64: lab roles have no dues workflow — skip the read altogether rather
+  // than fetching and hiding. senior_lab was previously in canSeeAll and could
+  // see every outstanding due in the lab.
+  if (!canSeeMoney(role)) {
+    var _dc = document.getElementById('dash-dues-card');
+    if (_dc) _dc.style.display = 'none';
+    return;
+  }
+  var canSeeAll = role==='admin'||role==='manager'||role==='pathologist';
   var d = new Date(); d.setDate(d.getDate()-90);
   var fromDate = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 
@@ -8304,6 +8326,7 @@ function filterOrders(q) {
 function updateOrdersRevenue() {
   var revEl = document.getElementById('orders-revenue');
   if (!revEl || !allOrders.length) { if(revEl) revEl.style.display='none'; return; }
+  if (!canSeeMoney()) { revEl.style.display='none'; return; }   // v21.64
   var cash=0, upi=0, card=0, credit=0, total=0;
   allOrders.forEach(function(o) {
     if (o.status === 'draft') return; // exclude drafts from revenue
@@ -8351,8 +8374,8 @@ function renderOrders(orders) {
       +'<span>&#128100; '+esc(o.createdByName||'-')+'</span>'
       +(o.gps?'<span style="color:#1D4ED8">&#128205; GPS</span>':'')
       +'</div>'
-      +'<div class="order-footer">'      +'<span class="badge '+(o.status==='draft'?'badge-gold':(o.payMode==='credit'&&o.status==='pending')?'badge-gold':(o.dueAmount||0)>0&&(o.paidAmount||0)>0?'badge-gold':(o.dueAmount||0)>0&&(o.paidAmount||0)===0?'badge-red':'badge-green')+'">'
-        +(o.status==='draft'?'DISPATCH':(o.payMode==='credit'&&o.status==='pending')?'CREDIT':(o.dueAmount||0)>0&&(o.paidAmount||0)>0?'PARTIAL':(o.dueAmount||0)>0&&(o.paidAmount||0)===0?'DUE':((o.status||'paid').toUpperCase()))+'</span>'      +(function(){          if(o.payMode==='split'&&o.splitPayments){            var p=[];if(o.splitPayments.cash>0)p.push('Cash');if(o.splitPayments.upi>0)p.push('UPI');if(o.splitPayments.card>0)p.push('Card');            return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+p.join('+')+'</span>';          }          if(o.payMode&&o.payMode!=='cash')return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+o.payMode.toUpperCase()+'</span>';          return '';        })()      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>'      +'</div>'
+      +'<div class="order-footer">'      + (canSeeMoney() ? ('<span class="badge '+(o.status==='draft'?'badge-gold':(o.payMode==='credit'&&o.status==='pending')?'badge-gold':(o.dueAmount||0)>0&&(o.paidAmount||0)>0?'badge-gold':(o.dueAmount||0)>0&&(o.paidAmount||0)===0?'badge-red':'badge-green')+'">'
+        +(o.status==='draft'?'DISPATCH':(o.payMode==='credit'&&o.status==='pending')?'CREDIT':(o.dueAmount||0)>0&&(o.paidAmount||0)>0?'PARTIAL':(o.dueAmount||0)>0&&(o.paidAmount||0)===0?'DUE':((o.status||'paid').toUpperCase()))+'</span>'      +(function(){          if(o.payMode==='split'&&o.splitPayments){            var p=[];if(o.splitPayments.cash>0)p.push('Cash');if(o.splitPayments.upi>0)p.push('UPI');if(o.splitPayments.card>0)p.push('Card');            return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+p.join('+')+'</span>';          }          if(o.payMode&&o.payMode!=='cash')return '<span style="font-size:9px;font-family:var(--mono);padding:2px 5px;border-radius:4px;background:var(--surface);color:var(--text3);border:0.5px solid var(--border)">'+o.payMode.toUpperCase()+'</span>';          return '';        })()      +'<div style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.'+(o.paidAmount||0).toLocaleString('en-IN')+'</div>') : ('<span class="badge '+(o.status==='draft'?'badge-gold':'badge-green')+'">'+(o.status==='draft'?'DISPATCH':(o.status||'').toUpperCase())+'</span>'))      +'</div>'
       +'</div>';
   }).join('');
 }
@@ -8384,8 +8407,12 @@ function renderOrderDetail(o) {
   var events = buildAuditTrail(o);
 
   // Tests rows
+  // v21.64: lab roles see the test list, not the price list
+  var _money = canSeeMoney();
   var testRows = (o.tests||[]).map(function(t) {
-    return '<div class="audit-test-row"><span>' + esc(t.name) + '</span><span style="color:var(--text2);font-family:var(--mono)">Rs.' + (t.rate||0).toLocaleString('en-IN') + '</span></div>';
+    return '<div class="audit-test-row"><span>' + esc(t.name) + '</span>'
+      + (_money ? '<span style="color:var(--text2);font-family:var(--mono)">Rs.' + (t.rate||0).toLocaleString('en-IN') + '</span>' : '')
+      + '</div>';
   }).join('');
 
   // Source + GPS block
@@ -8426,7 +8453,7 @@ function renderOrderDetail(o) {
     + '<div class="card" style="margin-bottom:12px">'
     + '<div class="card-title">Tests (' + (o.tests||[]).length + ')</div>'
     + testRows
-    + '<div style="display:flex;justify-content:space-between;padding-top:10px;font-size:13px;font-weight:500">'    + '<span>Total</span><span style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.' + (o.paidAmount||0).toLocaleString('en-IN') + '</span></div>'    + (function(){        var pmLine = '';        if (o.splitPayments) {          var parts = [];          if (o.splitPayments.cash > 0) parts.push('Cash Rs.'+o.splitPayments.cash.toLocaleString('en-IN'));          if (o.splitPayments.upi > 0)  parts.push('UPI Rs.'+o.splitPayments.upi.toLocaleString('en-IN'));          if (o.splitPayments.card > 0) parts.push('Card Rs.'+o.splitPayments.card.toLocaleString('en-IN'));          pmLine = parts.join(' + ');        } else { pmLine = esc(o.payMode||'cash').toUpperCase(); }        var dueStr = (o.dueAmount > 0) ? ' &nbsp;<span style="color:#EF4444">Due Rs.'+o.dueAmount.toLocaleString('en-IN')+'</span>' : '';        var discStr = (o.discount > 0) ? ' · Discount Rs.'+o.discount : '';        return '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+pmLine+discStr+dueStr+'</div>';      })()
+    + (_money ? ('<div style="display:flex;justify-content:space-between;padding-top:10px;font-size:13px;font-weight:500">'    + '<span>Total</span><span style="font-family:var(--serif);font-size:18px;color:var(--accent)">Rs.' + (o.paidAmount||0).toLocaleString('en-IN') + '</span></div>'    + (function(){        var pmLine = '';        if (o.splitPayments) {          var parts = [];          if (o.splitPayments.cash > 0) parts.push('Cash Rs.'+o.splitPayments.cash.toLocaleString('en-IN'));          if (o.splitPayments.upi > 0)  parts.push('UPI Rs.'+o.splitPayments.upi.toLocaleString('en-IN'));          if (o.splitPayments.card > 0) parts.push('Card Rs.'+o.splitPayments.card.toLocaleString('en-IN'));          pmLine = parts.join(' + ');        } else { pmLine = esc(o.payMode||'cash').toUpperCase(); }        var dueStr = (o.dueAmount > 0) ? ' &nbsp;<span style="color:#EF4444">Due Rs.'+o.dueAmount.toLocaleString('en-IN')+'</span>' : '';        var discStr = (o.discount > 0) ? ' · Discount Rs.'+o.discount : '';        return '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+pmLine+discStr+dueStr+'</div>';      })()) : '')
     + '</div>'
 
     // Collection guide card
@@ -13117,14 +13144,29 @@ function removeDefDr(i) {
   renderDefDrTags();
 }
 
-function toggleDashAccess() {
-  if (!editingStaffId) return;
-  smDashAccess = !smDashAccess;
-  var btn = document.getElementById('sm-dash-toggle');
+function _paintDashToggle(btn) {
+  if (!btn) return;
   btn.textContent = smDashAccess ? 'ON' : 'OFF';
-  btn.style.background = smDashAccess ? 'var(--accent)' : 'var(--surface)';
-  btn.style.color = smDashAccess ? '#fff' : 'var(--text2)';
+  btn.style.background  = smDashAccess ? 'var(--accent)' : 'var(--surface)';
+  btn.style.color       = smDashAccess ? '#fff' : 'var(--text2)';
   btn.style.borderColor = smDashAccess ? 'var(--accent)' : 'var(--border-strong)';
+}
+
+function toggleDashAccess() {
+  var btn = document.getElementById('sm-dash-toggle');
+  // v21.65: for a NEW staff member there is no document yet, so this used to
+  // `return` on the first line — the toggle appeared dead with no explanation.
+  // The create payload already writes dashboardAccess: smDashAccess, so all
+  // that is needed here is to flip the local flag and repaint. The Firestore
+  // write below applies only when editing an existing staff member.
+  if (!editingStaffId) {
+    smDashAccess = !smDashAccess;
+    _paintDashToggle(btn);
+    toast('Dashboard access will be ' + (smDashAccess ? 'granted' : 'off') + ' when the account is created', 'ok');
+    return;
+  }
+  smDashAccess = !smDashAccess;
+  _paintDashToggle(btn);
   btn.disabled = true;
   // Auto-save immediately
   db.collection('staff').doc(editingStaffId).update({ dashboardAccess: smDashAccess })
@@ -13142,10 +13184,7 @@ function toggleDashAccess() {
       toast('Save failed — check connection', 'err');
       // Revert toggle on failure
       smDashAccess = !smDashAccess;
-      btn.textContent = smDashAccess ? 'ON' : 'OFF';
-      btn.style.background = smDashAccess ? 'var(--accent)' : 'var(--surface)';
-      btn.style.color = smDashAccess ? '#fff' : 'var(--text2)';
-      btn.style.borderColor = smDashAccess ? 'var(--accent)' : 'var(--border-strong)';
+      _paintDashToggle(btn);
       btn.disabled = false;
     });
 }

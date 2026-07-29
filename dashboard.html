@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LabFlow Dashboard v20.47 — OnePLUS</title>
+<title>LabFlow Dashboard v20.48 — OnePLUS</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -225,7 +225,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="topbar">
     <div>
       <div class="tb-brand">OnePLUS Ultrasound Lab &mdash; LabFlow
-        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.47</span>
+        <span style="font-size:11px;font-family:var(--mono);background:rgba(255,255,255,0.18);border-radius:4px;padding:1px 6px;vertical-align:middle">v20.48</span>
       </div>
       <div class="tb-meta">47 Harsh Vihar, Pitampura &middot; Real-time Dashboard</div>
     </div>
@@ -493,7 +493,12 @@ auth.onAuthStateChanged(function(user){
       var data = snap.exists ? snap.data() : {};
       // dashboardAccess OR admin/pathologist role can view
       var role = data.role || '';
-      var allowed = data.dashboardAccess === true || role === 'admin' || role === 'pathologist' || role === 'manager' || role === 'reception';
+      // v20.48: lab roles are money-blind in the app (index.html canSeeMoney).
+      // This dashboard is almost entirely financial, so the dashboardAccess
+      // flag must not become a back door around that. Excluded outright,
+      // regardless of the per-staff flag.
+      var moneyBlind = (role === 'lab' || role === 'senior_lab');
+      var allowed = !moneyBlind && (data.dashboardAccess === true || role === 'admin' || role === 'pathologist' || role === 'manager' || role === 'reception');
       if(!allowed){
         auth.signOut();
         document.getElementById('lerr').textContent = 'Access denied. Contact Admin to enable dashboard access.';

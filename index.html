@@ -3649,7 +3649,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.66';
+var APP_VERSION = 'v21.67';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3907,6 +3907,8 @@ function showScreen(id) {
   if (id === 's-pa-editor') { initPAEditor(); }
   if (id === 's-phlebo') { startPhleboDash(); }
 }
+var _exitArm = 0;   // timestamp of the first back press at root (v21.66)
+
 function goTo(id, push) {
   // Block order/estimate creation during impersonation — writes would use admin UID not staff UID
   if (_impersonating && (id === 's-order' || id === 's-estimate')) {
@@ -3917,6 +3919,7 @@ function goTo(id, push) {
     showScreen(id); return;
   }
   if (push !== false) stack.push(id);
+  _exitArm = 0;   // v21.67: navigating cancels a pending exit confirmation
   showScreen(id);
   if (push === false) {
     history.replaceState({appNav: true}, '', '');
@@ -3956,6 +3959,7 @@ function goBack() {
   }
   if (stack.length > 1) stack.pop();
   var prev = stack[stack.length-1] || 's-dash';
+  _exitArm = 0;   // v21.67: a back-navigation is not a confirmation to quit
   showScreen(prev);
   // v21.66: no pushState here. When goBack() runs from popstate the handler
   // has already restored the consumed entry; when it runs from an on-screen
@@ -3972,7 +3976,6 @@ history.pushState({appNav: true}, '', '');
 
 // Intercept Android hardware back button / browser back gesture
 var _popstateBusy = false;
-var _exitArm   = 0;      // timestamp of the first back press at root
 var _allowExit = false;  // set once the user has confirmed — stop intercepting
 
 window.addEventListener('popstate', function(e) {
@@ -4003,6 +4006,15 @@ window.addEventListener('popstate', function(e) {
 
   // At root. Require a confirming second press within 2s before quitting, so
   // a stray gesture can't drop someone out of a shift mid-task.
+  // v21.67: belt-and-braces — only the dashboard is a legitimate exit point.
+  // If the stack says depth 1 but we are somewhere else, that is a stack bug,
+  // and quitting would be the wrong recovery. Go home instead.
+  var _visible = stack[stack.length-1] || '';
+  if (_visible !== 's-dash') {
+    goTo('s-dash', false); stack = ['s-dash'];
+    history.pushState({appNav: true}, '', '');
+    return;
+  }
   if (Date.now() - _exitArm < 2000) {
     _allowExit = true;
     history.back();

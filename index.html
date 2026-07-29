@@ -3649,7 +3649,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.65';
+var APP_VERSION = 'v21.66';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3941,11 +3941,9 @@ function toggleEye(id, btn) {
 
 function goBack() {
   var cur = stack[stack.length-1];
-  // Already at root — do nothing, never exit the app
-  if (cur === 's-dash' || stack.length <= 1) {
-    history.pushState({appNav: true}, '', '');
-    return;
-  }
+  // Already at root — do nothing. The popstate handler owns the sentinel and
+  // the exit-confirm; pushing here too made the history depth drift (v21.66).
+  if (cur === 's-dash' || stack.length <= 1) return;
   // If mid-order, swipe/back navigates between steps — never discards
   if (cur === 's-order') {
     if (_curStep === 3)  { showStep(2); return; }
@@ -3959,16 +3957,27 @@ function goBack() {
   if (stack.length > 1) stack.pop();
   var prev = stack[stack.length-1] || 's-dash';
   showScreen(prev);
-  // After going back, push a fresh sentinel so the NEXT back press
-  // is also caught — without this, back would exit after one goBack().
-  history.pushState({appNav: true}, '', '');
+  // v21.66: no pushState here. When goBack() runs from popstate the handler
+  // has already restored the consumed entry; when it runs from an on-screen
+  // back button nothing was consumed. Pushing in either case grew the history
+  // by one per press, so depth no longer matched the screen stack.
 }
-// Seed initial sentinel state
+
+// v21.66: seed TWO entries, not one. replaceState alone leaves a freshly
+// launched PWA with a single history entry, so the very first back press has
+// nothing to pop — Android closes the app and popstate never fires. That was
+// the "back on the home screen quits with no warning" report.
 history.replaceState({appNav: true}, '', '');
+history.pushState({appNav: true}, '', '');
 
 // Intercept Android hardware back button / browser back gesture
 var _popstateBusy = false;
+var _exitArm   = 0;      // timestamp of the first back press at root
+var _allowExit = false;  // set once the user has confirmed — stop intercepting
+
 window.addEventListener('popstate', function(e) {
+  // User confirmed the exit: stand aside and let the browser unwind.
+  if (_allowExit) return;
   // Debounce — Android sometimes fires twice on a single swipe
   if (_popstateBusy) { history.pushState({appNav: true}, '', ''); return; }
   _popstateBusy = true;
@@ -3989,11 +3998,19 @@ window.addEventListener('popstate', function(e) {
 
   if (stack.length > 1) {
     goBack();
-  } else {
-    // Already at root — keep sentinel alive so app never exits.
-    // Must pushState (not replaceState) so the stack never drains to 0.
-    history.pushState({appNav: true}, '', '');
+    return;
   }
+
+  // At root. Require a confirming second press within 2s before quitting, so
+  // a stray gesture can't drop someone out of a shift mid-task.
+  if (Date.now() - _exitArm < 2000) {
+    _allowExit = true;
+    history.back();
+    return;
+  }
+  _exitArm = Date.now();
+  toast('Press back again to exit', 'warn');
+  history.pushState({appNav: true}, '', '');
 });
 
 // ── AUTH STATE ──

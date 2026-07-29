@@ -3649,7 +3649,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.67';
+var APP_VERSION = 'v21.68';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3979,7 +3979,7 @@ var _popstateBusy = false;
 var _allowExit = false;  // set once the user has confirmed — stop intercepting
 
 window.addEventListener('popstate', function(e) {
-  // User confirmed the exit: stand aside and let the browser unwind.
+  // v21.68: retained as a kill-switch only — nothing sets this any more.
   if (_allowExit) return;
   // Debounce — Android sometimes fires twice on a single swipe
   if (_popstateBusy) { history.pushState({appNav: true}, '', ''); return; }
@@ -4004,24 +4004,23 @@ window.addEventListener('popstate', function(e) {
     return;
   }
 
-  // At root. Require a confirming second press within 2s before quitting, so
-  // a stray gesture can't drop someone out of a shift mid-task.
-  // v21.67: belt-and-braces — only the dashboard is a legitimate exit point.
-  // If the stack says depth 1 but we are somewhere else, that is a stack bug,
-  // and quitting would be the wrong recovery. Go home instead.
+  // v21.68 — the app no longer closes itself. Reported behaviour: from a
+  // non-dashboard screen, two presses quit with no toast, meaning this branch
+  // was never reached. Since the exit path cannot be reached correctly, it is
+  // removed rather than left half-working: every back press now re-pushes a
+  // sentinel and navigation is the only outcome. Staff leave via the home
+  // button or app switcher, which is also safer mid-booking.
+  //
+  // This doubles as a diagnostic. If the app STILL quits after this, no code
+  // in this handler can be responsible — popstate is not firing for those
+  // presses and the cause is platform-level (WebAPK / gesture navigation).
   var _visible = stack[stack.length-1] || '';
   if (_visible !== 's-dash') {
-    goTo('s-dash', false); stack = ['s-dash'];
-    history.pushState({appNav: true}, '', '');
-    return;
+    // Stack says root but we are elsewhere: resync instead of stranding the user.
+    goTo('s-dash', false);
+    stack = ['s-dash'];
   }
-  if (Date.now() - _exitArm < 2000) {
-    _allowExit = true;
-    history.back();
-    return;
-  }
-  _exitArm = Date.now();
-  toast('Press back again to exit', 'warn');
+  history.pushState({appNav: true}, '', '');
   history.pushState({appNav: true}, '', '');
 });
 

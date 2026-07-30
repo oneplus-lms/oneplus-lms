@@ -3649,7 +3649,7 @@ function renderReview(byPhlebo) {
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
 
-var APP_VERSION = 'v21.68';
+var APP_VERSION = 'v21.70';
 // ── ASYNC DATA LOADER ──────────────────────────────────────────────────
 // Loads heavy JSON files after login so login screen renders instantly
 var _dataLoaded = false;
@@ -3979,7 +3979,7 @@ var _popstateBusy = false;
 var _allowExit = false;  // set once the user has confirmed — stop intercepting
 
 window.addEventListener('popstate', function(e) {
-  // v21.68: retained as a kill-switch only — nothing sets this any more.
+  // User confirmed the exit: stand aside and let the browser unwind.
   if (_allowExit) return;
   // Debounce — Android sometimes fires twice on a single swipe
   if (_popstateBusy) { history.pushState({appNav: true}, '', ''); return; }
@@ -4019,8 +4019,21 @@ window.addEventListener('popstate', function(e) {
     // Stack says root but we are elsewhere: resync instead of stranding the user.
     goTo('s-dash', false);
     stack = ['s-dash'];
+    history.pushState({appNav: true}, '', '');
+    return;
   }
-  history.pushState({appNav: true}, '', '');
+
+  // v21.69: the dashboard confirm is restored — it was verified working and
+  // v21.68 removed it for no gain. It only ever governs presses that actually
+  // reach this handler; on deeper screens Android closes the PWA before any
+  // JS runs, which no code here can prevent (see draft autosave instead).
+  if (Date.now() - _exitArm < 2000) {
+    _allowExit = true;
+    history.back();
+    return;
+  }
+  _exitArm = Date.now();
+  toast('Press back again to exit', 'warn');
   history.pushState({appNav: true}, '', '');
 });
 
@@ -9668,8 +9681,43 @@ function buildPaymentProofSection(o) {
 
 function startAttachProof(orderId, kind, idx) {
   _attachTarget = { orderId: orderId, kind: kind, idx: idx };
+  // v21.70: previously this clicked a bare accept="image/*" input with no
+  // capture attribute, so the platform chose — on Android that meant the
+  // gallery only, with no way to photograph a receipt. Ask for the source,
+  // matching the Collect Due and Quick Pay modals.
+  var ex = document.getElementById('proof-src-overlay');
+  if (ex) ex.remove();
+  var ov = document.createElement('div');
+  ov.id = 'proof-src-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(20,15,5,0.55);z-index:900;'
+    + 'display:flex;align-items:flex-end;justify-content:center;padding:18px';
+  ov.innerHTML =
+      '<div style="background:var(--surface);border-radius:14px;padding:16px;width:100%;max-width:420px">'
+    + '<div style="font-size:13px;font-weight:600;margin-bottom:4px">Add payment proof</div>'
+    + '<div style="font-size:11px;color:var(--text3);margin-bottom:12px">Photograph the receipt, or pick a saved screenshot</div>'
+    + '<button class="btn" style="width:100%;margin-bottom:8px;padding:12px" onclick="_pickProofSource(\'camera\')">&#128247; Camera</button>'
+    + '<button class="btn" style="width:100%;margin-bottom:8px;padding:12px" onclick="_pickProofSource(\'gallery\')">&#128194; Gallery</button>'
+    + '<button class="btn" style="width:100%;padding:12px;color:var(--text3)" onclick="_closeProofSrc()">Cancel</button>'
+    + '</div>';
+  ov.addEventListener('click', function(e){ if (e.target === ov) _closeProofSrc(); });
+  document.body.appendChild(ov);
+}
+
+function _closeProofSrc() {
+  var ov = document.getElementById('proof-src-overlay');
+  if (ov) ov.remove();
+  _attachTarget = null;
+}
+
+function _pickProofSource(src) {
+  var ov = document.getElementById('proof-src-overlay');
+  if (ov) ov.remove();   // NB: do not clear _attachTarget — still needed
   var inp = document.getElementById('attach-proof-input');
-  if (inp) { inp.value = ''; inp.click(); }
+  if (!inp) { toast('Could not open picker — reopen the order', 'err'); return; }
+  if (src === 'camera') inp.setAttribute('capture', 'environment');
+  else inp.removeAttribute('capture');
+  inp.value = '';
+  inp.click();
 }
 
 function handleAttachProof(input) {

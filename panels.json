@@ -312,13 +312,13 @@
   },
   "BIOCHEMISTRY|QUANTIFERON - TB GOLD": {
     "jk": 2800,
-    "du": 2800,
+    "du": 2500,
     "sh": 2800,
     "pj": 2800
   },
   "BIOCHEMISTRY|ACID PHOSPHATASE": {
     "jk": 350,
-    "du": 350,
+    "du": 150,
     "sh": 350,
     "pj": 350
   },
@@ -342,7 +342,7 @@
   },
   "BIOCHEMISTRY|ALBUMIN": {
     "jk": 120,
-    "du": 120,
+    "du": 50,
     "sh": 120,
     "pj": 150
   },
@@ -395,7 +395,7 @@
   },
   "BIOCHEMISTRY|ANDROSTENEDIONE": {
     "jk": 2000,
-    "du": 2000,
+    "du": 1000,
     "sh": 2000,
     "pj": 2000
   },
@@ -491,7 +491,7 @@
   },
   "BIOCHEMISTRY|CALCITONIN": {
     "jk": 2200,
-    "du": 2200,
+    "du": 1200,
     "sh": 2200,
     "pj": 2200
   },
@@ -972,7 +972,7 @@
   },
   "BIOCHEMISTRY|S. FRUCTOSAMINE": {
     "jk": 550,
-    "du": 550,
+    "du": 500,
     "sh": 550,
     "pj": 550
   },
@@ -996,7 +996,7 @@
   },
   "BIOCHEMISTRY|SERUM BICARBONATE": {
     "jk": 700,
-    "du": 700,
+    "du": 200,
     "sh": 700,
     "pj": 700
   },
@@ -1062,7 +1062,7 @@
   },
   "BIOCHEMISTRY|TRIGLYCERIDE": {
     "jk": 250,
-    "du": 300,
+    "du": 150,
     "sh": 200,
     "pj": 300
   },
@@ -1331,7 +1331,7 @@
   },
   "ENDOCRINOLOGY|AMH (ANTI MULLERIAN HORMONE)": {
     "jk": 1850,
-    "du": 1850,
+    "du": 1000,
     "sh": 1850,
     "pj": 2100
   },
@@ -1481,7 +1481,7 @@
   },
   "ENDOCRINOLOGY|ANTI SMOOTH MUSCLE ANTIBODY(ASMA)": {
     "jk": 2300,
-    "du": 2300,
+    "du": 1460,
     "sh": 2300,
     "pj": 2300
   },
@@ -1829,7 +1829,7 @@
   },
   "ENDOCRINOLOGY|GROWTH HORMONE": {
     "jk": 1200,
-    "du": 1200,
+    "du": 600,
     "sh": 1200,
     "pj": 1200
   },
@@ -2003,7 +2003,7 @@
   },
   "ENDOCRINOLOGY|INHIBIN B": {
     "jk": 2500,
-    "du": 2500,
+    "du": 1900,
     "sh": 2500,
     "pj": 2500
   },
@@ -2057,7 +2057,7 @@
   },
   "ENDOCRINOLOGY|LITHIUM": {
     "jk": 550,
-    "du": 550,
+    "du": 350,
     "sh": 550,
     "pj": 550
   },
@@ -2129,19 +2129,19 @@
   },
   "ENDOCRINOLOGY|PROCALCITONIN": {
     "jk": 2800,
-    "du": 2800,
+    "du": 2070,
     "sh": 2800,
     "pj": 2800
   },
   "ENDOCRINOLOGY|PROGESTERONE": {
     "jk": 600,
-    "du": 600,
+    "du": 400,
     "sh": 500,
     "pj": 600
   },
   "ENDOCRINOLOGY|PROLACTIN": {
     "jk": 500,
-    "du": 550,
+    "du": 400,
     "sh": 450,
     "pj": 550
   },
@@ -2247,13 +2247,13 @@
   },
   "ENDOCRINOLOGY|SERUM CHROMOGRANIN A": {
     "jk": 7500,
-    "du": 7500,
+    "du": 3800,
     "sh": 7500,
     "pj": 7500
   },
   "ENDOCRINOLOGY|SERUM EPO ( ERYTHROPOIETIN)": {
     "jk": 2500,
-    "du": 2500,
+    "du": 1200,
     "sh": 2500,
     "pj": 2500
   },
@@ -2379,7 +2379,7 @@
   },
   "ENDOCRINOLOGY|TSH RECEPTOR ANTIBODY": {
     "jk": 4500,
-    "du": 4500,
+    "du": 1200,
     "sh": 4500,
     "pj": 4500
   },
@@ -2456,7 +2456,7 @@
   },
   "HAEMATOLOGY|ABSOLUTE EOSINOPHIL COUNT": {
     "jk": 150,
-    "du": 150,
+    "du": 100,
     "sh": 150,
     "pj": 150
   },
@@ -2480,13 +2480,13 @@
   },
   "HAEMATOLOGY|BLOOD GROUP RH TYPE": {
     "jk": 100,
-    "du": 150,
+    "du": 90,
     "sh": 100,
     "pj": 150
   },
   "HAEMATOLOGY|BT (BLEEDING TIME )": {
     "jk": 200,
-    "du": 200,
+    "du": 50,
     "sh": 100,
     "pj": 200
   },
@@ -2532,13 +2532,13 @@
   },
   "HAEMATOLOGY|CT (CLOTTING TIME)": {
     "jk": 200,
-    "du": 200,
+    "du": 50,
     "sh": 100,
     "pj": 200
   },
   "HAEMATOLOGY|D-DIMER": {
     "jk": 1200,
-    "du": 1200,
+    "du": 500,
     "sh": 1200,
     "pj": 1200
   },
@@ -2693,7 +2693,7 @@
   },
   "HAEMATOLOGY|OSMOTIC FRAGILITY TEST": {
     "jk": 700,
-    "du": 700,
+    "du": 300,
     "sh": 700,
     "pj": 700
   },
@@ -2717,7 +2717,7 @@
   },
   "HAEMATOLOGY|PLATELET COUNT": {
     "jk": 150,
-    "du": 150,
+    "du": 100,
     "sh": 150,
     "pj": 150
   },
@@ -2765,7 +2765,7 @@
   },
   "HAEMATOLOGY|RETICULOCYTE COUNT": {
     "jk": 300,
-    "du": 300,
+    "du": 100,
     "sh": 200,
     "pj": 300
   },
@@ -2896,7 +2896,7 @@
   },
   "CLINICAL PATHOLOGY|STOOL OCCULT BLOOD": {
     "jk": 150,
-    "du": 150,
+    "du": 100,
     "sh": 150,
     "pj": 150
   },
@@ -2986,7 +2986,7 @@
   },
   "CLINICAL PATHOLOGY|URINE FOR UROBILINOGEN": {
     "jk": 150,
-    "du": 150,
+    "du": 70,
     "sh": 100,
     "pj": 150
   },
@@ -3009,7 +3009,7 @@
   },
   "CLINICAL PATHOLOGY|URINE PREGNANCY TEST": {
     "jk": 150,
-    "du": 150,
+    "du": 100,
     "sh": 100,
     "pj": 150
   },
@@ -3093,7 +3093,7 @@
   },
   "SEROLOGY|ANTI SPERM ANTIBODY": {
     "jk": 1100,
-    "du": 1100,
+    "du": 900,
     "sh": 1100,
     "pj": 1100
   },
@@ -3295,7 +3295,7 @@
   },
   "SEROLOGY|WIDAL TEST": {
     "jk": 150,
-    "du": 300,
+    "du": 70,
     "sh": 200,
     "pj": 300
   },
@@ -3595,7 +3595,7 @@
   },
   "CYTOLOGY|PAP SMEAR": {
     "jk": 850,
-    "du": 850,
+    "du": 400,
     "sh": 400,
     "pj": 850
   },
@@ -6329,7 +6329,7 @@
   },
   "MISC|CRYPTOCOCCAL ANTIGEN": {
     "jk": 3000,
-    "du": 3000,
+    "du": 1500,
     "sh": 3000
   },
   "MISC|DNA STORAGE": {
@@ -6381,7 +6381,7 @@
   },
   "MISC|INHIBIN A": {
     "jk": 2500,
-    "du": 2500,
+    "du": 900,
     "sh": 2500,
     "pj": 2500
   },
@@ -6595,5 +6595,59 @@
     "du": 1500,
     "sh": 1500,
     "pj": 1500
+  },
+  "HAEMATOLOGY|TROPONIN I": {
+    "jk": 1550,
+    "du": 700,
+    "sh": 1550,
+    "pj": 1550
+  },
+  "HAEMATOLOGY|TROPONIN T": {
+    "jk": 1550,
+    "du": 700,
+    "sh": 1550,
+    "pj": 1550
+  },
+  "BIOCHEMISTRY|LIPOPROTEIN A  LP(A)": {
+    "jk": 1000,
+    "du": 400,
+    "sh": 1000,
+    "pj": 1000
+  },
+  "SEROLOGY|HCV RNA QUANTITATIVE": {
+    "jk": 5500,
+    "du": 1845,
+    "sh": 5500,
+    "pj": 5500
+  },
+  "SEROLOGY|C3 COMPLEMENT": {
+    "jk": 700,
+    "du": 650,
+    "sh": 700,
+    "pj": 700
+  },
+  "SEROLOGY|C4 COMPLEMENT": {
+    "jk": 700,
+    "du": 650,
+    "sh": 700,
+    "pj": 700
+  },
+  "SEROLOGY|ANTI HEV(IGM)": {
+    "jk": 1800,
+    "du": 1000,
+    "sh": 1800,
+    "pj": 1800
+  },
+  "SEROLOGY|ANTI HAV(IGM)": {
+    "jk": 1200,
+    "du": 750,
+    "sh": 1200,
+    "pj": 1200
+  },
+  "ENDOCRINOLOGY|SHBG  SEX HORMONE BINDING GLOBULIN": {
+    "jk": 2500,
+    "du": 1540,
+    "sh": 2500,
+    "pj": 2500
   }
 }
